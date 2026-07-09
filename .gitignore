@@ -1,0 +1,16 @@
+.next/
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+*.log
+*.err
+dev.db
+dev.db-journal
+uploads/
+.vercel/
+outputs/
+.codex-spreadsheet-work/
