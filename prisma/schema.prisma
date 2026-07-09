@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MaterialStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ActivityKind {
+  IN_CLASS
+  AT_HOME
+}
+
+enum QuestionType {
+  VOCAB
+  COMPREHENSION
+  PREDICTION
+  SHORT_RESPONSE
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  PARTIAL
+  COMPLETED
+}
+
+model Teacher {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  classrooms   Classroom[]
+  materials    Material[]
+  homeResources AtHomeResource[]
+}
+
+model Classroom {
+  id         String    @id @default(cuid())
+  name       String
+  gradeLevel String
+  teacherId  String
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+  teacher    Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  students   Student[]
+  materials  Material[]
+  homeResources AtHomeResource[]
+
+  @@index([teacherId, archivedAt])
+}
+
+model Student {
+  id          String           @id @default(cuid())
+  classroomId String
+  accountId   String?
+  displayName String
+  email       String?
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  classroom   Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  account     StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  sessions    StudentSession[]
+  adaptiveHomeMaterials Material[] @relation("AdaptiveHomeTarget")
+
+  @@unique([classroomId, displayName])
+  @@unique([classroomId, email])
+  @@index([classroomId, active])
+  @@index([accountId, active])
+}
+
+model StudentAccount {
+  id           String    @id @default(cuid())
+  displayName  String
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  enrollments  Student[]
+}
+
+model Material {
+  id               String         @id @default(cuid())
+  teacherId        String
+  classroomId      String
+  title            String
+  sourceName       String?
+  sourceHash       String?
+  sourcePreview    String?
+  sourceText       String?
+  atHomeScope      String?
+  gradeLevel       String
+  estimatedMinutes Int            @default(15)
+  activityKind     ActivityKind   @default(IN_CLASS)
+  dueAt            DateTime?
+  availableAt      DateTime?
+  seriesKey        String?
+  dayNumber        Int?
+  status           MaterialStatus @default(DRAFT)
+  generationNotes  String?
+  isAdaptiveHome   Boolean        @default(false)
+  targetStudentId  String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  teacher          Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom        Classroom      @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  questions        Question[]
+  sessions         StudentSession[]
+  targetStudent    Student?       @relation("AdaptiveHomeTarget", fields: [targetStudentId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, updatedAt])
+  @@index([classroomId, createdAt])
+  @@index([classroomId, activityKind, isAdaptiveHome, availableAt])
+  @@unique([targetStudentId, seriesKey])
+}
+
+model Question {
+  id            String          @id @default(cuid())
+  materialId    String
+  type          QuestionType
+  prompt        String
+  choicesJson   String?
+  correctAnswer String?
+  rubric        String?
+  skillTag      String?
+  standardCode  String?
+  explanation   String?
+  timeLimitSeconds Int?
+  randomizeChoices Boolean       @default(false)
+  difficulty    Int             @default(3)
+  sortOrder     Int
+  material      Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  answers       StudentAnswer[]
+}
+
+model AtHomeResource {
+  id            String    @id @default(cuid())
+  teacherId     String
+  classroomId   String
+  title         String
+  sourceName    String
+  sourceHash    String
+  sourcePreview String?
+  sourceText    String
+  readingScope  String?
+  createdAt     DateTime  @default(now())
+  teacher       Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom     Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@unique([classroomId, sourceHash])
+  @@index([classroomId, createdAt])
+}
+
+model StudentSession {
+  id                 String          @id @default(cuid())
+  studentId          String
+  materialId         String
+  signInAt           DateTime        @default(now())
+  signedOutAt        DateTime?
+  lastSeenAt         DateTime        @default(now())
+  completedAt        DateTime?
+  status             SessionStatus   @default(IN_PROGRESS)
+  openedBook         Boolean         @default(false)
+  foundChapter       Boolean         @default(false)
+  heardVocabulary    Boolean         @default(false)
+  answeredPrompt     Boolean         @default(false)
+  madePrediction     Boolean         @default(false)
+  completedCharlotte Boolean         @default(false)
+  understoodStory    Boolean         @default(false)
+  pointsEarned       Int             @default(0)
+  focusViolationCount Int            @default(0)
+  flaggedAt          DateTime?
+  endedByFocusLoss   Boolean         @default(false)
+  student            Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  material           Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  answers            StudentAnswer[]
+
+  @@index([materialId, status, completedAt])
+  @@index([studentId, materialId, status])
+}
+
+model StudentAnswer {
+  id          String         @id @default(cuid())
+  sessionId   String
+  questionId  String
+  answerText  String
+  isCorrect   Boolean?
+  attemptCount Int          @default(0)
+  firstTryCorrect Boolean?
+  pointsEarned Int          @default(0)
+  revealedAnswer Boolean    @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  session     StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question    Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId])
+  @@index([questionId])
+}
+
+model ContactLead {
+  id         String   @id @default(cuid())
+  name       String
+  email      String
+  phone      String
+  school     String
+  gradeLevel String
+  createdAt  DateTime @default(now())
+}
