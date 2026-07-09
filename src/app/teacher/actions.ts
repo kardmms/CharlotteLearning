@@ -1,0 +1,650 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { ActivityKind, MaterialStatus, QuestionType } from "@prisma/client";
+import * as XLSX from "xlsx";
+import { prisma } from "@/lib/db";
+import {
+  clearTeacherSession,
+  hashPassword,
+  requireTeacher,
+  setTeacherSession,
+  verifyPassword
+} from "@/lib/auth";
+import { normalizeStudentEmail } from "@/lib/codes";
+import { extractStudentRosterWithAI, generateQuestionsFromText } from "@/lib/ai";
+import { extractTextFromUpload } from "@/lib/extract-text";
+import { normalizeGrade } from "@/lib/grade";
+
+function formText(formData: FormData, key: string) {
+  return String(formData.get(key) ?? "").trim();
+}
+
+function errorRedirect(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function optionalDate(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function questionPointValue(sortOrder: number, questionCount: number) {
+  const base = Math.floor(100 / questionCount);
+  const remainder = 100 % questionCount;
+  return base + (sortOrder <= remainder ? 1 : 0);
+}
+
+export async function createFirstTeacher(formData: FormData) {
+  const existing = await prisma.teacher.count();
+  if (existing > 0) redirect("/teacher/login");
+
+  const name = formText(formData, "name");
+  const email = normalizeEmail(formText(formData, "email"));
+  const password = formText(formData, "password");
+
+  if (name.length < 2) errorRedirect("/teacher/setup", "Please enter the teacher name.");
+  if (!email.includes("@")) errorRedirect("/teacher/setup", "Please enter a valid email.");
+  if (password.length < 10) {
+    errorRedirect("/teacher/setup", "Use a password with at least 10 characters.");
+  }
+
+  const teacher = await prisma.teacher.create({
+    data: {
+      name,
+      email,
+      passwordHash: await hashPassword(password)
+    }
+  });
+
+  await setTeacherSession(teacher);
+  const classroomCount = await prisma.classroom.count({
+    where: { teacherId: teacher.id, archivedAt: null }
+  });
+  redirect(classroomCount > 0 ? "/teacher/classes" : "/teacher");
+}
+
+export async function loginTeacher(formData: FormData) {
+  const email = normalizeEmail(formText(formData, "email"));
+  const password = formText(formData, "password");
+
+  const teacher = await prisma.teacher.findUnique({ where: { email } });
+  if (!teacher) errorRedirect("/teacher/login", "Email or password was not recognized.");
+
+  const ok = await verifyPassword(password, teacher.passwordHash);
+  if (!ok) errorRedirect("/teacher/login", "Email or password was not recognized.");
+
+  await setTeacherSession(teacher);
+  const classroomCount = await prisma.classroom.count({
+    where: { teacherId: teacher.id, archivedAt: null }
+  });
+  redirect(classroomCount > 0 ? "/teacher/classes" : "/teacher");
+}
+
+export async function logoutTeacher() {
+  await clearTeacherSession();
+  redirect("/");
+}
+
+export async function createClassroom(formData: FormData) {
+  const teacher = await requireTeacher();
+  const name = formText(formData, "name");
+  const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
+
+  if (name.length < 2) errorRedirect("/teacher", "Please name the class.");
+  if (!gradeLevel) errorRedirect("/teacher", "Please enter a grade level.");
+
+  const classroom = await prisma.classroom.create({
+    data: {
+      name,
+      gradeLevel,
+      teacherId: teacher.id
+    }
+  });
+
+  redirect(`/teacher/classes/${classroom.id}`);
+}
+
+export async function deleteClassroom(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id }
+  });
+  if (!classroom) errorRedirect("/teacher", "Class not found.");
+
+  await prisma.classroom.delete({ where: { id: classroom.id } });
+  redirect("/teacher/classes");
+}
+
+export async function archiveClassroom(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id }
+  });
+  if (!classroom) errorRedirect("/teacher/classes", "Class not found.");
+
+  await prisma.classroom.update({
+    where: { id: classroom.id },
+    data: { archivedAt: new Date() }
+  });
+  redirect("/teacher/classes");
+}
+
+export async function unarchiveClassroom(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id }
+  });
+  if (!classroom) errorRedirect("/teacher/archive", "Class not found.");
+
+  await prisma.classroom.update({
+    where: { id: classroom.id },
+    data: { archivedAt: null }
+  });
+  redirect("/teacher/archive");
+}
+
+function isValidStudentEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function cleanStudentRows(rows: Array<{ displayName: string; email: string }>) {
+  return rows
+    .map((row) => ({
+      displayName: row.displayName.trim(),
+      email: normalizeStudentEmail(row.email)
+    }))
+    .filter((row) => row.displayName || row.email);
+}
+
+async function createStudentsFromRows(
+  teacherId: string,
+  classroomId: string,
+  rows: Array<{ displayName: string; email: string }>,
+  errorPath: string
+) {
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId }
+  });
+  if (!classroom) errorRedirect("/teacher", "Class not found.");
+
+  const cleaned = cleanStudentRows(rows);
+  if (cleaned.length === 0) errorRedirect(errorPath, "Add at least one student.");
+
+  const seen = new Set<string>();
+  const existingAccounts = await prisma.studentAccount.findMany({
+    where: { email: { in: cleaned.map((row) => row.email) } },
+    select: { id: true, email: true }
+  });
+  const accountByEmail = new Map(existingAccounts.map((account) => [account.email, account.id]));
+  const data = cleaned.map((row) => {
+    if (row.displayName.length < 2 || !isValidStudentEmail(row.email)) {
+      errorRedirect(errorPath, "Each student needs a name and a valid email address.");
+    }
+    if (seen.has(row.email)) {
+      errorRedirect(errorPath, "Each student email can only appear once in the import.");
+    }
+    seen.add(row.email);
+    return {
+      classroomId,
+      accountId: accountByEmail.get(row.email) || null,
+      displayName: row.displayName,
+      email: row.email
+    };
+  });
+
+  try {
+    await prisma.student.createMany({ data });
+  } catch {
+    errorRedirect(errorPath, "Student names and emails must be unique inside the class.");
+  }
+}
+
+export async function addStudents(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const path = `/teacher/classes/${classroomId}/roster`;
+  const names = formData.getAll("studentName").map((value) => String(value));
+  const emails = formData.getAll("studentEmail").map((value) => String(value));
+  const rows = names.map((displayName, index) => ({
+    displayName,
+    email: emails[index] || ""
+  }));
+
+  await createStudentsFromRows(teacher.id, classroomId, rows, path);
+  redirect(`${path}?saved=1`);
+}
+
+export type RosterImportState = {
+  rows: Array<{ displayName: string; email: string }>;
+  fileName: string;
+  error?: string;
+};
+
+export async function prepareStudentImport(
+  _previousState: RosterImportState,
+  formData: FormData
+): Promise<RosterImportState> {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id }
+  });
+  if (!classroom) return { rows: [], fileName: "", error: "Class not found." };
+
+  const file = formData.get("studentFile");
+  if (!(file instanceof File) || file.size === 0) {
+    return { rows: [], fileName: "", error: "Upload a CSV, TSV, or XLSX spreadsheet." };
+  }
+  if (file.size > 4 * 1024 * 1024) {
+    return { rows: [], fileName: file.name, error: "Upload a student spreadsheet no larger than 4 MB." };
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const values = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
+    if (values.length === 0) {
+      return { rows: [], fileName: file.name, error: "The spreadsheet appears to be empty." };
+    }
+    const rows = await extractStudentRosterWithAI(values);
+    if (rows.length === 0) {
+      return { rows: [], fileName: file.name, error: "Charlotte could not find any student rows." };
+    }
+    return { rows, fileName: file.name };
+  } catch {
+    return { rows: [], fileName: file.name, error: "Charlotte could not read that spreadsheet." };
+  }
+}
+
+export async function createMaterial(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const title = formText(formData, "title");
+  const creationMode = formText(formData, "creationMode") === "manual" ? "manual" : "ai";
+  const dueAt = optionalDate(formText(formData, "dueAt"));
+  const readingScope = formText(formData, "readingScope").slice(0, 160) || null;
+  const estimatedMinutes = Math.min(
+    30,
+    Math.max(10, Number(formData.get("estimatedMinutes") || 15))
+  );
+  const path = `/teacher/classes/${classroomId}/materials/new`;
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id }
+  });
+  if (!classroom) errorRedirect("/teacher", "Class not found.");
+  if (title.length < 2) errorRedirect(path, "Please enter a title for the material.");
+
+  if (creationMode === "manual") {
+    const material = await prisma.material.create({
+      data: {
+        teacherId: teacher.id,
+        classroomId,
+        title,
+        gradeLevel: classroom.gradeLevel,
+        estimatedMinutes,
+        activityKind: ActivityKind.IN_CLASS,
+        dueAt,
+        availableAt: new Date(),
+        atHomeScope: readingScope,
+        generationNotes: "Created manually by the teacher.",
+        questions: {
+          create: Array.from({ length: 5 }, (_, index) => ({
+            type: QuestionType.SHORT_RESPONSE,
+            prompt: `Enter question ${index + 1}`,
+            difficulty: 3,
+            sortOrder: index + 1
+          }))
+        }
+      }
+    });
+    redirect(`/teacher/classes/${classroomId}/materials/${material.id}/review`);
+  }
+
+  const file = formData.get("sourceFile");
+  if (!(file instanceof File) || file.size === 0) {
+    errorRedirect(path, "Please upload a PDF, DOCX, or TXT lesson plan.");
+  }
+
+  let materialId = "";
+  try {
+    const extracted = await extractTextFromUpload(file);
+    const generated = await generateQuestionsFromText({
+      title,
+      gradeLevel: classroom.gradeLevel,
+      estimatedMinutes,
+      text: extracted.text,
+      activityLabel: "In-class activity",
+      activityFocus: ""
+    });
+
+    const material = await prisma.material.create({
+      data: {
+        teacherId: teacher.id,
+        classroomId,
+        title,
+        gradeLevel: classroom.gradeLevel,
+        estimatedMinutes,
+        activityKind: ActivityKind.IN_CLASS,
+        dueAt,
+        availableAt: new Date(),
+        sourceName: extracted.sourceName,
+        sourceHash: extracted.sourceHash,
+        sourcePreview: extracted.sourcePreview,
+        sourceText: extracted.text,
+        atHomeScope: readingScope,
+        generationNotes: generated.notes,
+        questions: {
+          create: generated.questions.map((question, questionIndex) => ({
+            type: question.type,
+            prompt: question.prompt,
+            choicesJson: question.choices?.length ? JSON.stringify(question.choices) : null,
+            correctAnswer: question.correctAnswer || null,
+            rubric: question.rubric || null,
+            skillTag: question.skillTag || null,
+            standardCode: question.standardCode || null,
+            difficulty: question.difficulty,
+            sortOrder: questionIndex + 1
+          }))
+        }
+      }
+    });
+    materialId = material.id;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Material generation failed.";
+    errorRedirect(path, message);
+  }
+
+  redirect(`/teacher/classes/${classroomId}/materials/${materialId}/review`);
+}
+
+export async function saveMaterialDraft(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const materialId = formText(formData, "materialId");
+  const path = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
+  const returnTab = formText(formData, "returnTab");
+
+  const material = await prisma.material.findFirst({
+    where: { id: materialId, classroomId, teacherId: teacher.id },
+    include: { questions: true }
+  });
+  if (!material) errorRedirect("/teacher", "Material not found.");
+
+  await prisma.material.update({
+    where: { id: materialId },
+    data: {
+      title: formData.has("title") ? formText(formData, "title") || material.title : material.title,
+      gradeLevel: formData.has("gradeLevel")
+        ? normalizeGrade(formText(formData, "gradeLevel") || material.gradeLevel)
+        : material.gradeLevel,
+      estimatedMinutes: formData.has("estimatedMinutes")
+        ? Math.min(30, Math.max(10, Number(formData.get("estimatedMinutes") || 15)))
+        : material.estimatedMinutes,
+      activityKind: formData.has("activityKind")
+        ? formText(formData, "activityKind") === ActivityKind.AT_HOME
+          ? ActivityKind.AT_HOME
+          : ActivityKind.IN_CLASS
+        : material.activityKind,
+      dueAt: formData.has("dueAt") ? optionalDate(formText(formData, "dueAt")) : material.dueAt,
+      availableAt: formData.has("availableAt")
+        ? optionalDate(formText(formData, "availableAt"))
+        : material.availableAt,
+      atHomeScope: formData.has("readingScope")
+        ? formText(formData, "readingScope").slice(0, 160) || null
+        : material.atHomeScope
+    }
+  });
+
+  await Promise.all(
+    material.questions.map((question) => {
+      if (!formData.has(`prompt-${question.id}`)) return Promise.resolve(question);
+      const type = formText(formData, `type-${question.id}`) as QuestionType;
+      const format = formText(formData, `format-${question.id}`) || "MULTIPLE_CHOICE";
+      const repeatedChoices = formData
+        .getAll(`choice-${question.id}`)
+        .map((choice) => String(choice).trim())
+        .filter(Boolean);
+      const textareaChoices = formText(formData, `choices-${question.id}`)
+        .split(/\r?\n/)
+        .map((choice) => choice.trim())
+        .filter(Boolean);
+      const choices = repeatedChoices.length ? repeatedChoices : textareaChoices;
+      const useChoices = format === "MULTIPLE_CHOICE" || format === "CHECKBOXES";
+
+      return prisma.question.update({
+        where: { id: question.id },
+        data: {
+          type: Object.values(QuestionType).includes(type) ? type : question.type,
+          prompt: formText(formData, `prompt-${question.id}`),
+          choicesJson: useChoices && choices.length ? JSON.stringify(choices) : null,
+          correctAnswer: useChoices ? formText(formData, `correct-${question.id}`) || null : null,
+          rubric: formText(formData, `rubric-${question.id}`) || null,
+          skillTag: formText(formData, `skill-${question.id}`) || null,
+          standardCode: formText(formData, `standard-${question.id}`) || null,
+          timeLimitSeconds: Math.max(0, Number(formData.get(`timeLimit-${question.id}`) || 0)) || null,
+          randomizeChoices: formData.get(`randomize-${question.id}`) === "on",
+          difficulty: Math.min(5, Math.max(1, Number(formData.get(`difficulty-${question.id}`) || 3)))
+        }
+      });
+    })
+  );
+
+  redirect(`${path}?${returnTab ? `tab=${encodeURIComponent(returnTab)}&` : ""}saved=1`);
+}
+
+export async function deleteMaterial(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const materialId = formText(formData, "materialId");
+  const material = await prisma.material.findFirst({
+    where: { id: materialId, classroomId, teacherId: teacher.id }
+  });
+  if (!material) errorRedirect(`/teacher/classes/${classroomId}/materials`, "Assignment not found.");
+  await prisma.material.delete({ where: { id: materialId } });
+  redirect(`/teacher/classes/${classroomId}/materials?deleted=1`);
+}
+
+export async function uploadAtHomeResource(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const path = `/teacher/classes/${classroomId}/home-learning`;
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id }
+  });
+  if (!classroom) errorRedirect("/teacher/classes", "Class not found.");
+
+  const file = formData.get("sourceFile");
+  if (!(file instanceof File) || file.size === 0) {
+    errorRedirect(path, "Drop in a PDF, DOCX, or TXT resource.");
+  }
+
+  try {
+    const extracted = await extractTextFromUpload(file);
+    const customTitle = formText(formData, "title");
+    const defaultTitle = extracted.sourceName.replace(/\.[^.]+$/, "");
+    await prisma.atHomeResource.create({
+      data: {
+        teacherId: teacher.id,
+        classroomId,
+        title: customTitle || defaultTitle,
+        sourceName: extracted.sourceName,
+        sourceHash: extracted.sourceHash,
+        sourcePreview: extracted.sourcePreview,
+        sourceText: extracted.text,
+        readingScope: formText(formData, "readingScope").slice(0, 160) || null
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.message.includes("Unique constraint")
+      ? "That document is already in the at-home resource library."
+      : error instanceof Error
+        ? error.message
+        : "Charlotte could not read that document.";
+    errorRedirect(path, message);
+  }
+
+  redirect(`${path}?saved=1`);
+}
+
+export async function deleteAtHomeResource(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const resourceId = formText(formData, "resourceId");
+  const path = `/teacher/classes/${classroomId}/home-learning`;
+  const resource = await prisma.atHomeResource.findFirst({
+    where: { id: resourceId, classroomId, teacherId: teacher.id }
+  });
+  if (!resource) errorRedirect(path, "At-home resource not found.");
+  await prisma.atHomeResource.delete({ where: { id: resource.id } });
+  redirect(`${path}?deleted=1`);
+}
+
+export async function publishMaterial(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const materialId = formText(formData, "materialId");
+
+  const material = await prisma.material.findFirst({
+    where: { id: materialId, classroomId, teacherId: teacher.id },
+    include: { questions: true }
+  });
+  if (!material) errorRedirect("/teacher", "Material not found.");
+  if (material.questions.length < 5) {
+    errorRedirect(
+      `/teacher/classes/${classroomId}/materials/${materialId}/review`,
+      "Add at least 5 questions before publishing."
+    );
+  }
+
+  await prisma.material.update({
+    where: { id: materialId },
+    data: { status: MaterialStatus.PUBLISHED }
+  });
+
+  redirect(`/teacher/classes/${classroomId}`);
+}
+
+export async function unpublishMaterial(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const materialId = formText(formData, "materialId");
+
+  const material = await prisma.material.findFirst({
+    where: { id: materialId, classroomId, teacherId: teacher.id }
+  });
+  if (!material) errorRedirect("/teacher", "Material not found.");
+
+  await prisma.material.update({
+    where: { id: materialId },
+    data: { status: MaterialStatus.DRAFT }
+  });
+
+  redirect(`/teacher/classes/${classroomId}/materials/${materialId}/review`);
+}
+
+export async function gradeStudentAnswer(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const materialId = formText(formData, "materialId");
+  const questionId = formText(formData, "questionId");
+  const answerId = formText(formData, "answerId");
+  const requestedPoints = Number(formData.get("points"));
+  const path = `/teacher/classes/${classroomId}/materials/${materialId}/questions/${questionId}/responses`;
+
+  if (!Number.isFinite(requestedPoints)) {
+    errorRedirect(path, "Choose a point value before submitting.");
+  }
+
+  const answer = await prisma.studentAnswer.findFirst({
+    where: {
+      id: answerId,
+      questionId,
+      question: {
+        material: {
+          id: materialId,
+          classroomId,
+          teacherId: teacher.id
+        }
+      }
+    },
+    include: {
+      question: { include: { material: { include: { questions: true } } } }
+    }
+  });
+  if (!answer) errorRedirect(path, "Student response not found.");
+
+  const maxPoints = questionPointValue(answer.question.sortOrder, answer.question.material.questions.length);
+  const pointsEarned = Math.min(maxPoints, Math.max(0, Math.round(requestedPoints)));
+  const isCorrect = pointsEarned === maxPoints;
+
+  await prisma.studentAnswer.update({
+    where: { id: answer.id },
+    data: { isCorrect, firstTryCorrect: isCorrect && answer.attemptCount <= 1, pointsEarned }
+  });
+
+  const total = await prisma.studentAnswer.aggregate({
+    where: { sessionId: answer.sessionId },
+    _sum: { pointsEarned: true }
+  });
+  await prisma.studentSession.update({
+    where: { id: answer.sessionId },
+    data: { pointsEarned: total._sum.pointsEarned || 0 }
+  });
+
+  redirect(`${path}?graded=1`);
+}
+
+export async function updateTeacherPassword(formData: FormData) {
+  const teacher = await requireTeacher();
+  const confirmEmail = normalizeEmail(formText(formData, "confirmEmail"));
+  const newPassword = formText(formData, "newPassword");
+  const confirmPassword = formText(formData, "confirmPassword");
+
+  if (confirmEmail !== teacher.email) {
+    errorRedirect("/teacher/account", "Confirm your account email before changing the password.");
+  }
+  if (newPassword.length < 10) {
+    errorRedirect("/teacher/account", "Use a password with at least 10 characters.");
+  }
+  if (newPassword !== confirmPassword) {
+    errorRedirect("/teacher/account", "The new passwords do not match.");
+  }
+
+  await prisma.teacher.update({
+    where: { id: teacher.id },
+    data: { passwordHash: await hashPassword(newPassword) }
+  });
+
+  redirect("/teacher/account?saved=1");
+}
+
+export async function submitContactLead(formData: FormData) {
+  const name = formText(formData, "name");
+  const email = normalizeEmail(formText(formData, "email"));
+  const phone = formText(formData, "phone");
+  const school = formText(formData, "school");
+  const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
+  const website = formText(formData, "website");
+
+  if (website) redirect("/contact?sent=1");
+  if (name.length < 2 || !email.includes("@") || phone.length < 7 || school.length < 2 || !gradeLevel) {
+    errorRedirect("/contact", "Please complete every field so we can reach you.");
+  }
+
+  await prisma.contactLead.create({ data: { name, email, phone, school, gradeLevel } });
+  redirect("/contact?sent=1");
+}
