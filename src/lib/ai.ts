@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { standardsReferenceForGrade } from "@/lib/standards";
+import { sourceExcerptWindows } from "@/lib/text-context";
 
 const GeneratedQuestionSchema = z.object({
   type: z.enum(["VOCAB", "COMPREHENSION", "PREDICTION", "SHORT_RESPONSE"]),
@@ -11,6 +12,8 @@ const GeneratedQuestionSchema = z.object({
   skillTag: z.string().optional(),
   standardCode: z.string().optional(),
   explanation: z.string().optional(),
+  contextExcerpt: z.string().optional(),
+  sourcePage: z.string().optional(),
   difficulty: z.number().int().min(1).max(5).default(3)
 });
 
@@ -38,6 +41,8 @@ const HomePracticeQuestionSchema = z.object({
   explanation: z.string().min(10),
   skillTag: z.string().min(2),
   standardCode: z.string().min(2),
+  contextExcerpt: z.string().optional(),
+  sourcePage: z.string().optional(),
   difficulty: z.number().int().min(1).max(5).default(3)
 }).refine((question) => question.choices.includes(question.correctAnswer), {
   message: "The correct answer must exactly match one choice."
@@ -54,14 +59,44 @@ function openAiApiKey() {
   return process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY || "";
 }
 
-function normalizeGeneratedQuestion(question: GeneratedQuestion): GeneratedQuestion {
-  if (!question.choices?.length) return question;
+function gradeLevelLanguageRule(gradeLevel: string) {
+  const normalized = gradeLevel.toUpperCase() === "K" ? 0 : Number.parseInt(gradeLevel, 10);
+  if (Number.isNaN(normalized)) {
+    return "Use clear student-facing language. Keep the support wording easier than the skill being assessed.";
+  }
+  if (normalized <= 2) {
+    return "Use very short sentences, familiar words, and concrete choices. Ask one thing at a time. Do not use academic words unless the question directly teaches that word.";
+  }
+  if (normalized <= 5) {
+    return "Use elementary-grade wording: common words, direct questions, and short answer choices. Keep academic or challenging words only when they are the target vocabulary from the reading.";
+  }
+  if (normalized <= 8) {
+    return "Use middle-school wording: clear academic language is okay only when it is part of the assessed skill. Avoid unnecessary jargon in prompts and distractors.";
+  }
+  return "Use high-school-appropriate wording, but still avoid needless jargon. The challenge should come from interpretation, evidence, and vocabulary from the text.";
+}
+
+function cleanContextExcerpt(value?: string | null) {
+  return value
+    ?.replace(/\[\[PAGE \d+\]\]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 900) || undefined;
+}
+
+function normalizeGeneratedQuestion(question: GeneratedQuestion, fallbackContext?: {
+  contextExcerpt?: string | null;
+  sourcePage?: string | null;
+}): GeneratedQuestion {
+  const contextExcerpt = cleanContextExcerpt(question.contextExcerpt) || cleanContextExcerpt(fallbackContext?.contextExcerpt);
+  const sourcePage = (question.sourcePage || fallbackContext?.sourcePage || "").trim().slice(0, 80) || undefined;
+  if (!question.choices?.length) return { ...question, contextExcerpt, sourcePage };
 
   const choices = question.choices
     .map((choice) => choice.trim())
     .filter(Boolean)
     .slice(0, 4);
-  if (choices.length === 0) return { ...question, choices: undefined, correctAnswer: undefined };
+  if (choices.length === 0) return { ...question, contextExcerpt, sourcePage, choices: undefined, correctAnswer: undefined };
 
   const rawAnswer = question.correctAnswer?.trim() || "";
   const letterMatch = rawAnswer.match(/^[A-D]$/i);
@@ -75,8 +110,21 @@ function normalizeGeneratedQuestion(question: GeneratedQuestion): GeneratedQuest
 
   return {
     ...question,
+    contextExcerpt,
+    sourcePage,
     choices,
     correctAnswer: exactChoice || letterChoice || caseChoice || containedChoice || choices[0]
+  };
+}
+
+function normalizeHomePracticeQuestion(
+  question: HomePracticeQuestion,
+  fallbackContext?: { contextExcerpt?: string | null; sourcePage?: string | null }
+): HomePracticeQuestion {
+  return {
+    ...question,
+    contextExcerpt: cleanContextExcerpt(question.contextExcerpt) || cleanContextExcerpt(fallbackContext?.contextExcerpt),
+    sourcePage: (question.sourcePage || fallbackContext?.sourcePage || "").trim().slice(0, 80) || undefined
   };
 }
 
@@ -152,6 +200,7 @@ export async function generateQuestionsFromText(input: {
   activityFocus?: string;
   activityLabel?: string;
 }) {
+  const fallbackContexts = sourceExcerptWindows(input.text, 24);
   const apiKey = openAiApiKey();
   if (!apiKey) return demoQuestions(input);
 
@@ -175,11 +224,18 @@ export async function generateQuestionsFromText(input: {
           `Material title: ${input.title}.`,
           input.activityLabel ? `Activity label: ${input.activityLabel}.` : "",
           input.activityFocus ? `Instructional focus: ${input.activityFocus}.` : "",
+          gradeLevelLanguageRule(input.gradeLevel),
           "The questions must reward close attention, inference, vocabulary-in-context, and evidence from the uploaded text.",
           "Avoid easy yes/no questions. Avoid questions answerable without reading.",
+          "Keep the support wording simple and student-friendly. Challenge may live in the target vocabulary word, inference, evidence, or idea—not in accidental extra words in the question or answer choices.",
+          "If a hard word is not the target vocabulary word or the actual skill being assessed, replace it with a clear grade-level synonym.",
+          "Avoid answer choices such as 'not just or equitable' unless the question is directly teaching those words. Prefer clearer support wording such as 'not fair.'",
+          "When a question asks about a specific part of the reading, include a 2-3 sentence contextExcerpt copied or lightly cleaned from the uploaded text so students do not have to hunt for the passage.",
+          "Also include sourcePage. Prefer a visible book page number, chapter-page label, or printed page marker near the excerpt. If the PDF combines multiple book pages on one PDF page, choose the visible book page closest to the excerpt. If no book page is visible, use the nearest [[PAGE n]] marker as 'PDF page n'.",
+          "Do not put the context excerpt inside the prompt. Put it only in contextExcerpt.",
           "Every question must be genuinely aligned to one California Common Core ELA/Literacy standard for the target grade.",
           "Use exactly this JSON shape:",
-          '{"notes":"short teacher note","questions":[{"type":"VOCAB|COMPREHENSION|PREDICTION|SHORT_RESPONSE","prompt":"...","choices":["A","B","C","D"],"correctAnswer":"...","rubric":"...","skillTag":"...","standardCode":"RL.3.1","difficulty":1}]}',
+          '{"notes":"short teacher note","questions":[{"type":"VOCAB|COMPREHENSION|PREDICTION|SHORT_RESPONSE","prompt":"...","contextExcerpt":"2-3 sentence excerpt students should read first","sourcePage":"book page 12 or PDF page 3","choices":["A","B","C","D"],"correctAnswer":"...","rubric":"...","skillTag":"...","standardCode":"RL.3.1","difficulty":1}]}',
           "Create 8 questions: 3 VOCAB multiple-choice, 3 COMPREHENSION multiple-choice, 1 PREDICTION written response, and 1 SHORT_RESPONSE evidence question.",
           "For multiple-choice questions, include 4 choices and a correctAnswer exactly matching one choice.",
           "For written questions, include a concise teacher rubric instead of a correctAnswer.",
@@ -197,7 +253,9 @@ export async function generateQuestionsFromText(input: {
   const parsed = GeneratedMaterialSchema.parse(JSON.parse(raw));
   return {
     ...parsed,
-    questions: parsed.questions.map(normalizeGeneratedQuestion)
+    questions: parsed.questions.map((question, index) =>
+      normalizeGeneratedQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+    )
   };
 }
 
@@ -210,6 +268,7 @@ export async function generateAtHomePractice(input: {
   excludePrompts?: string[];
   readingScope?: string;
 }) {
+  const fallbackContexts = sourceExcerptWindows(input.sourceText, 36);
   const fallback = fallbackAtHomePractice(input);
   const apiKey = openAiApiKey();
   if (!apiKey) return fallback;
@@ -232,6 +291,7 @@ export async function generateAtHomePractice(input: {
           role: "user",
           content: [
             `Create exactly ${questionCount} new multiple-choice questions for a grade ${input.gradeLevel} student.`,
+            gradeLevelLanguageRule(input.gradeLevel),
             "Use a mix of vocabulary and comprehension. Every question needs four plausible choices, one exact correct answer, and a short teaching explanation shown after the student responds.",
             input.weakTopics.length
               ? `Spend about two thirds of the questions strengthening these weak topics: ${input.weakTopics.join(", ")}.`
@@ -240,8 +300,14 @@ export async function generateAtHomePractice(input: {
               ? `Use the remaining questions to reinforce these successful or recently taught topics: ${input.reinforcementTopics.join(", ")}.`
               : "Use the remaining questions for close reading, evidence, vocabulary in context, and main idea.",
             "Keep language, sentence length, distractors, and standards appropriate for the class grade.",
+            "Keep the hard thinking in the target skill: vocabulary-in-context, inference, evidence, main idea, or close reading. Do not accidentally make answer choices hard because of unrelated advanced words.",
+            "If a challenging word is the vocabulary target, keep it. If a challenging word is only support language in a prompt or distractor, use an easier synonym.",
+            "Avoid answer choices like 'not just or equitable' unless those exact words are being taught. Use child-friendly choices such as 'not fair' when fairness is only support language.",
             "Write questions that look like real reading practice: ask directly about characters, events, details, vocabulary, sequence, cause and effect, main idea, inference, or evidence.",
             "Never use phrases such as teacher material, supplied material, source text, today's practice, theme practice, or comprehension practice in a student-facing question or answer.",
+            "For each question, include a 2-3 sentence contextExcerpt from the reading so the student has enough context without going back to the full book.",
+            "Also include sourcePage. Prefer the printed book page number or page label visible near the excerpt. If one PDF page contains multiple book pages, use the visible book page closest to the excerpt. If no book page is visible, use the nearest [[PAGE n]] marker as 'PDF page n'.",
+            "Do not put the excerpt inside the prompt. The prompt should ask the question after the separate excerpt.",
             "Do not ask the same idea in slightly different words. Each question must test a distinct detail or skill.",
             input.readingScope ? `Hard reading boundary: ${input.readingScope}. Do not ask about any chapter or page beyond this limit.` : "Stay within the supplied reading only.",
             input.excludePrompts?.length
@@ -249,7 +315,7 @@ export async function generateAtHomePractice(input: {
               : "Do not repeat a question within this batch.",
             "Do not ask for personal information. Do not introduce facts that are absent from the reading.",
             "Use exactly this JSON shape:",
-            '{"notes":"short teacher-facing generation note","questions":[{"type":"VOCAB|COMPREHENSION","prompt":"...","choices":["...","...","...","..."],"correctAnswer":"exact matching choice","explanation":"brief supportive teaching explanation","skillTag":"...","standardCode":"RL.3.1","difficulty":3}]}',
+            '{"notes":"short teacher-facing generation note","questions":[{"type":"VOCAB|COMPREHENSION","prompt":"...","contextExcerpt":"2-3 sentence excerpt students should read first","sourcePage":"book page 12 or PDF page 3","choices":["...","...","...","..."],"correctAnswer":"exact matching choice","explanation":"brief supportive teaching explanation","skillTag":"...","standardCode":"RL.3.1","difficulty":3}]}',
             "California standards reference:",
             standardsReferenceForGrade(input.gradeLevel),
             `Teacher material: ${input.sourceText.slice(0, 18000)}`
@@ -260,7 +326,13 @@ export async function generateAtHomePractice(input: {
 
     const raw = completion.choices[0]?.message.content;
     if (!raw) return fallback;
-    return HomePracticeSchema.parse(JSON.parse(raw));
+    const parsed = HomePracticeSchema.parse(JSON.parse(raw));
+    return {
+      ...parsed,
+      questions: parsed.questions.map((question, index) =>
+        normalizeHomePracticeQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+      )
+    };
   } catch {
     return fallback;
   }
@@ -277,6 +349,7 @@ function fallbackAtHomePractice(input: {
 }) {
   const gradeCode = input.gradeLevel.toUpperCase() === "K" ? "K" : input.gradeLevel;
   const questionCount = Math.min(12, Math.max(1, input.questionCount || 10));
+  const fallbackContexts = sourceExcerptWindows(input.sourceText, questionCount + 8);
   const excluded = new Set((input.excludePrompts || []).map((prompt) => prompt.trim().toLowerCase()));
   const teacherQuestions = input.sourceText
     .split(/\n(?=Question:)/i)
@@ -292,7 +365,7 @@ function fallbackAtHomePractice(input: {
     .filter((question) => !excluded.has(question.prompt.toLowerCase()));
 
   const questions: HomePracticeQuestion[] = teacherQuestions.slice(0, questionCount).map((question, index) => ({
-    type: index % 3 === 0 ? "VOCAB" : "COMPREHENSION",
+    type: (index % 3 === 0 ? "VOCAB" : "COMPREHENSION") as "VOCAB" | "COMPREHENSION",
     prompt: question.prompt,
     choices: question.choices,
     correctAnswer: question.correctAnswer,
@@ -300,7 +373,9 @@ function fallbackAtHomePractice(input: {
     skillTag: question.skillTag,
     standardCode: `RL.${gradeCode}.1`,
     difficulty: Math.min(5, 2 + (index % 4))
-  }));
+  })).map((question, index) =>
+    normalizeHomePracticeQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+  );
 
   const sentences = input.sourceText
     .split(/(?<=[.!?])\s+/)
@@ -319,7 +394,7 @@ function fallbackAtHomePractice(input: {
     if (excluded.has(prompt.toLowerCase())) continue;
     const distractors = wordPool.filter((word) => word.toLowerCase() !== correctAnswer.toLowerCase()).slice(index, index + 3);
     while (distractors.length < 3) distractors.push(["because", "another", "before"][distractors.length]);
-    questions.push({
+    questions.push(normalizeHomePracticeQuestion({
       type: "VOCAB",
       prompt,
       choices: [correctAnswer, ...distractors.slice(0, 3)],
@@ -328,7 +403,7 @@ function fallbackAtHomePractice(input: {
       skillTag: topics[index % Math.max(1, topics.length)] || "Vocabulary in context",
       standardCode: `L.${gradeCode}.4`,
       difficulty: Math.min(5, 2 + (index % 4))
-    });
+    }, fallbackContexts[index % Math.max(1, fallbackContexts.length)]));
   }
   return {
     notes: "Practice created from teacher-approved questions and reading details.",
@@ -356,6 +431,7 @@ function demoQuestions(input: {
     .split(/(?<=[.!?])\s+/)
     .filter((sentence) => sentence.length > 40)
     .slice(0, 6);
+  const fallbackContexts = sourceExcerptWindows(input.text, 12);
   const anchor = sentences[0] || input.text.slice(0, 160);
   const second = sentences[1] || anchor;
 
@@ -472,7 +548,9 @@ function demoQuestions(input: {
         standardCode: `W.${gradeCode}.9`,
         difficulty: 5
       }
-    ]
+    ].map((question, index) =>
+      normalizeGeneratedQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+    )
   };
 }
 

@@ -356,6 +356,8 @@ export async function createMaterial(formData: FormData) {
             rubric: question.rubric || null,
             skillTag: question.skillTag || null,
             standardCode: question.standardCode || null,
+            contextExcerpt: question.contextExcerpt || null,
+            sourcePage: question.sourcePage || null,
             difficulty: question.difficulty,
             sortOrder: questionIndex + 1
           }))
@@ -435,6 +437,8 @@ export async function saveMaterialDraft(formData: FormData) {
           rubric: formText(formData, `rubric-${question.id}`) || null,
           skillTag: formText(formData, `skill-${question.id}`) || null,
           standardCode: formText(formData, `standard-${question.id}`) || null,
+          contextExcerpt: formText(formData, `context-${question.id}`).slice(0, 900) || null,
+          sourcePage: formText(formData, `sourcePage-${question.id}`).slice(0, 80) || null,
           timeLimitSeconds: Math.max(0, Number(formData.get(`timeLimit-${question.id}`) || 0)) || null,
           randomizeChoices: formData.get(`randomize-${question.id}`) === "on",
           difficulty: Math.min(5, Math.max(1, Number(formData.get(`difficulty-${question.id}`) || 3)))

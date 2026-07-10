@@ -56,6 +56,27 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
         <textarea name={`prompt-${question.id}`} defaultValue={question.prompt} required />
       </label>
 
+      <div className="question-context-editor">
+        <label>
+          Student reading excerpt
+          <textarea
+            name={`context-${question.id}`}
+            defaultValue={question.contextExcerpt || ""}
+            placeholder="Optional: 2-3 sentences Charlotte should show above this question."
+          />
+          <span className="help-text">Students see this before the question so they have enough context without flipping back.</span>
+        </label>
+        <label>
+          Page shown to students
+          <input
+            name={`sourcePage-${question.id}`}
+            defaultValue={question.sourcePage || ""}
+            placeholder="Example: book page 12 or PDF page 3"
+          />
+          <span className="help-text">Use the book page if the PDF page number is misleading.</span>
+        </label>
+      </div>
+
       {isMultipleChoice && (
         <div className="options-editor simple-options-editor">
           <div className="answers-editor-heading">

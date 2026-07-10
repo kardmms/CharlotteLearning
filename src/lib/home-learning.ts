@@ -3,6 +3,7 @@ import "server-only";
 import { ActivityKind, MaterialStatus, QuestionType } from "@prisma/client";
 import { generateAtHomePractice, type HomePracticeQuestion } from "@/lib/ai";
 import { prisma } from "@/lib/db";
+import { excerptForIndex } from "@/lib/text-context";
 
 export function homeLearningDayKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -139,6 +140,8 @@ function instantQuestionsFromReading(
     output.push({
       type: "VOCAB",
       prompt,
+      contextExcerpt: excerptForIndex(sourceText, index).excerpt,
+      sourcePage: excerptForIndex(sourceText, index).sourcePage || undefined,
       choices: [correctAnswer, ...distractors.slice(0, 3)],
       correctAnswer,
       explanation: `The sentence uses “${correctAnswer},” so that word completes the idea correctly.`,
@@ -241,6 +244,8 @@ export async function ensureDailyHomePractice(studentId: string) {
       seedQuestions.push({
         type: question.type === QuestionType.VOCAB ? "VOCAB" : "COMPREHENSION",
         prompt: question.prompt,
+        contextExcerpt: question.contextExcerpt || undefined,
+        sourcePage: question.sourcePage || undefined,
         choices,
         correctAnswer: question.correctAnswer,
         explanation: question.explanation || `“${question.correctAnswer}” is the answer that best matches the reading.`,
@@ -293,6 +298,8 @@ export async function ensureDailyHomePractice(studentId: string) {
             choicesJson: JSON.stringify(question.choices),
             correctAnswer: question.correctAnswer,
             explanation: question.explanation,
+            contextExcerpt: question.contextExcerpt || null,
+            sourcePage: question.sourcePage || null,
             skillTag: question.skillTag,
             standardCode: question.standardCode,
             difficulty: question.difficulty,
@@ -369,6 +376,8 @@ export async function extendDailyHomePractice(sessionId: string, studentId: stri
       choicesJson: JSON.stringify(question.choices),
       correctAnswer: question.correctAnswer,
       explanation: question.explanation,
+      contextExcerpt: question.contextExcerpt || null,
+      sourcePage: question.sourcePage || null,
       skillTag: question.skillTag,
       standardCode: question.standardCode,
       difficulty: question.difficulty,

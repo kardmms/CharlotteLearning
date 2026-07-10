@@ -3,6 +3,7 @@ import { BookOpen } from "lucide-react";
 import { loginStudent } from "@/app/student/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
+import { PasswordField } from "@/components/PasswordField";
 
 export const dynamic = "force-dynamic";
 
@@ -32,10 +33,7 @@ export default async function StudentLoginPage({
               Student email
               <input name="email" type="email" autoComplete="email" required />
             </label>
-            <label>
-              Password
-              <input name="password" type="password" autoComplete="current-password" required />
-            </label>
+            <PasswordField name="password" label="Password" autoComplete="current-password" />
             <button className="button" type="submit">
               Sign in
             </button>

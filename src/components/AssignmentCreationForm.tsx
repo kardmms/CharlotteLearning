@@ -56,7 +56,7 @@ export function AssignmentCreationForm({
             />
             <span>
               <strong><Sparkles size={18} /> AI-assisted assignment</strong>
-              <small>Upload a lesson plan and Charlotte will build an editable quiz.</small>
+              <small>Upload a lesson, chapter, or reading and Charlotte will build an editable in-class quiz.</small>
             </span>
           </label>
           <label className={`choice-card ${creationMode === "manual" ? "selected" : ""}`}>
@@ -98,16 +98,16 @@ export function AssignmentCreationForm({
       </div>
 
       <label>
-        Reading limit for at-home practice
+        Reading limit for at-home follow-up
         <input name="readingScope" placeholder="Example: Through chapter 2 or pages 1–5" />
         <span className="help-text">Charlotte will not ask about content beyond this chapter or page.</span>
       </label>
 
       {creationMode === "ai" && (
         <label>
-          Lesson plan
+          In-class source file
           <input name="sourceFile" type="file" accept=".pdf,.docx,.txt,application/pdf" required />
-          <span className="help-text">PDF, DOCX, or TXT, up to 4 MB.</span>
+          <span className="help-text">Use this upload when Charlotte should create the in-class assignment. PDF, DOCX, or TXT, up to 4 MB.</span>
         </label>
       )}
 

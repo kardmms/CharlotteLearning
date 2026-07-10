@@ -130,6 +130,8 @@ model Question {
   skillTag      String?
   standardCode  String?
   explanation   String?
+  contextExcerpt String?
+  sourcePage    String?
   timeLimitSeconds Int?
   randomizeChoices Boolean       @default(false)
   difficulty    Int             @default(3)

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, Clock3, Eye, Send, Sparkles, Star } from "lucide-react";
+import { ArrowRight, BookOpenText, CheckCircle2, Clock3, Eye, Send, Sparkles, Star } from "lucide-react";
+import { shortResponseFeedback } from "@/lib/student-feedback";
 
 type Question = {
   id: string;
@@ -11,6 +12,8 @@ type Question = {
   skillTag?: string | null;
   standardCode?: string | null;
   explanation?: string | null;
+  contextExcerpt?: string | null;
+  sourcePage?: string | null;
   timeLimitSeconds?: number | null;
   correctAnswer?: string | null;
   existingAnswer: string;
@@ -348,8 +351,9 @@ export function StudentStation({
         setStatus("Correct — this is how students will see the feedback.");
         advanceSoon(material.activityKind === "AT_HOME" ? 2600 : 700);
       } else if (isWrittenResponse) {
-        setStatus("Written responses will be sent to the teacher for review.");
-        advanceSoon();
+        setStatus("Response saved. Read the quick checklist, then continue.");
+        setNeedsContinue(question.id);
+        setSubmitting(false);
       } else if (revealedAnswer) {
         setStatus(`The correct answer is: ${question.correctAnswer}`);
         advanceSoon(material.activityKind === "AT_HOME" ? 3200 : 1500);
@@ -380,8 +384,9 @@ export function StudentStation({
       setStatus(result.attemptCount === 1 ? "Correct on the first try!" : "Correct. Nice recovery!");
       advanceSoon(material.activityKind === "AT_HOME" ? 700 : 700);
     } else if (result.isCorrect === null) {
-      setStatus("Response submitted for teacher review.");
-      advanceSoon();
+      setStatus("Response saved. Read the quick checklist, then continue.");
+      setNeedsContinue(question.id);
+      setSubmitting(false);
     } else if (result.revealedAnswer) {
       setStatus(`The correct answer is: ${result.correctAnswer}`);
       if (material.activityKind === "AT_HOME") {
@@ -486,6 +491,18 @@ export function StudentStation({
             <span>{question.skillTag || "Close reading"}</span>
             <span>{possiblePoints} points</span>
           </div>
+
+          {question.contextExcerpt && (
+            <aside className="question-context-card">
+              <div>
+                <BookOpenText size={18} />
+                <strong>Read this part first</strong>
+                {question.sourcePage && <span>{question.sourcePage}</span>}
+              </div>
+              <p>{question.contextExcerpt}</p>
+            </aside>
+          )}
+
           <h2>{question.prompt}</h2>
 
           {question.choices.length > 0 ? (
@@ -533,6 +550,16 @@ export function StudentStation({
             <div className="answer-feedback answer-feedback-teaching">
               <strong>Charlotte explains</strong>
               <p>{currentResult.explanation}</p>
+            </div>
+          )}
+
+          {currentResult?.locked && question.choices.length === 0 && (
+            <div className="answer-feedback answer-feedback-review student-writing-feedback">
+              <strong>{shortResponseFeedback.title}</strong>
+              <p>{shortResponseFeedback.note}</p>
+              <ul>
+                {shortResponseFeedback.bullets.map((item) => <li key={item}>{item}</li>)}
+              </ul>
             </div>
           )}
 

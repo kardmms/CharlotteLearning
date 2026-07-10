@@ -2,6 +2,7 @@ import Link from "next/link";
 import { UserRoundPlus } from "lucide-react";
 import { registerStudent } from "@/app/student/actions";
 import { Message } from "@/components/Message";
+import { PasswordField } from "@/components/PasswordField";
 import { PublicTopbar } from "@/components/AppTopbar";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +27,8 @@ export default async function StudentSignupPage({
           <form className="form-grid" action={registerStudent}>
             <label>Your name<input name="displayName" autoComplete="name" required /></label>
             <label>Student email<input name="email" type="email" autoComplete="email" required /></label>
-            <label>Password<input name="password" type="password" minLength={10} autoComplete="new-password" required /><span className="help-text">Use at least 10 characters.</span></label>
-            <label>Confirm password<input name="confirmPassword" type="password" minLength={10} autoComplete="new-password" required /></label>
+            <PasswordField name="password" label="Password" minLength={10} autoComplete="new-password" helpText="Use at least 10 characters." />
+            <PasswordField name="confirmPassword" label="Confirm password" minLength={10} autoComplete="new-password" />
             <button className="button" type="submit">Create account</button>
           </form>
           <p>Already have an account? <Link href="/student/login">Sign in</Link></p>

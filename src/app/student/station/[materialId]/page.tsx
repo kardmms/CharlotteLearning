@@ -115,6 +115,8 @@ export default async function StationPage({
             skillTag: question.skillTag,
             standardCode: question.standardCode,
             explanation: question.explanation,
+            contextExcerpt: question.contextExcerpt,
+            sourcePage: question.sourcePage,
             timeLimitSeconds: question.timeLimitSeconds,
             existingAnswer:
               session.answers.find((answer) => answer.questionId === question.id)?.answerText || "",

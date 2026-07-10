@@ -1,4 +1,5 @@
 import { BookOpenCheck, FileQuestion, FileText, Sparkles, Star, Trash2, Trophy, UsersRound } from "lucide-react";
+import Link from "next/link";
 import { deleteAtHomeResource } from "@/app/teacher/actions";
 import { ClassNav } from "@/components/ClassNav";
 import { HomeResourceUpload } from "@/components/HomeResourceUpload";
@@ -94,6 +95,15 @@ export default async function HomeLearningPage({
             <div><div className="eyebrow">Teacher resource library</div><h2>What Charlotte can teach and reinforce</h2></div>
           </div>
           <p>Lesson plans and manual assignments appear automatically. Add more readings or question sheets anytime.</p>
+          <div className="upload-guide-card">
+            <div>
+              <strong>Have book text, a chapter, or a reading packet?</strong>
+              <p>Use the upload box below when Charlotte should reinforce that material during at-home Daily Wins.</p>
+            </div>
+            <Link className="ghost-button" href={`/teacher/classes/${classroom.id}/materials/new`}>
+              Need an in-class quiz?
+            </Link>
+          </div>
           <HomeResourceUpload classroomId={classroom.id} />
 
           <div className="home-resource-grid">

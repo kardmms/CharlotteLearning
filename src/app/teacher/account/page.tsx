@@ -2,6 +2,7 @@ import { KeyRound, Mail, UserRound } from "lucide-react";
 import { updateTeacherPassword } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
+import { PasswordField } from "@/components/PasswordField";
 import { requireTeacher } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -71,14 +72,8 @@ export default async function TeacherAccountPage({
               Confirm email
               <input name="confirmEmail" type="email" placeholder={teacher.email} required />
             </label>
-            <label>
-              New password
-              <input name="newPassword" type="password" minLength={10} required />
-            </label>
-            <label>
-              Confirm new password
-              <input name="confirmPassword" type="password" minLength={10} required />
-            </label>
+            <PasswordField name="newPassword" label="New password" minLength={10} autoComplete="new-password" />
+            <PasswordField name="confirmPassword" label="Confirm new password" minLength={10} autoComplete="new-password" />
             <button className="button" type="submit">
               Update password
             </button>

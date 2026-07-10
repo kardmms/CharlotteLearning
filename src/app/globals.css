@@ -65,6 +65,44 @@ textarea {
   font: inherit;
 }
 
+.password-field {
+  display: grid;
+  gap: 7px;
+}
+
+.password-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 96px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: var(--blue);
+  padding: 6px 10px;
+  font-weight: 900;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
 button,
 a,
 input,
@@ -3042,6 +3080,40 @@ tr:last-child td {
   font-size: clamp(1.45rem, 3vw, 2.25rem);
 }
 
+.question-context-card {
+  display: grid;
+  gap: 10px;
+  max-width: 920px;
+  margin: 18px 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  padding: 16px;
+}
+
+.question-context-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.question-context-card span {
+  border-radius: 999px;
+  background: white;
+  color: var(--blue);
+  padding: 5px 9px;
+  font-size: .82rem;
+}
+
+.question-context-card p {
+  margin: 0;
+  color: #1e40af;
+  line-height: 1.6;
+}
+
 .response-field {
   margin-top: 20px;
 }
@@ -3551,6 +3623,25 @@ tr:last-child td {
   color: #92400e;
 }
 
+.student-writing-feedback ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.student-writing-feedback li + li {
+  margin-top: 4px;
+}
+
+.question-context-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  gap: 12px;
+}
+
+.question-context-editor textarea {
+  min-height: 110px;
+}
+
 .check-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3969,6 +4060,12 @@ tr:last-child td {
   border-color: #334155;
 }
 
+:root[data-theme="dark"] .password-toggle {
+  background: #172554;
+  border-color: #3b82f6;
+  color: #bfdbfe;
+}
+
 :root[data-theme="dark"] .click-loading {
   background-color: #172554 !important;
   border-color: #1d4ed8 !important;
@@ -3986,6 +4083,8 @@ tr:last-child td {
 :root[data-theme="dark"] .options-editor,
 :root[data-theme="dark"] .home-resource-dropzone,
 :root[data-theme="dark"] .home-resource-card.linked,
+:root[data-theme="dark"] .question-context-card,
+:root[data-theme="dark"] .upload-guide-card,
 :root[data-theme="dark"] .student-mode-detail.class,
 :root[data-theme="dark"] .student-mode-detail.home,
 :root[data-theme="dark"] .result-topbar,
@@ -3993,6 +4092,16 @@ tr:last-child td {
 :root[data-theme="dark"] .leaderboard-panel {
   background: #111827;
   border-color: #334155;
+}
+
+:root[data-theme="dark"] .question-context-card p,
+:root[data-theme="dark"] .upload-guide-card p {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .question-context-card span {
+  background: #0f172a;
+  color: #bfdbfe;
 }
 
 :root[data-theme="dark"] .choice-card:hover,
@@ -4446,6 +4555,22 @@ tr:last-child td {
 .home-metric-grid strong { font-size: 1.65rem; }
 .home-resource-panel,
 .home-leaderboard-panel { margin-top: 18px; }
+.upload-guide-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 18px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  margin-top: 16px;
+  padding: 16px;
+}
+.upload-guide-card p {
+  margin: 4px 0 0;
+  color: #1e40af;
+}
 .home-resource-upload {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4532,6 +4657,9 @@ tr:last-child td {
   .home-metric-grid,
   .home-resource-grid { grid-template-columns: 1fr; }
   .home-resource-upload { grid-template-columns: 1fr; }
+  .question-context-editor,
+  .upload-guide-card { grid-template-columns: 1fr; }
+  .upload-guide-card { align-items: stretch; flex-direction: column; }
   .home-leaderboard-head { display: none; }
   .home-leaderboard-row {
     grid-template-columns: 42px minmax(130px, 1fr) auto;

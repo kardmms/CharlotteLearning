@@ -4,6 +4,7 @@ import { KeyRound } from "lucide-react";
 import { createFirstTeacher } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
+import { PasswordField } from "@/components/PasswordField";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +43,13 @@ export default async function TeacherSetupPage({
               Email
               <input name="email" type="email" autoComplete="email" required />
             </label>
-            <label>
-              Password
-              <input name="password" type="password" minLength={10} autoComplete="new-password" required />
-              <span className="help-text">Use at least 10 characters. Longer is better.</span>
-            </label>
+            <PasswordField
+              name="password"
+              label="Password"
+              minLength={10}
+              autoComplete="new-password"
+              helpText="Use at least 10 characters. Longer is better."
+            />
             <button className="button" type="submit">
               Create teacher account
             </button>

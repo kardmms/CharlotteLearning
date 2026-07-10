@@ -70,6 +70,8 @@ export default async function TeacherPreviewPage({
             correctAnswer: question.correctAnswer,
             skillTag: question.skillTag,
             standardCode: question.standardCode,
+            contextExcerpt: question.contextExcerpt,
+            sourcePage: question.sourcePage,
             timeLimitSeconds: question.timeLimitSeconds,
             existingAnswer: "",
             existingIsCorrect: null,
