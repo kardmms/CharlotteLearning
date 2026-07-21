@@ -21,9 +21,10 @@ export function PublicTopbar() {
         <span>Charlotte AI</span>
       </Link>
       <nav className="marketing-nav" aria-label="Marketing navigation">
-        <a href="#features" data-no-loading="true">Features</a>
-        <a href="#benefits" data-no-loading="true">Benefits</a>
-        <a href="#contact" data-no-loading="true">Contact</a>
+        <Link href="/#features">Features</Link>
+        <Link href="/#benefits">Benefits</Link>
+        <Link href="/#contact">Contact</Link>
+        <Link href="/privacy">Privacy</Link>
       </nav>
       <nav className="nav-links">
         <Link className="ghost-button" href="/teacher/login">

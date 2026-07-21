@@ -167,7 +167,7 @@ export default async function HomePage() {
             <div>
               <h2>Interested in starting a Charlotte program for your class?</h2>
               <p>
-                Tell us about your school and the students you serve. We&apos;ll help you choose the
+                Tell us the basics about the students you serve. We&apos;ll help you choose the
                 right starting point and share pricing for your classroom.
               </p>
               <div className="hero-badges">
@@ -205,6 +205,7 @@ export default async function HomePage() {
           <div className="nav-links">
             <Link href="/teacher/login">Teacher login</Link>
             <Link href="/student/login">Student sign in</Link>
+            <Link href="/privacy">Privacy</Link>
             <BookOpen size={18} color="#64748B" />
           </div>
         </div>

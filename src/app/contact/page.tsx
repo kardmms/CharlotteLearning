@@ -21,7 +21,7 @@ export default async function ContactPage({
         <section className="contact-intro">
           <div className="contact-icon"><School size={28} /></div>
           <h1>Bring Charlotte AI to your classroom.</h1>
-          <p>Share a few details and we&apos;ll reach out about the right classroom plan.</p>
+          <p>Share the basics and we&apos;ll reach out about the right classroom plan.</p>
         </section>
         <section className="panel contact-form-panel">
           <Message
@@ -41,12 +41,12 @@ export default async function ContactPage({
                   <input name="email" type="email" autoComplete="email" maxLength={254} required />
                 </label>
                 <label>
-                  Phone number
-                  <input name="phone" type="tel" autoComplete="tel" maxLength={40} required />
+                  Phone number <span className="optional-label">optional</span>
+                  <input name="phone" type="tel" autoComplete="tel" maxLength={40} />
                 </label>
                 <label>
-                  School
-                  <input name="school" autoComplete="organization" maxLength={160} required />
+                  School <span className="optional-label">optional</span>
+                  <input name="school" autoComplete="organization" maxLength={160} />
                 </label>
               </div>
               <GradeSlider defaultValue="3" />

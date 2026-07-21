@@ -1,0 +1,80 @@
+name: Supply Chain
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "41 11 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v4
+        continue-on-error: ${{ github.event.repository.private }}
+        with:
+          fail-on-severity: moderate
+
+  sbom-and-vulnerability-scan:
+    name: SBOM and Grype Scan
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: charlotte-learning-sbom.spdx.json
+          upload-artifact: false
+
+      - name: Scan SBOM
+        id: grype
+        uses: anchore/scan-action@v7
+        with:
+          sbom: charlotte-learning-sbom.spdx.json
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+
+      - name: Upload Grype SARIF
+        if: always() && steps.grype.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: charlotte-learning-sbom
+          path: charlotte-learning-sbom.spdx.json
+          retention-days: 30
+
+      - name: Attest SBOM artifact
+        if: github.event_name == 'push' && github.event.repository.private == false
+        uses: actions/attest@v4
+        with:
+          subject-path: charlotte-learning-sbom.spdx.json

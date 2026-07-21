@@ -3511,6 +3511,55 @@ tr:last-child td {
 .contact-form-panel { padding: clamp(24px, 4vw, 42px); }
 .contact-honeypot { position: absolute !important; left: -10000px !important; }
 .turnstile-field { min-height: 1px; }
+
+.optional-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.privacy-page {
+  max-width: 1000px;
+}
+
+.privacy-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.privacy-panel h1 {
+  margin: 0;
+}
+
+.privacy-panel p {
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.privacy-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.privacy-grid h2 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+.privacy-grid ul {
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 0;
+  padding-left: 20px;
+}
+
+@media (max-width: 760px) {
+  .privacy-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .contact-cta-card { align-content: center; }
 
 .question-randomize-control {

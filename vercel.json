@@ -1,4 +1,10 @@
 {
   "framework": "nextjs",
-  "buildCommand": "pnpm vercel-build"
+  "buildCommand": "pnpm vercel-build",
+  "crons": [
+    {
+      "path": "/api/maintenance/privacy-retention",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

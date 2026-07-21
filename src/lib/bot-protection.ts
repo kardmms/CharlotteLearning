@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { restrictedFetch } from "@/lib/outbound";
 import { requestIp } from "@/lib/rate-limit";
 
 type TurnstileResponse = {
@@ -49,7 +50,7 @@ export async function enforceTurnstile(formData: FormData, expectedAction: strin
   payload.append("remoteip", await requestIp());
   payload.append("idempotency_key", crypto.randomUUID());
 
-  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+  const response = await restrictedFetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
     method: "POST",
     body: payload,
     signal: AbortSignal.timeout(8000)

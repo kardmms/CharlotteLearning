@@ -209,10 +209,12 @@ model ContactLead {
   id         String   @id @default(cuid())
   name       String
   email      String
-  phone      String
-  school     String
+  phone      String?
+  school     String?
   gradeLevel String
   createdAt  DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model RateLimitBucket {

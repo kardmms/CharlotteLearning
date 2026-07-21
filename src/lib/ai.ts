@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { restrictedFetch } from "@/lib/outbound";
 import { standardsReferenceForGrade } from "@/lib/standards";
 import { sourceExcerptWindows } from "@/lib/text-context";
 
@@ -179,7 +180,7 @@ export async function extractStudentRosterWithAI(values: unknown[][]) {
   if (!apiKey) return fallback;
 
   try {
-    const openai = new OpenAI({ apiKey });
+    const openai = new OpenAI({ apiKey, fetch: restrictedFetch });
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
     const completion = await openai.chat.completions.create({
       model,
@@ -223,7 +224,7 @@ export async function generateQuestionsFromText(input: {
   const apiKey = openAiApiKey();
   if (!apiKey) return demoQuestions(input);
 
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, fetch: restrictedFetch });
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const completion = await openai.chat.completions.create({
@@ -294,7 +295,7 @@ export async function generateAtHomePractice(input: {
   if (!apiKey) return fallback;
 
   try {
-    const openai = new OpenAI({ apiKey, timeout: 12_000, maxRetries: 1 });
+    const openai = new OpenAI({ apiKey, fetch: restrictedFetch, timeout: 12_000, maxRetries: 1 });
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
     const questionCount = Math.min(12, Math.max(1, input.questionCount || 10));
     const completion = await openai.chat.completions.create({
@@ -595,7 +596,7 @@ export async function summarizeClassData(input: {
   const apiKey = openAiApiKey();
   if (!apiKey) return fallbackClassSummary(input);
 
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, fetch: restrictedFetch });
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const completion = await openai.chat.completions.create({

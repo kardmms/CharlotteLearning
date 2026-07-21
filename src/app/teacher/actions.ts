@@ -42,6 +42,14 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase().slice(0, 254);
 }
 
+function normalizePhone(value: string) {
+  return value
+    .replace(/[^\d+().\-\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
 function boundedText(formData: FormData, key: string, maxLength: number) {
   return formText(formData, key).slice(0, maxLength);
 }
@@ -783,7 +791,7 @@ export async function updateTeacherPassword(formData: FormData) {
 export async function submitContactLead(formData: FormData) {
   const name = boundedText(formData, "name", 120);
   const email = normalizeEmail(formText(formData, "email"));
-  const phone = boundedText(formData, "phone", 40);
+  const phone = normalizePhone(formText(formData, "phone"));
   const school = boundedText(formData, "school", 160);
   const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
   const website = formText(formData, "website");
@@ -794,10 +802,21 @@ export async function submitContactLead(formData: FormData) {
     await enforceRateLimit({ scope: "contact-email", limit: 3, windowSeconds: 24 * 60 * 60, identifier: email });
     await enforceTurnstile(formData, "contact");
   });
-  if (name.length < 2 || !email.includes("@") || phone.length < 7 || school.length < 2 || !gradeLevel) {
-    errorRedirect("/contact", "Please complete every field so we can reach you.");
+  if (name.length < 2 || !email.includes("@") || !gradeLevel) {
+    errorRedirect("/contact", "Please share your name, email, and grade level so we can reach you.");
+  }
+  if (phone && phone.length < 7) {
+    errorRedirect("/contact", "Enter a valid phone number or leave it blank.");
   }
 
-  await prisma.contactLead.create({ data: { name, email, phone, school, gradeLevel } });
+  await prisma.contactLead.create({
+    data: {
+      name,
+      email,
+      phone: phone || null,
+      school: school || null,
+      gradeLevel
+    }
+  });
   redirect("/contact?sent=1");
 }
