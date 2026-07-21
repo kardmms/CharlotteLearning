@@ -20,7 +20,8 @@ export default function PrivacyPage() {
               <h2>What We Store</h2>
               <ul>
                 <li>Teacher name, email, and hashed password.</li>
-                <li>Student name, email, and hashed password after the student creates an account.</li>
+                <li>Student name, email, and hashed password for standard classes.</li>
+                <li>For school-key protected classes: student numbers, encrypted identity data, and a keyed email lookup hash.</li>
                 <li>Classroom names, grade level, assignments, uploaded reading text, and question data.</li>
                 <li>Student answers, attempts, completion status, and scores for teacher review.</li>
                 <li>Contact requests: name, email, grade level, and optional phone or school.</li>
@@ -34,6 +35,7 @@ export default function PrivacyPage() {
                 <li>No student phone numbers, addresses, birthdates, or payment details.</li>
                 <li>No uploaded original files kept after text extraction.</li>
                 <li>No API keys or secrets in browser code.</li>
+                <li>No raw school privacy keys stored by Charlotte.</li>
               </ul>
             </section>
 
@@ -42,6 +44,7 @@ export default function PrivacyPage() {
               <ul>
                 <li>HTTPS-only production traffic and HTTP-only session cookies.</li>
                 <li>Managed cloud hosting and managed Postgres with provider encryption controls.</li>
+                <li>Optional school-held encryption keys for database-anonymous student rosters.</li>
                 <li>Class-scoped teacher and student access checks on every protected route.</li>
                 <li>Rate limits, bot checks, dependency scanning, and security headers.</li>
               </ul>

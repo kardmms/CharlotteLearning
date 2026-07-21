@@ -12,6 +12,12 @@ import {
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { normalizeStudentEmail } from "@/lib/codes";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import {
+  cleanPrivacyKey,
+  emailKeyHashForPrivacyKey,
+  isUsablePrivacyKey,
+  privacyAccountEmail
+} from "@/lib/school-privacy";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -40,6 +46,7 @@ async function enforceOrRedirect(path: string, callback: () => Promise<void>) {
 export async function loginStudent(formData: FormData) {
   const email = normalizeStudentEmail(formText(formData, "email")).slice(0, 254);
   const password = boundedText(formData, "password", 1024);
+  const privacyKey = cleanPrivacyKey(formText(formData, "privacyKey"));
   await enforceOrRedirect("/student/login", async () => {
     await enforceRateLimit({ scope: "student-login-ip", limit: 100, windowSeconds: 60 * 60 });
     await enforceRateLimit({ scope: "student-login-email", limit: 20, windowSeconds: 15 * 60, identifier: email });
@@ -49,7 +56,15 @@ export async function loginStudent(formData: FormData) {
     errorRedirect("/student/login", "Enter your email and password.");
   }
 
-  const account = await prisma.studentAccount.findUnique({ where: { email } });
+  if (privacyKey && !isUsablePrivacyKey(privacyKey)) {
+    errorRedirect("/student/login", "Enter the full class privacy key.");
+  }
+
+  const account = privacyKey
+    ? await prisma.studentAccount.findUnique({
+        where: { emailKeyHash: emailKeyHashForPrivacyKey(privacyKey, email) }
+      })
+    : await prisma.studentAccount.findUnique({ where: { email } });
   if (!account || !(await verifyPassword(password, account.passwordHash))) {
     errorRedirect("/student/login", "Email or password was not recognized.");
   }
@@ -63,6 +78,7 @@ export async function registerStudent(formData: FormData) {
   const email = normalizeStudentEmail(formText(formData, "email")).slice(0, 254);
   const password = boundedText(formData, "password", 1024);
   const confirmPassword = boundedText(formData, "confirmPassword", 1024);
+  const privacyKey = cleanPrivacyKey(formText(formData, "privacyKey"));
   await enforceOrRedirect("/student/signup", async () => {
     await enforceRateLimit({ scope: "student-signup-ip", limit: 100, windowSeconds: 60 * 60 });
     await enforceRateLimit({ scope: "student-signup-email", limit: 6, windowSeconds: 24 * 60 * 60, identifier: email });
@@ -72,6 +88,55 @@ export async function registerStudent(formData: FormData) {
   if (!email.includes("@")) errorRedirect("/student/signup", "Enter a valid email.");
   if (password.length < 10) errorRedirect("/student/signup", "Use a password with at least 10 characters.");
   if (password !== confirmPassword) errorRedirect("/student/signup", "The passwords do not match.");
+  if (privacyKey && !isUsablePrivacyKey(privacyKey)) {
+    errorRedirect("/student/signup", "Enter the full class privacy key.");
+  }
+
+  if (privacyKey) {
+    const emailKeyHash = emailKeyHashForPrivacyKey(privacyKey, email);
+    const matchingEnrollments = await prisma.student.findMany({
+      where: { emailKeyHash, active: true },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        classroomId: true,
+        accountId: true,
+        displayName: true,
+        displayNameEncrypted: true,
+        emailEncrypted: true
+      }
+    });
+    if (!matchingEnrollments.length) {
+      errorRedirect("/student/signup", "A teacher must add this email and privacy key to a class first.");
+    }
+    if (matchingEnrollments.some((enrollment) => enrollment.accountId)) {
+      errorRedirect("/student/login", "An account already exists for this email. Sign in instead.");
+    }
+    if (await prisma.studentAccount.findUnique({ where: { emailKeyHash } })) {
+      errorRedirect("/student/login", "An account already exists for this email. Sign in instead.");
+    }
+
+    const firstEnrollment = matchingEnrollments[0];
+    const account = await prisma.$transaction(async (transaction) => {
+      const created = await transaction.studentAccount.create({
+        data: {
+          displayName: firstEnrollment.displayName,
+          email: privacyAccountEmail(emailKeyHash),
+          emailKeyHash,
+          displayNameEncrypted: firstEnrollment.displayNameEncrypted,
+          emailEncrypted: firstEnrollment.emailEncrypted,
+          passwordHash: await hashPassword(password)
+        }
+      });
+      await transaction.student.updateMany({
+        where: { emailKeyHash, accountId: null },
+        data: { accountId: created.id }
+      });
+      return created;
+    });
+    await setStudentSession(account);
+    redirect("/student/classes");
+  }
 
   const enrollmentCount = await prisma.student.count({ where: { email, active: true } });
   if (!enrollmentCount) {

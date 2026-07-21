@@ -6,6 +6,7 @@ import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassActionsMenu } from "@/components/ClassActionsMenu";
 import { GradeSlider } from "@/components/GradeSlider";
 import { Message } from "@/components/Message";
+import { PasswordField } from "@/components/PasswordField";
 import { TeacherTutorial } from "@/components/TeacherTutorial";
 import { gradeLabel } from "@/lib/grade";
 import { prisma } from "@/lib/db";
@@ -60,11 +61,24 @@ export default async function TeacherHomePage({
               <Plus color="#2563EB" />
             </div>
             <form className="form-grid" action={createClassroom}>
+              <input type="hidden" name="returnPath" value="/teacher" />
               <label>
                 Class name
                 <input name="name" placeholder="Period 2 Literacy" required />
               </label>
               <GradeSlider defaultValue="3" />
+              <PasswordField
+                name="privacyKey"
+                label="School privacy key"
+                required={false}
+                minLength={12}
+                autoComplete="off"
+                helpText="Optional. If used, student names and emails are encrypted with a key the school keeps."
+              />
+              <label>
+                Privacy key hint
+                <input name="privacyKeyHint" maxLength={80} placeholder="Kept by grade team" />
+              </label>
               <button className="button" type="submit">
                 Create class
               </button>

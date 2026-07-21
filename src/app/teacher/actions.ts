@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { ActivityKind, MaterialStatus, QuestionType } from "@prisma/client";
+import { ActivityKind, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
 import { readSheet } from "read-excel-file/node";
 import { prisma } from "@/lib/db";
 import {
@@ -17,6 +17,17 @@ import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
 import { normalizeGrade } from "@/lib/grade";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import {
+  cleanPrivacyKey,
+  createPrivacyKeySalt,
+  decryptIdentityValue,
+  deriveClassPrivacyKey,
+  emailKeyHashForPrivacyKey,
+  encryptIdentityValue,
+  isUsablePrivacyKey,
+  privacyKeyVerifierFromDerivedKey,
+  verifyClassPrivacyKey
+} from "@/lib/school-privacy";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -52,6 +63,11 @@ function normalizePhone(value: string) {
 
 function boundedText(formData: FormData, key: string, maxLength: number) {
   return formText(formData, key).slice(0, maxLength);
+}
+
+function teacherReturnPath(formData: FormData, fallback: string) {
+  const returnPath = formText(formData, "returnPath");
+  return returnPath.startsWith("/teacher") ? returnPath : fallback;
 }
 
 function optionalDate(value: string) {
@@ -128,20 +144,33 @@ export async function logoutTeacher() {
 
 export async function createClassroom(formData: FormData) {
   const teacher = await requireTeacher();
-  await enforceOrRedirect("/teacher", async () => {
+  const errorPath = teacherReturnPath(formData, "/teacher");
+  await enforceOrRedirect(errorPath, async () => {
     await enforceRateLimit({ scope: "teacher-create-class", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
   });
   const name = boundedText(formData, "name", 120);
   const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
+  const privacyKey = cleanPrivacyKey(formText(formData, "privacyKey"));
+  const privacyKeyHint = boundedText(formData, "privacyKeyHint", 80) || null;
 
-  if (name.length < 2) errorRedirect("/teacher", "Please name the class.");
-  if (!gradeLevel) errorRedirect("/teacher", "Please enter a grade level.");
+  if (name.length < 2) errorRedirect(errorPath, "Please name the class.");
+  if (!gradeLevel) errorRedirect(errorPath, "Please enter a grade level.");
+  if (privacyKey && !isUsablePrivacyKey(privacyKey)) {
+    errorRedirect(errorPath, "Use a school privacy key with at least 12 characters.");
+  }
+
+  const privacySalt = privacyKey ? createPrivacyKeySalt() : null;
+  const derivedPrivacyKey = privacyKey && privacySalt ? deriveClassPrivacyKey(privacyKey, privacySalt) : null;
 
   const classroom = await prisma.classroom.create({
     data: {
       name,
       gradeLevel,
-      teacherId: teacher.id
+      teacherId: teacher.id,
+      identityMode: derivedPrivacyKey ? IdentityMode.SCHOOL_KEY : IdentityMode.STANDARD,
+      privacyKeySalt: privacySalt,
+      privacyKeyVerifier: derivedPrivacyKey ? privacyKeyVerifierFromDerivedKey(derivedPrivacyKey) : null,
+      privacyKeyHint: derivedPrivacyKey ? privacyKeyHint : null
     }
   });
 
@@ -219,7 +248,8 @@ async function createStudentsFromRows(
   teacherId: string,
   classroomId: string,
   rows: Array<{ displayName: string; email: string }>,
-  errorPath: string
+  errorPath: string,
+  rawPrivacyKey = ""
 ) {
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId }
@@ -229,6 +259,80 @@ async function createStudentsFromRows(
   const cleaned = cleanStudentRows(rows);
   if (cleaned.length === 0) errorRedirect(errorPath, "Add at least one student.");
 
+  for (const row of cleaned) {
+    if (row.displayName.length < 2 || !isValidStudentEmail(row.email)) {
+      errorRedirect(errorPath, "Each student needs a name and a valid email address.");
+    }
+  }
+
+  const privacyKey = cleanPrivacyKey(rawPrivacyKey);
+  const usesPrivacyKey = classroom.identityMode === IdentityMode.SCHOOL_KEY || Boolean(privacyKey);
+
+  if (usesPrivacyKey) {
+    if (!isUsablePrivacyKey(privacyKey)) {
+      errorRedirect(errorPath, "Enter this class privacy key before adding students.");
+    }
+
+    const existingStudentCount = await prisma.student.count({ where: { classroomId } });
+    const salt = classroom.privacyKeySalt || createPrivacyKeySalt();
+    const derivedKey = deriveClassPrivacyKey(privacyKey, salt);
+    const verifier = privacyKeyVerifierFromDerivedKey(derivedKey);
+
+    if (classroom.privacyKeyVerifier && classroom.privacyKeyVerifier !== verifier) {
+      errorRedirect(errorPath, "That privacy key does not match this class.");
+    }
+
+    const rowsWithHashes = cleaned.map((row) => ({
+      ...row,
+      emailKeyHash: emailKeyHashForPrivacyKey(privacyKey, row.email)
+    }));
+    const seenHashes = new Set<string>();
+    for (const row of rowsWithHashes) {
+      if (seenHashes.has(row.emailKeyHash)) {
+        errorRedirect(errorPath, "Each student email can only appear once in the import.");
+      }
+      seenHashes.add(row.emailKeyHash);
+    }
+
+    const existingAccounts = await prisma.studentAccount.findMany({
+      where: { emailKeyHash: { in: rowsWithHashes.map((row) => row.emailKeyHash) } },
+      select: { id: true, emailKeyHash: true }
+    });
+    const accountByEmailHash = new Map(
+      existingAccounts
+        .filter((account) => account.emailKeyHash)
+        .map((account) => [account.emailKeyHash as string, account.id])
+    );
+    const data = rowsWithHashes.map((row, index) => ({
+      classroomId,
+      accountId: accountByEmailHash.get(row.emailKeyHash) || null,
+      displayName: `Student ${existingStudentCount + index + 1}`,
+      email: null,
+      displayNameEncrypted: encryptIdentityValue(row.displayName, derivedKey),
+      emailEncrypted: encryptIdentityValue(row.email, derivedKey),
+      emailKeyHash: row.emailKeyHash
+    }));
+
+    try {
+      await prisma.$transaction(async (transaction) => {
+        if (classroom.identityMode !== IdentityMode.SCHOOL_KEY || !classroom.privacyKeySalt || !classroom.privacyKeyVerifier) {
+          await transaction.classroom.update({
+            where: { id: classroomId },
+            data: {
+              identityMode: IdentityMode.SCHOOL_KEY,
+              privacyKeySalt: salt,
+              privacyKeyVerifier: verifier
+            }
+          });
+        }
+        await transaction.student.createMany({ data });
+      });
+    } catch {
+      errorRedirect(errorPath, "Student invitations must be unique inside the class.");
+    }
+    return;
+  }
+
   const seen = new Set<string>();
   const existingAccounts = await prisma.studentAccount.findMany({
     where: { email: { in: cleaned.map((row) => row.email) } },
@@ -236,9 +340,6 @@ async function createStudentsFromRows(
   });
   const accountByEmail = new Map(existingAccounts.map((account) => [account.email, account.id]));
   const data = cleaned.map((row) => {
-    if (row.displayName.length < 2 || !isValidStudentEmail(row.email)) {
-      errorRedirect(errorPath, "Each student needs a name and a valid email address.");
-    }
     if (seen.has(row.email)) {
       errorRedirect(errorPath, "Each student email can only appear once in the import.");
     }
@@ -272,7 +373,7 @@ export async function addStudents(formData: FormData) {
       email: emails[index] || ""
   }));
 
-  await createStudentsFromRows(teacher.id, classroomId, rows, path);
+  await createStudentsFromRows(teacher.id, classroomId, rows, path, formText(formData, "privacyKey"));
   redirect(`${path}?saved=1`);
 }
 
@@ -281,6 +382,84 @@ export type RosterImportState = {
   fileName: string;
   error?: string;
 };
+
+export type RosterRevealState = {
+  rows: Array<{ id: string; displayName: string; email: string }>;
+  keyAccepted?: boolean;
+  error?: string;
+};
+
+export async function revealRosterIdentities(
+  _previousState: RosterRevealState,
+  formData: FormData
+): Promise<RosterRevealState> {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const privacyKey = cleanPrivacyKey(formText(formData, "privacyKey"));
+  try {
+    await enforceRateLimit({
+      scope: "teacher-reveal-roster",
+      limit: 30,
+      windowSeconds: 60 * 60,
+      identifier: `${teacher.id}:${classroomId}`
+    });
+    await clearExpiredRateLimits();
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return { rows: [], error: error.message };
+    }
+    throw error;
+  }
+
+  if (!isUsablePrivacyKey(privacyKey)) {
+    return { rows: [], error: "Enter the full school privacy key." };
+  }
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id },
+    select: {
+      identityMode: true,
+      privacyKeySalt: true,
+      privacyKeyVerifier: true,
+      students: {
+        where: { active: true },
+        orderBy: { displayName: "asc" },
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+          displayNameEncrypted: true,
+          emailEncrypted: true
+        }
+      }
+    }
+  });
+  if (!classroom) return { rows: [], error: "Class not found." };
+  if (classroom.identityMode !== IdentityMode.SCHOOL_KEY) {
+    return { rows: [], error: "This class does not use a school privacy key." };
+  }
+  if (!verifyClassPrivacyKey(privacyKey, classroom.privacyKeySalt, classroom.privacyKeyVerifier)) {
+    return { rows: [], error: "That privacy key does not match this class." };
+  }
+
+  const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);
+  try {
+    return {
+      keyAccepted: true,
+      rows: classroom.students.map((student) => ({
+        id: student.id,
+        displayName: student.displayNameEncrypted
+          ? decryptIdentityValue(student.displayNameEncrypted, derivedKey)
+          : student.displayName,
+        email: student.emailEncrypted
+          ? decryptIdentityValue(student.emailEncrypted, derivedKey)
+          : student.email || ""
+      }))
+    };
+  } catch {
+    return { rows: [], error: "Charlotte could not decrypt this roster with that key." };
+  }
+}
 
 function parseDelimitedRows(text: string, delimiter: "," | "\t") {
   const rows: unknown[][] = [];

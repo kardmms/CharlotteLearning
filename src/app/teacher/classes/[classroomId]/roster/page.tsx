@@ -1,8 +1,10 @@
-import { FileSpreadsheet, UserPlus } from "lucide-react";
+import { FileSpreadsheet, ShieldCheck, UserPlus } from "lucide-react";
 import { addStudents } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { Message } from "@/components/Message";
+import { PasswordField } from "@/components/PasswordField";
+import { RosterIdentityReveal } from "@/components/RosterIdentityReveal";
 import { StudentSpreadsheetImport } from "@/components/StudentSpreadsheetImport";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -35,6 +37,7 @@ export default async function RosterPage({
     }
   });
   if (!classroom) notFound();
+  const isPrivacyProtected = classroom.identityMode === "SCHOOL_KEY";
 
   return (
     <>
@@ -57,6 +60,30 @@ export default async function RosterPage({
           />
         </section>
 
+        <section className="panel privacy-roster-panel" style={{ marginTop: 18 }}>
+          <div className="panel-header">
+            <div>
+              <div className="eyebrow">Student privacy</div>
+              <h2>{isPrivacyProtected ? "School-key protected roster" : "Standard roster"}</h2>
+            </div>
+            <ShieldCheck color={isPrivacyProtected ? "#15803d" : "#376c8f"} />
+          </div>
+          <p>
+            {isPrivacyProtected
+              ? "Student names and emails are stored as encrypted identity data. Keep the school privacy key outside Charlotte; it is needed when adding more students."
+              : "This class stores student names and emails normally. Create a new class with a school privacy key when you need database-anonymous student identities."}
+          </p>
+          {isPrivacyProtected && classroom.privacyKeyHint && (
+            <span className="status-pill status-blue">Hint: {classroom.privacyKeyHint}</span>
+          )}
+          {isPrivacyProtected && (
+            <RosterIdentityReveal
+              classroomId={classroom.id}
+              privacyKeyHint={classroom.privacyKeyHint}
+            />
+          )}
+        </section>
+
         <section className="grid roster-entry-grid" style={{ marginTop: 18 }}>
           <div className="panel spreadsheet-import-panel">
             <div className="panel-header">
@@ -67,10 +94,14 @@ export default async function RosterPage({
               <FileSpreadsheet color="#2f7d4a" />
             </div>
             <p>
-              Charlotte copies student names and emails into a review table. Students create their
-              own password after you enroll their email.
+              Charlotte copies student rows into a review table. Students create their own password
+              after you enroll their email.
             </p>
-            <StudentSpreadsheetImport classroomId={classroom.id} />
+            <StudentSpreadsheetImport
+              classroomId={classroom.id}
+              privacyProtected={isPrivacyProtected}
+              privacyKeyHint={classroom.privacyKeyHint}
+            />
           </div>
 
           <div className="panel manual-student-panel">
@@ -83,6 +114,16 @@ export default async function RosterPage({
             </div>
             <form className="form-grid" action={addStudents}>
               <input type="hidden" name="classroomId" value={classroom.id} />
+              {isPrivacyProtected && (
+                <PasswordField
+                  name="privacyKey"
+                  label="School privacy key"
+                  required
+                  minLength={12}
+                  autoComplete="off"
+                  helpText="Charlotte uses this once to encrypt the roster entry. The key is not stored."
+                />
+              )}
               <div className="student-entry-fields">
                 <div className="student-entry-head" aria-hidden="true">
                   <span>Student name</span>
@@ -135,7 +176,9 @@ export default async function RosterPage({
                 {classroom.students.map((student) => (
                   <tr key={student.id}>
                     <td>{student.displayName}</td>
-                    <td>{student.email || "No email linked"}</td>
+                    <td>
+                      {student.email || (student.emailKeyHash ? "Encrypted with school key" : "No email linked")}
+                    </td>
                     <td>{student._count.sessions}</td>
                     <td>
                       <span className={`status-pill ${student.account ? "status-green" : "status-yellow"}`}>

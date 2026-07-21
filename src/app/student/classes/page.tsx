@@ -49,7 +49,14 @@ export default async function StudentClassesPage({
             </form>
           ))}
           {!enrollments.length && (
-            <div className="empty-state"><h2>No classes yet</h2><p>Ask your teacher to add {account.email} to a class.</p></div>
+            <div className="empty-state">
+              <h2>No classes yet</h2>
+              <p>
+                {account.emailKeyHash
+                  ? "Ask your teacher to add your email with the class privacy key."
+                  : `Ask your teacher to add ${account.email} to a class.`}
+              </p>
+            </div>
           )}
         </section>
       </main>

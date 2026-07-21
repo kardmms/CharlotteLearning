@@ -28,6 +28,14 @@ export default async function StudentSignupPage({
           <form className="form-grid" action={registerStudent}>
             <label>Your name<input name="displayName" autoComplete="name" maxLength={120} required /></label>
             <label>Student email<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
+            <PasswordField
+              name="privacyKey"
+              label="Class privacy key"
+              required={false}
+              minLength={12}
+              autoComplete="off"
+              helpText="Only use this if your teacher gave you one."
+            />
             <PasswordField name="password" label="Password" minLength={10} autoComplete="new-password" helpText="Use at least 10 characters." />
             <PasswordField name="confirmPassword" label="Confirm password" minLength={10} autoComplete="new-password" />
             <TurnstileField action="student_signup" />

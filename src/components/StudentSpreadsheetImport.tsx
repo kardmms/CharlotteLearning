@@ -7,10 +7,19 @@ import {
   prepareStudentImport,
   type RosterImportState
 } from "@/app/teacher/actions";
+import { PasswordField } from "@/components/PasswordField";
 
 const initialState: RosterImportState = { rows: [], fileName: "" };
 
-export function StudentSpreadsheetImport({ classroomId }: { classroomId: string }) {
+export function StudentSpreadsheetImport({
+  classroomId,
+  privacyProtected,
+  privacyKeyHint
+}: {
+  classroomId: string;
+  privacyProtected?: boolean;
+  privacyKeyHint?: string | null;
+}) {
   const [state, prepareAction, pending] = useActionState(prepareStudentImport, initialState);
 
   return (
@@ -45,6 +54,21 @@ export function StudentSpreadsheetImport({ classroomId }: { classroomId: string 
             </div>
             <span className="status-pill status-blue"><Sparkles size={15} /> {state.fileName}</span>
           </div>
+
+          {privacyProtected && (
+            <PasswordField
+              name="privacyKey"
+              label="School privacy key"
+              required
+              minLength={12}
+              autoComplete="off"
+              helpText={
+                privacyKeyHint
+                  ? `Hint: ${privacyKeyHint}`
+                  : "Charlotte uses this once to encrypt the roster entry. The key is not stored."
+              }
+            />
+          )}
 
           <div className="student-entry-fields spreadsheet-review-fields">
             <div className="student-entry-head" aria-hidden="true">

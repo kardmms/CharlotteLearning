@@ -30,6 +30,11 @@ enum SessionStatus {
   COMPLETED
 }
 
+enum IdentityMode {
+  STANDARD
+  SCHOOL_KEY
+}
+
 model Teacher {
   id           String      @id @default(cuid())
   name         String
@@ -42,46 +47,57 @@ model Teacher {
 }
 
 model Classroom {
-  id         String    @id @default(cuid())
-  name       String
-  gradeLevel String
-  teacherId  String
-  createdAt  DateTime  @default(now())
-  archivedAt DateTime?
-  teacher    Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  students   Student[]
-  materials  Material[]
+  id                 String       @id @default(cuid())
+  name               String
+  gradeLevel         String
+  teacherId          String
+  identityMode       IdentityMode @default(STANDARD)
+  privacyKeySalt     String?
+  privacyKeyVerifier String?
+  privacyKeyHint     String?
+  createdAt          DateTime     @default(now())
+  archivedAt         DateTime?
+  teacher            Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  students           Student[]
+  materials          Material[]
   homeResources AtHomeResource[]
 
   @@index([teacherId, archivedAt])
 }
 
 model Student {
-  id          String           @id @default(cuid())
-  classroomId String
-  accountId   String?
-  displayName String
-  email       String?
-  active      Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  classroom   Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-  account     StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  sessions    StudentSession[]
+  id                   String           @id @default(cuid())
+  classroomId          String
+  accountId            String?
+  displayName          String
+  email                String?
+  displayNameEncrypted String?
+  emailEncrypted       String?
+  emailKeyHash         String?
+  active               Boolean          @default(true)
+  createdAt            DateTime         @default(now())
+  classroom            Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  account              StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  sessions             StudentSession[]
   adaptiveHomeMaterials Material[] @relation("AdaptiveHomeTarget")
 
   @@unique([classroomId, displayName])
   @@unique([classroomId, email])
+  @@unique([classroomId, emailKeyHash])
   @@index([classroomId, active])
   @@index([accountId, active])
 }
 
 model StudentAccount {
-  id           String    @id @default(cuid())
-  displayName  String
-  email        String    @unique
-  passwordHash String
-  createdAt    DateTime  @default(now())
-  enrollments  Student[]
+  id                   String    @id @default(cuid())
+  displayName          String
+  email                String    @unique
+  emailKeyHash         String?   @unique
+  displayNameEncrypted String?
+  emailEncrypted       String?
+  passwordHash         String
+  createdAt            DateTime  @default(now())
+  enrollments          Student[]
 }
 
 model Material {

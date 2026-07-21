@@ -2393,6 +2393,32 @@ tr:last-child td {
   margin-top: 6px;
 }
 
+.privacy-roster-panel {
+  align-items: start;
+}
+
+.roster-reveal {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.roster-reveal form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.roster-reveal .password-field {
+  min-width: 0;
+}
+
+.roster-reveal-table {
+  max-height: 320px;
+  overflow: auto;
+}
+
 .progress-track {
   width: 100%;
   height: 12px;
@@ -4778,6 +4804,7 @@ tr:last-child td {
   .individual-answer-heading { flex-direction: column; }
   .weekly-metric-title { grid-template-columns: auto minmax(0, 1fr); }
   .weekly-metric-title em { grid-column: 1 / -1; justify-self: start; }
+  .roster-reveal form { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
