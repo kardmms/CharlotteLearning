@@ -3,6 +3,7 @@ import { StudentStation } from "@/components/StudentStation";
 import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { studentBandClass } from "@/lib/grade";
+import { excerptForIndex } from "@/lib/text-context";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,7 @@ export default async function StationPage({
       include: { answers: true }
     });
   }
+  const sourceText = material.sourceText || material.sourcePreview || "";
 
   return (
     <div className={`student-shell ${studentBandClass(student.classroom.gradeLevel)}`}>
@@ -105,30 +107,33 @@ export default async function StationPage({
             pointsEarned: session.pointsEarned,
             focusViolationCount: session.focusViolationCount
           }}
-          questions={material.questions.map((question) => ({
-            id: question.id,
-            type: question.type,
-            prompt: question.prompt,
-            choices: question.randomizeChoices
-              ? shuffledChoices(parseChoices(question.choicesJson), `${session.id}:${question.id}`)
-              : parseChoices(question.choicesJson),
-            skillTag: question.skillTag,
-            standardCode: question.standardCode,
-            explanation: question.explanation,
-            contextExcerpt: question.contextExcerpt,
-            sourcePage: question.sourcePage,
-            timeLimitSeconds: question.timeLimitSeconds,
-            existingAnswer:
-              session.answers.find((answer) => answer.questionId === question.id)?.answerText || "",
-            existingIsCorrect:
-              session.answers.find((answer) => answer.questionId === question.id)?.isCorrect ?? null,
-            existingAttemptCount:
-              session.answers.find((answer) => answer.questionId === question.id)?.attemptCount || 0,
-            existingPointsEarned:
-              session.answers.find((answer) => answer.questionId === question.id)?.pointsEarned || 0,
-            existingRevealed:
-              session.answers.find((answer) => answer.questionId === question.id)?.revealedAnswer || false
-          }))}
+          questions={material.questions.map((question, index) => {
+            const fallbackExcerpt = !question.contextExcerpt && sourceText ? excerptForIndex(sourceText, index) : null;
+            return {
+              id: question.id,
+              type: question.type,
+              prompt: question.prompt,
+              choices: question.randomizeChoices
+                ? shuffledChoices(parseChoices(question.choicesJson), `${session.id}:${question.id}`)
+                : parseChoices(question.choicesJson),
+              skillTag: question.skillTag,
+              standardCode: question.standardCode,
+              explanation: question.explanation,
+              contextExcerpt: question.contextExcerpt || fallbackExcerpt?.excerpt || null,
+              sourcePage: question.sourcePage || fallbackExcerpt?.sourcePage || null,
+              timeLimitSeconds: question.timeLimitSeconds,
+              existingAnswer:
+                session.answers.find((answer) => answer.questionId === question.id)?.answerText || "",
+              existingIsCorrect:
+                session.answers.find((answer) => answer.questionId === question.id)?.isCorrect ?? null,
+              existingAttemptCount:
+                session.answers.find((answer) => answer.questionId === question.id)?.attemptCount || 0,
+              existingPointsEarned:
+                session.answers.find((answer) => answer.questionId === question.id)?.pointsEarned || 0,
+              existingRevealed:
+                session.answers.find((answer) => answer.questionId === question.id)?.revealedAnswer || false
+            };
+          })}
         />
       </main>
     </div>

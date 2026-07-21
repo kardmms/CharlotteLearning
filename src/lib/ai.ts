@@ -65,15 +65,27 @@ function gradeLevelLanguageRule(gradeLevel: string) {
     return "Use clear student-facing language. Keep the support wording easier than the skill being assessed.";
   }
   if (normalized <= 2) {
-    return "Use very short sentences, familiar words, and concrete choices. Ask one thing at a time. Do not use academic words unless the question directly teaches that word.";
+    return "Use very short sentences, familiar words, and concrete choices. Prompts should usually be 12 words or fewer. Ask one thing at a time. Do not use academic words unless the question directly teaches that word.";
+  }
+  if (normalized <= 3) {
+    return "Use third-grade wording: one short sentence, common words, and one clear task. Prompts should usually be 16 words or fewer, with no parenthetical explanations or stacked clauses. Keep answer choices short.";
   }
   if (normalized <= 5) {
-    return "Use elementary-grade wording: common words, direct questions, and short answer choices. Keep academic or challenging words only when they are the target vocabulary from the reading.";
+    return "Use elementary-grade wording: common words, direct questions, and short answer choices. Prompts should usually be 20 words or fewer. Keep academic or challenging words only when they are the target vocabulary from the reading.";
   }
   if (normalized <= 8) {
     return "Use middle-school wording: clear academic language is okay only when it is part of the assessed skill. Avoid unnecessary jargon in prompts and distractors.";
   }
   return "Use high-school-appropriate wording, but still avoid needless jargon. The challenge should come from interpretation, evidence, and vocabulary from the text.";
+}
+
+function gradePromptExample(gradeLevel: string) {
+  const normalized = gradeLevel.toUpperCase() === "K" ? 0 : Number.parseInt(gradeLevel, 10);
+  if (Number.isNaN(normalized) || normalized > 5) return "";
+  if (normalized <= 3) {
+    return "For younger students, rewrite long evidence prompts into direct questions. Example: use 'Which words show the ocean was dangerous?' instead of 'What evidence (specific words from the book) from the text supports the idea that the ocean was dangerous during the storm?'";
+  }
+  return "For elementary students, keep prompts direct and friendly. Ask for the evidence or idea in one sentence, then let the separate excerpt carry the reading load.";
 }
 
 function cleanContextExcerpt(value?: string | null) {
@@ -225,6 +237,7 @@ export async function generateQuestionsFromText(input: {
           input.activityLabel ? `Activity label: ${input.activityLabel}.` : "",
           input.activityFocus ? `Instructional focus: ${input.activityFocus}.` : "",
           gradeLevelLanguageRule(input.gradeLevel),
+          gradePromptExample(input.gradeLevel),
           "The questions must reward close attention, inference, vocabulary-in-context, and evidence from the uploaded text.",
           "Avoid easy yes/no questions. Avoid questions answerable without reading.",
           "Keep the support wording simple and student-friendly. Challenge may live in the target vocabulary word, inference, evidence, or idea—not in accidental extra words in the question or answer choices.",
@@ -292,6 +305,7 @@ export async function generateAtHomePractice(input: {
           content: [
             `Create exactly ${questionCount} new multiple-choice questions for a grade ${input.gradeLevel} student.`,
             gradeLevelLanguageRule(input.gradeLevel),
+            gradePromptExample(input.gradeLevel),
             "Use a mix of vocabulary and comprehension. Every question needs four plausible choices, one exact correct answer, and a short teaching explanation shown after the student responds.",
             input.weakTopics.length
               ? `Spend about two thirds of the questions strengthening these weak topics: ${input.weakTopics.join(", ")}.`
@@ -427,13 +441,7 @@ function demoQuestions(input: {
         : Number(input.gradeLevel) >= 9
           ? "9-10"
           : input.gradeLevel;
-  const sentences = input.text
-    .split(/(?<=[.!?])\s+/)
-    .filter((sentence) => sentence.length > 40)
-    .slice(0, 6);
   const fallbackContexts = sourceExcerptWindows(input.text, 12);
-  const anchor = sentences[0] || input.text.slice(0, 160);
-  const second = sentences[1] || anchor;
 
   return {
     notes:
@@ -441,7 +449,7 @@ function demoQuestions(input: {
     questions: [
       {
         type: "VOCAB" as const,
-        prompt: `Which word from the passage most affects the meaning of this sentence: "${anchor.slice(0, 180)}"?`,
+        prompt: "Which word from this part changes the meaning most?",
         choices: ["setting", "conflict", "detail", "transition"],
         correctAnswer: "detail",
         rubric: "",
@@ -481,7 +489,7 @@ function demoQuestions(input: {
       },
       {
         type: "COMPREHENSION" as const,
-        prompt: `Based on this part of the text, what is the most important change happening: "${second.slice(0, 180)}"?`,
+        prompt: "What important change happens in this part?",
         choices: [
           "A character is facing a new problem",
           "The setting is no longer important",
@@ -527,7 +535,7 @@ function demoQuestions(input: {
       {
         type: "PREDICTION" as const,
         prompt:
-          `Make a prediction connected to ${input.activityFocus || "the reading"}. Include one specific detail from the passage that supports your prediction.`,
+          `What might happen next? Use one detail from ${input.activityFocus || "the reading"}.`,
         choices: [],
         correctAnswer: "",
         rubric:
@@ -539,7 +547,7 @@ function demoQuestions(input: {
       {
         type: "SHORT_RESPONSE" as const,
         prompt:
-          "What is one idea in the material that a reader could easily miss? Explain why that detail matters.",
+          "What is one detail a reader might miss? Why does it matter?",
         choices: [],
         correctAnswer: "",
         rubric:

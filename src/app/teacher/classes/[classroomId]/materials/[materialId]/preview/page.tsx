@@ -4,6 +4,7 @@ import { StudentStation } from "@/components/StudentStation";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { studentBandClass } from "@/lib/grade";
+import { excerptForIndex } from "@/lib/text-context";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export default async function TeacherPreviewPage({
   if (!material) notFound();
 
   const reviewHref = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
+  const sourceText = material.sourceText || material.sourcePreview || "";
 
   return (
     <div className={`student-shell teacher-preview-shell ${studentBandClass(material.classroom.gradeLevel)}`}>
@@ -62,23 +64,26 @@ export default async function TeacherPreviewPage({
             pointsEarned: 0,
             focusViolationCount: 0
           }}
-          questions={material.questions.map((question) => ({
-            id: question.id,
-            type: question.type,
-            prompt: question.prompt,
-            choices: parseChoices(question.choicesJson),
-            correctAnswer: question.correctAnswer,
-            skillTag: question.skillTag,
-            standardCode: question.standardCode,
-            contextExcerpt: question.contextExcerpt,
-            sourcePage: question.sourcePage,
-            timeLimitSeconds: question.timeLimitSeconds,
-            existingAnswer: "",
-            existingIsCorrect: null,
-            existingAttemptCount: 0,
-            existingPointsEarned: 0,
-            existingRevealed: false
-          }))}
+          questions={material.questions.map((question, index) => {
+            const fallbackExcerpt = !question.contextExcerpt && sourceText ? excerptForIndex(sourceText, index) : null;
+            return {
+              id: question.id,
+              type: question.type,
+              prompt: question.prompt,
+              choices: parseChoices(question.choicesJson),
+              correctAnswer: question.correctAnswer,
+              skillTag: question.skillTag,
+              standardCode: question.standardCode,
+              contextExcerpt: question.contextExcerpt || fallbackExcerpt?.excerpt || null,
+              sourcePage: question.sourcePage || fallbackExcerpt?.sourcePage || null,
+              timeLimitSeconds: question.timeLimitSeconds,
+              existingAnswer: "",
+              existingIsCorrect: null,
+              existingAttemptCount: 0,
+              existingPointsEarned: 0,
+              existingRevealed: false
+            };
+          })}
         />
       </main>
     </div>

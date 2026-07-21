@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpenText, CheckCircle2, Clock3, Eye, Send, Sparkles, Star } from "lucide-react";
+import { ArrowRight, BookOpenText, CheckCircle2, Clock3, Eye, PencilLine, Send, Sparkles, Star } from "lucide-react";
 import { shortResponseFeedback } from "@/lib/student-feedback";
 
 type Question = {
@@ -45,6 +45,14 @@ function resultClass(result?: QuestionResult) {
   if (result.isCorrect) return "second-try";
   if (result.isCorrect === null) return "teacher-review";
   return "missed";
+}
+
+function attemptTone(result?: QuestionResult) {
+  if (!result?.attemptCount) return "";
+  if (result.locked && result.isCorrect === true && result.attemptCount === 1) return "attempt-first";
+  if (result.locked && result.isCorrect === true && result.attemptCount === 2) return "attempt-second";
+  if (result.locked || result.attemptCount >= 3) return "attempt-third";
+  return "attempt-second";
 }
 
 export function StudentStation({
@@ -106,6 +114,7 @@ export function StudentStation({
   );
   const [submitting, setSubmitting] = useState(false);
   const [needsContinue, setNeedsContinue] = useState<string | null>(null);
+  const [responseReviewOpen, setResponseReviewOpen] = useState(false);
   const finishingRef = useRef(false);
   const extensionPromiseRef = useRef<Promise<Question[]> | null>(null);
   const extensionRetryAfterRef = useRef(0);
@@ -226,6 +235,7 @@ export function StudentStation({
 
   useEffect(() => {
     setQuestionSeconds(preview ? null : question.timeLimitSeconds || null);
+    setResponseReviewOpen(false);
   }, [current, preview, question.timeLimitSeconds]);
 
   useEffect(() => {
@@ -301,21 +311,28 @@ export function StudentStation({
     void finishSession();
   }
 
-  function advanceSoon(delay = 700) {
-    window.setTimeout(() => void moveToNextQuestion(), delay);
-  }
-
   async function continueAfterExplanation() {
     setNeedsContinue(null);
     setSubmitting(true);
     await moveToNextQuestion();
   }
 
-  async function submitAnswer(timedOut = false) {
+  function waitForContinue(message: string) {
+    setStatus(message);
+    setNeedsContinue(question.id);
+    setSubmitting(false);
+  }
+
+  async function submitAnswer(timedOut = false, confirmedWrittenSubmit = false) {
     if (submitting || results[question.id]?.locked) return;
     const answerText = answers[question.id]?.trim() || "";
     if (!answerText && !timedOut) {
       setStatus("Choose or type an answer first.");
+      return;
+    }
+    if (!timedOut && question.choices.length === 0 && !confirmedWrittenSubmit) {
+      setResponseReviewOpen(true);
+      setStatus("Check your response, then submit when you are ready.");
       return;
     }
 
@@ -349,14 +366,14 @@ export function StudentStation({
 
       if (isCorrect === true) {
         setStatus("Correct — this is how students will see the feedback.");
-        advanceSoon(material.activityKind === "AT_HOME" ? 2600 : 700);
+        waitForContinue("Correct! Select continue when you are ready.");
       } else if (isWrittenResponse) {
         setStatus("Response saved. Read the quick checklist, then continue.");
         setNeedsContinue(question.id);
         setSubmitting(false);
       } else if (revealedAnswer) {
         setStatus(`The correct answer is: ${question.correctAnswer}`);
-        advanceSoon(material.activityKind === "AT_HOME" ? 3200 : 1500);
+        waitForContinue(`The correct answer is: ${question.correctAnswer}`);
       } else {
         const triesLeft = 3 - attemptCount;
         setStatus(`Not quite. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.`);
@@ -382,7 +399,7 @@ export function StudentStation({
 
     if (result.isCorrect === true) {
       setStatus(result.attemptCount === 1 ? "Correct on the first try!" : "Correct. Nice recovery!");
-      advanceSoon(material.activityKind === "AT_HOME" ? 700 : 700);
+      waitForContinue(result.attemptCount === 1 ? "Correct on the first try! Select continue." : "Correct. Nice recovery! Select continue.");
     } else if (result.isCorrect === null) {
       setStatus("Response saved. Read the quick checklist, then continue.");
       setNeedsContinue(question.id);
@@ -393,7 +410,7 @@ export function StudentStation({
         setNeedsContinue(question.id);
         setSubmitting(false);
       } else {
-        advanceSoon(1900);
+        waitForContinue(`The correct answer is: ${result.correctAnswer}`);
       }
     } else {
       const triesLeft = 3 - result.attemptCount;
@@ -430,6 +447,59 @@ export function StudentStation({
             >
               Return to assignment
             </button>
+          </div>
+        </div>
+      )}
+      {responseReviewOpen && (
+        <div className="submit-review-layer" role="dialog" aria-modal="true" aria-labelledby="submit-review-title">
+          <div className="submit-review-card">
+            <div className="submit-review-icon">
+              <BookOpenText size={26} />
+            </div>
+            <div>
+              <h2 id="submit-review-title">Check before you submit</h2>
+              <p>Read your answer one more time. You can fix it, or send it now.</p>
+            </div>
+            <div className="submit-review-prompt">
+              <span>Question</span>
+              <strong>{question.prompt}</strong>
+            </div>
+            <div className="submit-review-answer">
+              <span>Your answer</span>
+              <p>{currentAnswer}</p>
+            </div>
+            <div className="submit-review-checklist">
+              <strong>{shortResponseFeedback.title}</strong>
+              <ul>
+                {shortResponseFeedback.bullets.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div className="submit-review-actions">
+              <button
+                className="ghost-button"
+                data-no-loading="true"
+                type="button"
+                onClick={() => {
+                  setResponseReviewOpen(false);
+                  setStatus("Make your changes, then submit when you are ready.");
+                }}
+              >
+                <PencilLine size={17} />
+                Keep editing
+              </button>
+              <button
+                className="button"
+                data-no-loading="true"
+                type="button"
+                onClick={() => {
+                  setResponseReviewOpen(false);
+                  void submitAnswer(false, true);
+                }}
+              >
+                Submit response
+                <Send size={17} />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -565,7 +635,7 @@ export function StudentStation({
 
           <div className="station-submit-row">
             <div>
-              {material.activityKind === "IN_CLASS" && <div className="attempt-dots" aria-label={`${currentResult?.attemptCount || 0} attempts used`}>
+              {material.activityKind === "IN_CLASS" && <div className={`attempt-dots ${attemptTone(currentResult)}`} aria-label={`${currentResult?.attemptCount || 0} attempts used`}>
                 {[1, 2, 3].map((attempt) => (
                   <span className={attempt <= (currentResult?.attemptCount || 0) ? "used" : ""} key={attempt} />
                 ))}
