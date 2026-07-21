@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStudentSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -20,6 +21,13 @@ export async function POST(
     if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { sessionId } = await params;
+    await enforceRateLimit({
+      scope: "student-submit-answer",
+      limit: 120,
+      windowSeconds: 60 * 60,
+      identifier: `${student.studentId}:${sessionId}`
+    });
+    await clearExpiredRateLimits();
     const body = (await request.json()) as {
       questionId?: string;
       answerText?: string;
@@ -129,7 +137,13 @@ export async function POST(
       locked: isCorrect === true || revealedAnswer || !isMultipleChoice,
       totalPoints
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
     return NextResponse.json({ error: "Could not submit answer" }, { status: 500 });
   }
 }

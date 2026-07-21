@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStudentSession, setStudentCompletionLock } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { finalizeStudentSession } from "@/lib/finalize-session";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -16,6 +17,13 @@ export async function POST(
     if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { sessionId } = await params;
+    await enforceRateLimit({
+      scope: "student-finish",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      identifier: `${student.studentId}:${sessionId}`
+    });
+    await clearExpiredRateLimits();
     const session = await prisma.studentSession.findFirst({
       where: { id: sessionId, studentId: student.studentId },
       include: { material: true }
@@ -33,7 +41,13 @@ export async function POST(
     }
 
     return NextResponse.json({ ok: true, pointsEarned: updated.pointsEarned });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
     return NextResponse.json({ error: "Could not finish session" }, { status: 500 });
   }
 }

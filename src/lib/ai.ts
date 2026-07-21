@@ -3,29 +3,36 @@ import { z } from "zod";
 import { standardsReferenceForGrade } from "@/lib/standards";
 import { sourceExcerptWindows } from "@/lib/text-context";
 
+function textField(maxLength: number, minLength = 0) {
+  return z.preprocess(
+    (value) => typeof value === "string" ? value.trim().slice(0, maxLength) : value,
+    z.string().min(minLength).max(maxLength)
+  );
+}
+
 const GeneratedQuestionSchema = z.object({
   type: z.enum(["VOCAB", "COMPREHENSION", "PREDICTION", "SHORT_RESPONSE"]),
-  prompt: z.string().min(10),
-  choices: z.array(z.string()).optional(),
-  correctAnswer: z.string().optional(),
-  rubric: z.string().optional(),
-  skillTag: z.string().optional(),
-  standardCode: z.string().optional(),
-  explanation: z.string().optional(),
-  contextExcerpt: z.string().optional(),
-  sourcePage: z.string().optional(),
+  prompt: textField(500, 6),
+  choices: z.array(textField(240)).optional(),
+  correctAnswer: textField(240).optional(),
+  rubric: textField(900).optional(),
+  skillTag: textField(80).optional(),
+  standardCode: textField(80).optional(),
+  explanation: textField(500).optional(),
+  contextExcerpt: textField(1200).optional(),
+  sourcePage: textField(80).optional(),
   difficulty: z.number().int().min(1).max(5).default(3)
 });
 
 const GeneratedMaterialSchema = z.object({
-  notes: z.string().optional(),
+  notes: textField(1000).optional(),
   questions: z.array(GeneratedQuestionSchema).min(5).max(10)
 });
 
 const StudentRosterSchema = z.object({
   students: z.array(z.object({
-    displayName: z.string(),
-    email: z.string()
+    displayName: textField(120),
+    email: textField(254)
   })).max(200)
 });
 
@@ -35,21 +42,21 @@ export type GeneratedQuestion = z.infer<typeof GeneratedQuestionSchema>;
 
 const HomePracticeQuestionSchema = z.object({
   type: z.enum(["VOCAB", "COMPREHENSION"]),
-  prompt: z.string().min(10),
-  choices: z.array(z.string().min(1)).length(4),
-  correctAnswer: z.string().min(1),
-  explanation: z.string().min(10),
-  skillTag: z.string().min(2),
-  standardCode: z.string().min(2),
-  contextExcerpt: z.string().optional(),
-  sourcePage: z.string().optional(),
+  prompt: textField(500, 6),
+  choices: z.array(textField(240, 1)).length(4),
+  correctAnswer: textField(240, 1),
+  explanation: textField(500, 6),
+  skillTag: textField(80, 2),
+  standardCode: textField(80, 2),
+  contextExcerpt: textField(1200).optional(),
+  sourcePage: textField(80).optional(),
   difficulty: z.number().int().min(1).max(5).default(3)
 }).refine((question) => question.choices.includes(question.correctAnswer), {
   message: "The correct answer must exactly match one choice."
 });
 
 const HomePracticeSchema = z.object({
-  notes: z.string().optional(),
+  notes: textField(1000).optional(),
   questions: z.array(HomePracticeQuestionSchema).min(1).max(12)
 });
 
@@ -105,7 +112,7 @@ function normalizeGeneratedQuestion(question: GeneratedQuestion, fallbackContext
   if (!question.choices?.length) return { ...question, contextExcerpt, sourcePage };
 
   const choices = question.choices
-    .map((choice) => choice.trim())
+    .map((choice) => choice.trim().slice(0, 240))
     .filter(Boolean)
     .slice(0, 4);
   if (choices.length === 0) return { ...question, contextExcerpt, sourcePage, choices: undefined, correctAnswer: undefined };

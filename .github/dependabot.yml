@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      next-and-react:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/client"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

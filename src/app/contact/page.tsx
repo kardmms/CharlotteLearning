@@ -3,6 +3,7 @@ import { submitContactLead } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { GradeSlider } from "@/components/GradeSlider";
 import { Message } from "@/components/Message";
+import { TurnstileField } from "@/components/TurnstileField";
 
 export const dynamic = "force-dynamic";
 
@@ -33,22 +34,23 @@ export default async function ContactPage({
               <div className="grid two">
                 <label>
                   Your name
-                  <input name="name" autoComplete="name" required />
+                  <input name="name" autoComplete="name" maxLength={120} required />
                 </label>
                 <label>
                   Email
-                  <input name="email" type="email" autoComplete="email" required />
+                  <input name="email" type="email" autoComplete="email" maxLength={254} required />
                 </label>
                 <label>
                   Phone number
-                  <input name="phone" type="tel" autoComplete="tel" required />
+                  <input name="phone" type="tel" autoComplete="tel" maxLength={40} required />
                 </label>
                 <label>
                   School
-                  <input name="school" autoComplete="organization" required />
+                  <input name="school" autoComplete="organization" maxLength={160} required />
                 </label>
               </div>
               <GradeSlider defaultValue="3" />
+              <TurnstileField action="contact" />
               <button className="button" type="submit">
                 <Mail size={18} />
                 Send request

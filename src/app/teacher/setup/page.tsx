@@ -5,6 +5,7 @@ import { createFirstTeacher } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
+import { TurnstileField } from "@/components/TurnstileField";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +38,11 @@ export default async function TeacherSetupPage({
           <form className="form-grid" action={createFirstTeacher}>
             <label>
               Teacher name
-              <input name="name" autoComplete="name" required />
+              <input name="name" autoComplete="name" maxLength={120} required />
             </label>
             <label>
               Email
-              <input name="email" type="email" autoComplete="email" required />
+              <input name="email" type="email" autoComplete="email" maxLength={254} required />
             </label>
             <PasswordField
               name="password"
@@ -50,6 +51,7 @@ export default async function TeacherSetupPage({
               autoComplete="new-password"
               helpText="Use at least 10 characters. Longer is better."
             />
+            <TurnstileField action="teacher_setup" />
             <button className="button" type="submit">
               Create teacher account
             </button>

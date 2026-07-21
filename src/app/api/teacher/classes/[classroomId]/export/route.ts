@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTeacherSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { toCsv } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -13,6 +14,23 @@ export async function GET(
   if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { classroomId } = await params;
+  try {
+    await enforceRateLimit({
+      scope: "teacher-export-class",
+      limit: 60,
+      windowSeconds: 60 * 60,
+      identifier: `${teacher.sub}:${classroomId}`
+    });
+    await clearExpiredRateLimits();
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
+    throw error;
+  }
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.sub },
     include: {

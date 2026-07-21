@@ -12,7 +12,7 @@ export function HomeResourceUpload({ classroomId }: { classroomId: string }) {
       <input type="hidden" name="classroomId" value={classroomId} />
       <label className="home-resource-scope">
         Reading/chapter limit
-        <input name="readingScope" placeholder="Example: Through chapter 2 or pages 1-5" />
+        <input name="readingScope" placeholder="Example: Through chapter 2 or pages 1-5" maxLength={160} />
         <small>Optional, but recommended for books and longer readings so Charlotte stays in-bounds.</small>
       </label>
       <label className={`home-resource-dropzone ${fileName ? "has-file" : ""}`}>

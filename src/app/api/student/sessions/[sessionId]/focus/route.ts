@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStudentSession, setStudentCompletionLock } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { finalizeStudentSession } from "@/lib/finalize-session";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -15,6 +16,13 @@ export async function POST(
     const student = await getStudentSession();
     if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { sessionId } = await params;
+    await enforceRateLimit({
+      scope: "student-focus",
+      limit: 30,
+      windowSeconds: 60 * 60,
+      identifier: `${student.studentId}:${sessionId}`
+    });
+    await clearExpiredRateLimits();
     const session = await prisma.studentSession.findFirst({
       where: { id: sessionId, studentId: student.studentId },
       include: { material: true }
@@ -47,7 +55,13 @@ export async function POST(
     }
 
     return NextResponse.json({ violationCount, ended });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
     return NextResponse.json({ error: "Could not record focus change" }, { status: 500 });
   }
 }

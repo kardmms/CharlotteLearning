@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { ActivityKind, MaterialStatus, QuestionType } from "@prisma/client";
-import * as XLSX from "xlsx";
+import { readSheet } from "read-excel-file/node";
 import { prisma } from "@/lib/db";
 import {
   clearTeacherSession,
@@ -13,8 +13,10 @@ import {
 } from "@/lib/auth";
 import { normalizeStudentEmail } from "@/lib/codes";
 import { extractStudentRosterWithAI, generateQuestionsFromText } from "@/lib/ai";
+import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
 import { normalizeGrade } from "@/lib/grade";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -24,8 +26,24 @@ function errorRedirect(path: string, message: string): never {
   redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
 
+async function enforceOrRedirect(path: string, callback: () => Promise<void>) {
+  try {
+    await callback();
+    await clearExpiredRateLimits();
+  } catch (error) {
+    if (error instanceof RateLimitError || error instanceof BotProtectionError) {
+      errorRedirect(path, error.message);
+    }
+    throw error;
+  }
+}
+
 function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
+  return email.trim().toLowerCase().slice(0, 254);
+}
+
+function boundedText(formData: FormData, key: string, maxLength: number) {
+  return formText(formData, key).slice(0, maxLength);
 }
 
 function optionalDate(value: string) {
@@ -41,12 +59,16 @@ function questionPointValue(sortOrder: number, questionCount: number) {
 }
 
 export async function createFirstTeacher(formData: FormData) {
+  await enforceOrRedirect("/teacher/setup", async () => {
+    await enforceRateLimit({ scope: "teacher-setup-ip", limit: 10, windowSeconds: 60 * 60 });
+    await enforceTurnstile(formData, "teacher_setup");
+  });
   const existing = await prisma.teacher.count();
   if (existing > 0) redirect("/teacher/login");
 
-  const name = formText(formData, "name");
+  const name = boundedText(formData, "name", 120);
   const email = normalizeEmail(formText(formData, "email"));
-  const password = formText(formData, "password");
+  const password = boundedText(formData, "password", 1024);
 
   if (name.length < 2) errorRedirect("/teacher/setup", "Please enter the teacher name.");
   if (!email.includes("@")) errorRedirect("/teacher/setup", "Please enter a valid email.");
@@ -71,7 +93,12 @@ export async function createFirstTeacher(formData: FormData) {
 
 export async function loginTeacher(formData: FormData) {
   const email = normalizeEmail(formText(formData, "email"));
-  const password = formText(formData, "password");
+  const password = boundedText(formData, "password", 1024);
+  await enforceOrRedirect("/teacher/login", async () => {
+    await enforceRateLimit({ scope: "teacher-login-ip", limit: 100, windowSeconds: 60 * 60 });
+    await enforceRateLimit({ scope: "teacher-login-email", limit: 12, windowSeconds: 15 * 60, identifier: email });
+    await enforceTurnstile(formData, "teacher_login");
+  });
 
   const teacher = await prisma.teacher.findUnique({ where: { email } });
   if (!teacher) errorRedirect("/teacher/login", "Email or password was not recognized.");
@@ -93,7 +120,10 @@ export async function logoutTeacher() {
 
 export async function createClassroom(formData: FormData) {
   const teacher = await requireTeacher();
-  const name = formText(formData, "name");
+  await enforceOrRedirect("/teacher", async () => {
+    await enforceRateLimit({ scope: "teacher-create-class", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
+  const name = boundedText(formData, "name", 120);
   const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
 
   if (name.length < 2) errorRedirect("/teacher", "Please name the class.");
@@ -113,6 +143,9 @@ export async function createClassroom(formData: FormData) {
 export async function deleteClassroom(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
+  await enforceOrRedirect("/teacher/classes", async () => {
+    await enforceRateLimit({ scope: "teacher-delete-class", limit: 10, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id }
@@ -126,6 +159,9 @@ export async function deleteClassroom(formData: FormData) {
 export async function archiveClassroom(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
+  await enforceOrRedirect("/teacher/classes", async () => {
+    await enforceRateLimit({ scope: "teacher-archive-class", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id }
@@ -142,6 +178,9 @@ export async function archiveClassroom(formData: FormData) {
 export async function unarchiveClassroom(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
+  await enforceOrRedirect("/teacher/archive", async () => {
+    await enforceRateLimit({ scope: "teacher-restore-class", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id }
@@ -162,8 +201,8 @@ function isValidStudentEmail(email: string) {
 function cleanStudentRows(rows: Array<{ displayName: string; email: string }>) {
   return rows
     .map((row) => ({
-      displayName: row.displayName.trim(),
-      email: normalizeStudentEmail(row.email)
+      displayName: row.displayName.trim().slice(0, 120),
+      email: normalizeStudentEmail(row.email).slice(0, 254)
     }))
     .filter((row) => row.displayName || row.email);
 }
@@ -215,11 +254,14 @@ export async function addStudents(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
   const path = `/teacher/classes/${classroomId}/roster`;
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-add-students", limit: 40, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
   const names = formData.getAll("studentName").map((value) => String(value));
   const emails = formData.getAll("studentEmail").map((value) => String(value));
   const rows = names.map((displayName, index) => ({
-    displayName,
-    email: emails[index] || ""
+      displayName: displayName.trim().slice(0, 120),
+      email: emails[index] || ""
   }));
 
   await createStudentsFromRows(teacher.id, classroomId, rows, path);
@@ -232,12 +274,87 @@ export type RosterImportState = {
   error?: string;
 };
 
+function parseDelimitedRows(text: string, delimiter: "," | "\t") {
+  const rows: unknown[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  const pushCell = () => {
+    row.push(cell);
+    cell = "";
+  };
+  const pushRow = () => {
+    pushCell();
+    if (row.some((value) => value.trim())) {
+      rows.push(row.slice(0, 20));
+    }
+    row = [];
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (inQuotes) {
+      if (char === "\"") {
+        if (text[index + 1] === "\"") {
+          cell += "\"";
+          index += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += char;
+      }
+    } else if (char === "\"") {
+      inQuotes = true;
+    } else if (char === delimiter) {
+      pushCell();
+    } else if (char === "\n") {
+      pushRow();
+    } else if (char === "\r") {
+      if (text[index + 1] === "\n") index += 1;
+      pushRow();
+    } else {
+      cell += char;
+    }
+  }
+
+  if (cell || row.length > 0) pushRow();
+  return rows.slice(0, 500);
+}
+
+async function readRosterRows(file: File) {
+  const fileName = file.name.toLowerCase();
+  if (fileName.endsWith(".csv") || file.type === "text/csv") {
+    return parseDelimitedRows(await file.text(), ",");
+  }
+  if (fileName.endsWith(".tsv") || file.type === "text/tab-separated-values") {
+    return parseDelimitedRows(await file.text(), "\t");
+  }
+  if (
+    fileName.endsWith(".xlsx") ||
+    file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
+    return readSheet(Buffer.from(await file.arrayBuffer()));
+  }
+  throw new Error("Unsupported roster file type.");
+}
+
 export async function prepareStudentImport(
   _previousState: RosterImportState,
   formData: FormData
 ): Promise<RosterImportState> {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
+  try {
+    await enforceRateLimit({ scope: "teacher-import-roster", limit: 20, windowSeconds: 60 * 60, identifier: teacher.id });
+    await clearExpiredRateLimits();
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return { rows: [], fileName: "", error: error.message };
+    }
+    throw error;
+  }
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id }
   });
@@ -252,10 +369,7 @@ export async function prepareStudentImport(
   }
 
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const values = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
+    const values = await readRosterRows(file);
     if (values.length === 0) {
       return { rows: [], fileName: file.name, error: "The spreadsheet appears to be empty." };
     }
@@ -272,7 +386,7 @@ export async function prepareStudentImport(
 export async function createMaterial(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
-  const title = formText(formData, "title");
+  const title = boundedText(formData, "title", 180);
   const creationMode = formText(formData, "creationMode") === "manual" ? "manual" : "ai";
   const dueAt = optionalDate(formText(formData, "dueAt"));
   const readingScope = formText(formData, "readingScope").slice(0, 160) || null;
@@ -281,6 +395,12 @@ export async function createMaterial(formData: FormData) {
     Math.max(10, Number(formData.get("estimatedMinutes") || 15))
   );
   const path = `/teacher/classes/${classroomId}/materials/new`;
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-create-material", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+    if (creationMode === "ai") {
+      await enforceRateLimit({ scope: "teacher-ai-material", limit: 12, windowSeconds: 60 * 60, identifier: teacher.id });
+    }
+  });
 
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id }
@@ -379,6 +499,9 @@ export async function saveMaterialDraft(formData: FormData) {
   const materialId = formText(formData, "materialId");
   const path = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
   const returnTab = formText(formData, "returnTab");
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-save-material", limit: 120, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   const material = await prisma.material.findFirst({
     where: { id: materialId, classroomId, teacherId: teacher.id },
@@ -389,7 +512,7 @@ export async function saveMaterialDraft(formData: FormData) {
   await prisma.material.update({
     where: { id: materialId },
     data: {
-      title: formData.has("title") ? formText(formData, "title") || material.title : material.title,
+      title: formData.has("title") ? boundedText(formData, "title", 180) || material.title : material.title,
       gradeLevel: formData.has("gradeLevel")
         ? normalizeGrade(formText(formData, "gradeLevel") || material.gradeLevel)
         : material.gradeLevel,
@@ -418,11 +541,11 @@ export async function saveMaterialDraft(formData: FormData) {
       const format = formText(formData, `format-${question.id}`) || "MULTIPLE_CHOICE";
       const repeatedChoices = formData
         .getAll(`choice-${question.id}`)
-        .map((choice) => String(choice).trim())
+        .map((choice) => String(choice).trim().slice(0, 240))
         .filter(Boolean);
       const textareaChoices = formText(formData, `choices-${question.id}`)
         .split(/\r?\n/)
-        .map((choice) => choice.trim())
+        .map((choice) => choice.trim().slice(0, 240))
         .filter(Boolean);
       const choices = repeatedChoices.length ? repeatedChoices : textareaChoices;
       const useChoices = format === "MULTIPLE_CHOICE" || format === "CHECKBOXES";
@@ -431,12 +554,12 @@ export async function saveMaterialDraft(formData: FormData) {
         where: { id: question.id },
         data: {
           type: Object.values(QuestionType).includes(type) ? type : question.type,
-          prompt: formText(formData, `prompt-${question.id}`),
+          prompt: formText(formData, `prompt-${question.id}`).slice(0, 500),
           choicesJson: useChoices && choices.length ? JSON.stringify(choices) : null,
-          correctAnswer: useChoices ? formText(formData, `correct-${question.id}`) || null : null,
-          rubric: formText(formData, `rubric-${question.id}`) || null,
-          skillTag: formText(formData, `skill-${question.id}`) || null,
-          standardCode: formText(formData, `standard-${question.id}`) || null,
+          correctAnswer: useChoices ? formText(formData, `correct-${question.id}`).slice(0, 240) || null : null,
+          rubric: formText(formData, `rubric-${question.id}`).slice(0, 900) || null,
+          skillTag: formText(formData, `skill-${question.id}`).slice(0, 80) || null,
+          standardCode: formText(formData, `standard-${question.id}`).slice(0, 80) || null,
           contextExcerpt: formText(formData, `context-${question.id}`).slice(0, 900) || null,
           sourcePage: formText(formData, `sourcePage-${question.id}`).slice(0, 80) || null,
           timeLimitSeconds: Math.max(0, Number(formData.get(`timeLimit-${question.id}`) || 0)) || null,
@@ -454,6 +577,9 @@ export async function deleteMaterial(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
   const materialId = formText(formData, "materialId");
+  await enforceOrRedirect(`/teacher/classes/${classroomId}/materials`, async () => {
+    await enforceRateLimit({ scope: "teacher-delete-material", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
   const material = await prisma.material.findFirst({
     where: { id: materialId, classroomId, teacherId: teacher.id }
   });
@@ -466,6 +592,9 @@ export async function uploadAtHomeResource(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
   const path = `/teacher/classes/${classroomId}/home-learning`;
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-upload-home-resource", limit: 20, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id }
   });
@@ -478,7 +607,7 @@ export async function uploadAtHomeResource(formData: FormData) {
 
   try {
     const extracted = await extractTextFromUpload(file);
-    const customTitle = formText(formData, "title");
+    const customTitle = boundedText(formData, "title", 180);
     const defaultTitle = extracted.sourceName.replace(/\.[^.]+$/, "");
     await prisma.atHomeResource.create({
       data: {
@@ -509,6 +638,9 @@ export async function deleteAtHomeResource(formData: FormData) {
   const classroomId = formText(formData, "classroomId");
   const resourceId = formText(formData, "resourceId");
   const path = `/teacher/classes/${classroomId}/home-learning`;
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-delete-home-resource", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
   const resource = await prisma.atHomeResource.findFirst({
     where: { id: resourceId, classroomId, teacherId: teacher.id }
   });
@@ -521,6 +653,9 @@ export async function publishMaterial(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
   const materialId = formText(formData, "materialId");
+  await enforceOrRedirect(`/teacher/classes/${classroomId}/materials/${materialId}/review`, async () => {
+    await enforceRateLimit({ scope: "teacher-publish-material", limit: 60, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   const material = await prisma.material.findFirst({
     where: { id: materialId, classroomId, teacherId: teacher.id },
@@ -546,6 +681,9 @@ export async function unpublishMaterial(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
   const materialId = formText(formData, "materialId");
+  await enforceOrRedirect(`/teacher/classes/${classroomId}/materials/${materialId}/review`, async () => {
+    await enforceRateLimit({ scope: "teacher-unpublish-material", limit: 60, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   const material = await prisma.material.findFirst({
     where: { id: materialId, classroomId, teacherId: teacher.id }
@@ -568,6 +706,9 @@ export async function gradeStudentAnswer(formData: FormData) {
   const answerId = formText(formData, "answerId");
   const requestedPoints = Number(formData.get("points"));
   const path = `/teacher/classes/${classroomId}/materials/${materialId}/questions/${questionId}/responses`;
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-grade-answer", limit: 240, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
 
   if (!Number.isFinite(requestedPoints)) {
     errorRedirect(path, "Choose a point value before submitting.");
@@ -614,9 +755,12 @@ export async function gradeStudentAnswer(formData: FormData) {
 
 export async function updateTeacherPassword(formData: FormData) {
   const teacher = await requireTeacher();
+  await enforceOrRedirect("/teacher/account", async () => {
+    await enforceRateLimit({ scope: "teacher-password-change", limit: 5, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
   const confirmEmail = normalizeEmail(formText(formData, "confirmEmail"));
-  const newPassword = formText(formData, "newPassword");
-  const confirmPassword = formText(formData, "confirmPassword");
+  const newPassword = boundedText(formData, "newPassword", 1024);
+  const confirmPassword = boundedText(formData, "confirmPassword", 1024);
 
   if (confirmEmail !== teacher.email) {
     errorRedirect("/teacher/account", "Confirm your account email before changing the password.");
@@ -637,14 +781,19 @@ export async function updateTeacherPassword(formData: FormData) {
 }
 
 export async function submitContactLead(formData: FormData) {
-  const name = formText(formData, "name");
+  const name = boundedText(formData, "name", 120);
   const email = normalizeEmail(formText(formData, "email"));
-  const phone = formText(formData, "phone");
-  const school = formText(formData, "school");
+  const phone = boundedText(formData, "phone", 40);
+  const school = boundedText(formData, "school", 160);
   const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
   const website = formText(formData, "website");
 
   if (website) redirect("/contact?sent=1");
+  await enforceOrRedirect("/contact", async () => {
+    await enforceRateLimit({ scope: "contact-ip", limit: 20, windowSeconds: 60 * 60 });
+    await enforceRateLimit({ scope: "contact-email", limit: 3, windowSeconds: 24 * 60 * 60, identifier: email });
+    await enforceTurnstile(formData, "contact");
+  });
   if (name.length < 2 || !email.includes("@") || phone.length < 7 || school.length < 2 || !gradeLevel) {
     errorRedirect("/contact", "Please complete every field so we can reach you.");
   }

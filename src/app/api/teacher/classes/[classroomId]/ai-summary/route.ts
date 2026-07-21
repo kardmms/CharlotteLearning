@@ -3,6 +3,7 @@ import { getTeacherSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { assertSameOrigin } from "@/lib/security";
 import { summarizeClassData } from "@/lib/ai";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,13 @@ export async function POST(
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { classroomId } = await params;
+    await enforceRateLimit({
+      scope: "teacher-ai-summary",
+      limit: 30,
+      windowSeconds: 60 * 60,
+      identifier: `${teacher.sub}:${classroomId}`
+    });
+    await clearExpiredRateLimits();
     const classroom = await prisma.classroom.findFirst({
       where: { id: classroomId, teacherId: teacher.sub },
       include: {
@@ -85,7 +93,13 @@ export async function POST(
     });
 
     return NextResponse.json({ summary });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
     return NextResponse.json({ error: "Could not summarize class data" }, { status: 500 });
   }
 }

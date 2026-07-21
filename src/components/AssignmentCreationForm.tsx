@@ -77,7 +77,7 @@ export function AssignmentCreationForm({
 
       <label>
         Assignment title
-        <input name="title" placeholder="Chapter 4 quiz" required />
+        <input name="title" placeholder="Chapter 4 quiz" maxLength={180} required />
       </label>
 
       <div className="grid two">

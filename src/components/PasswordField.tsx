@@ -8,6 +8,7 @@ type PasswordFieldProps = {
   label: string;
   autoComplete?: string;
   minLength?: number;
+  maxLength?: number;
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -18,6 +19,7 @@ export function PasswordField({
   label,
   autoComplete,
   minLength,
+  maxLength = 1024,
   required = true,
   placeholder,
   helpText
@@ -32,6 +34,7 @@ export function PasswordField({
           name={name}
           type={visible ? "text" : "password"}
           minLength={minLength}
+          maxLength={maxLength}
           autoComplete={autoComplete}
           placeholder={placeholder}
           required={required}

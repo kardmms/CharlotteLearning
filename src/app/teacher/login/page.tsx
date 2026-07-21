@@ -4,6 +4,7 @@ import { loginTeacher } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
+import { TurnstileField } from "@/components/TurnstileField";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,10 @@ export default async function TeacherLoginPage({
           <form className="form-grid" action={loginTeacher}>
             <label>
               Email
-              <input name="email" type="email" autoComplete="email" required />
+              <input name="email" type="email" autoComplete="email" maxLength={254} required />
             </label>
             <PasswordField name="password" label="Password" autoComplete="current-password" />
+            <TurnstileField action="teacher_login" />
             <button className="button" type="submit">
               Sign in
             </button>

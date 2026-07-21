@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStudentSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -24,6 +25,13 @@ export async function POST(
     if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { sessionId } = await params;
+    await enforceRateLimit({
+      scope: "student-progress",
+      limit: 120,
+      windowSeconds: 60 * 60,
+      identifier: `${student.studentId}:${sessionId}`
+    });
+    await clearExpiredRateLimits();
     const session = await prisma.studentSession.findFirst({
       where: { id: sessionId, studentId: student.studentId }
     });
@@ -41,7 +49,13 @@ export async function POST(
     });
 
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
     return NextResponse.json({ error: "Could not update progress" }, { status: 500 });
   }
 }

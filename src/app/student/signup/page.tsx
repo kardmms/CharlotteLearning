@@ -4,6 +4,7 @@ import { registerStudent } from "@/app/student/actions";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
 import { PublicTopbar } from "@/components/AppTopbar";
+import { TurnstileField } from "@/components/TurnstileField";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +26,11 @@ export default async function StudentSignupPage({
           <p>Your teacher must add your email to a class first. You only need one account for every Charlotte class.</p>
           <Message error={query.error} />
           <form className="form-grid" action={registerStudent}>
-            <label>Your name<input name="displayName" autoComplete="name" required /></label>
-            <label>Student email<input name="email" type="email" autoComplete="email" required /></label>
+            <label>Your name<input name="displayName" autoComplete="name" maxLength={120} required /></label>
+            <label>Student email<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
             <PasswordField name="password" label="Password" minLength={10} autoComplete="new-password" helpText="Use at least 10 characters." />
             <PasswordField name="confirmPassword" label="Confirm password" minLength={10} autoComplete="new-password" />
+            <TurnstileField action="student_signup" />
             <button className="button" type="submit">Create account</button>
           </form>
           <p>Already have an account? <Link href="/student/login">Sign in</Link></p>

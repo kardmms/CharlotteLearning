@@ -8,25 +8,26 @@ It gives teachers a setup flow, secure teacher/student access, source-based 15-m
 1. Copy `.env.example` to `.env`.
 2. Fill in `AUTH_SECRET` with at least 32 random characters.
 3. Add `OPENAI_API_KEY` when you are ready to generate real AI questions. The deployed app also accepts `OPEN_AI_KEY` for compatibility with the current Vercel environment.
-4. Install dependencies:
+4. Optional but recommended for production: create a Cloudflare Turnstile widget and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"` in Vercel.
+5. Install dependencies:
 
 ```powershell
 & 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' install
 ```
 
-5. Point `DATABASE_URL` at a Postgres database and apply migrations:
+6. Point `DATABASE_URL` at a Postgres database and apply migrations:
 
 ```powershell
 & 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' db:migrate
 ```
 
-6. Optional demo data:
+7. Optional demo data:
 
 ```powershell
 & 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' db:seed
 ```
 
-7. Start the app:
+8. Start the app:
 
 ```powershell
 & 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' dev
@@ -43,6 +44,12 @@ Open `http://localhost:3000`.
 - Teachers can only access their own classes, materials, students, and exports.
 - Students can only access published material for their own class.
 - CSV export neutralizes spreadsheet formula injection.
+- Public login, signup, setup, and contact forms support Cloudflare Turnstile with mandatory server-side verification when configured.
+- Auth, contact, upload, export, answer, heartbeat, and AI-generation endpoints have database-backed rate limits.
+- Production responses include security headers for CSP, clickjacking protection, MIME sniffing protection, referrer policy, browser permissions, HSTS, and HTTPS upgrades.
+- Dependabot and CI are configured for dependency updates and pull-request builds.
+
+Postgres Row Level Security is a recommended future hardening milestone. Do not enable RLS directly against the current Prisma connection until the data-access layer sets request-scoped database identity for every query; otherwise the app will either break or rely on policies that do not provide real tenant isolation.
 
 ## Production deployment
 

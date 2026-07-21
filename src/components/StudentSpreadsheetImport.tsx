@@ -55,11 +55,11 @@ export function StudentSpreadsheetImport({ classroomId }: { classroomId: string 
               <div className="student-entry-row" key={`${row.email}-${index}`}>
                 <label>
                   <span>Student name</span>
-                  <input name="studentName" defaultValue={row.displayName} required />
+                  <input name="studentName" defaultValue={row.displayName} maxLength={120} required />
                 </label>
                 <label>
                   <span>Student email</span>
-                  <input name="studentEmail" defaultValue={row.email} required type="email" />
+                  <input name="studentEmail" defaultValue={row.email} maxLength={254} required type="email" />
                 </label>
               </div>
             ))}

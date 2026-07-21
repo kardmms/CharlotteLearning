@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStudentSession } from "@/lib/auth";
 import { extendDailyHomePractice } from "@/lib/home-learning";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -35,6 +36,13 @@ export async function POST(
     const student = await getStudentSession();
     if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { sessionId } = await params;
+    await enforceRateLimit({
+      scope: "student-extend-practice",
+      limit: 12,
+      windowSeconds: 60 * 60,
+      identifier: `${student.studentId}:${sessionId}`
+    });
+    await clearExpiredRateLimits();
     const questions = await extendDailyHomePractice(sessionId, student.studentId);
     return NextResponse.json({
       questions: questions.map((question) => ({
@@ -55,7 +63,13 @@ export async function POST(
         existingRevealed: false
       }))
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+      );
+    }
     return NextResponse.json({ error: "Could not prepare more questions" }, { status: 500 });
   }
 }

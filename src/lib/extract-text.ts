@@ -21,7 +21,9 @@ export async function extractTextFromUpload(file: File): Promise<ExtractedUpload
     throw new Error("Please upload a file no larger than 4 MB.");
   }
 
-  const sourceName = file.name || "uploaded-material";
+  const sourceName = (file.name || "uploaded-material")
+    .replace(/[^\w.\- ()]/g, "")
+    .slice(0, 180) || "uploaded-material";
   const extension = sourceName.split(".").pop()?.toLowerCase();
   const buffer = Buffer.from(await file.arrayBuffer());
   let text = "";
