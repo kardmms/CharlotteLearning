@@ -14,7 +14,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@prisma/client": "^6.10.1",
+    "@prisma/client": "^7.9.0",
     "bcryptjs": "^3.0.2",
     "jose": "^5.9.6",
     "lucide-react": "^0.468.0",
@@ -33,7 +33,7 @@
     "@types/pdf-parse": "^1.1.4",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "prisma": "^6.10.1",
+    "prisma": "^7.9.0",
     "typescript": "^5.8.3"
   },
   "prisma": {
