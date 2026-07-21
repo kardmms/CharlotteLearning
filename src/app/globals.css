@@ -86,13 +86,14 @@ textarea {
   right: 8px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  min-height: 34px;
+  min-height: 40px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: #f8fafc;
   color: var(--blue);
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-weight: 900;
   transform: translateY(-50%);
   cursor: pointer;
@@ -243,10 +244,27 @@ select {
 .marketing-nav {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 12px;
   color: var(--muted);
   font-size: 0.95rem;
   font-weight: 700;
+}
+
+.marketing-nav a,
+.footer .nav-links a,
+.narrow-page .panel > p a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.marketing-nav a {
+  padding: 0 10px;
+}
+
+.footer .nav-links a,
+.narrow-page .panel > p a {
+  padding: 0 4px;
 }
 
 .marketing-nav a:hover {
