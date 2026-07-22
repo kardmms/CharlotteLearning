@@ -36,6 +36,8 @@ type AdminIdentity = {
   role: string;
 };
 
+export type AdminView = "dashboard" | "analytics" | "people" | "feedback" | "settings";
+
 type InviteFlash = {
   email: string;
   link: string;
@@ -143,12 +145,12 @@ function LinePanel({ metrics }: { metrics: AdminMetrics }) {
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Growth pulse line chart">
           <defs>
             <linearGradient id="adminLineA" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="#38bdf8" />
-              <stop offset="100%" stopColor="#22c55e" />
+              <stop offset="0%" stopColor="#8fb3c8" />
+              <stop offset="100%" stopColor="#78a89b" />
             </linearGradient>
             <linearGradient id="adminLineB" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="#fb923c" />
-              <stop offset="100%" stopColor="#facc15" />
+              <stop offset="0%" stopColor="#b98b64" />
+              <stop offset="100%" stopColor="#b8a35c" />
             </linearGradient>
           </defs>
           {[0, 1, 2, 3].map((line) => (
@@ -188,9 +190,9 @@ function GaugePanel({ metrics }: { metrics: AdminMetrics }) {
       </div>
       <div className="admin-gauge-grid">
         {[
-          ["Completion", completion, "#22c55e"],
-          ["Accuracy", correct, "#38bdf8"],
-          ["First try", firstTry, "#f97316"]
+          ["Completion", completion, "#6ea889"],
+          ["Accuracy", correct, "#7da8bd"],
+          ["First try", firstTry, "#b98658"]
         ].map(([label, value, color]) => (
           <div className="admin-gauge" key={String(label)}>
             <div
@@ -281,6 +283,15 @@ function InviteAndSettings({
   metrics: AdminMetrics;
   inviteFlash: InviteFlash;
 }) {
+  return (
+    <section className="admin-dashboard-grid two">
+      <AdminInvitePanel inviteFlash={inviteFlash} />
+      <FeedbackSettingsPanel metrics={metrics} />
+    </section>
+  );
+}
+
+function AdminInvitePanel({ inviteFlash }: { inviteFlash: InviteFlash }) {
   const [copied, setCopied] = useState(false);
 
   async function copyInvite() {
@@ -290,72 +301,74 @@ function InviteAndSettings({
   }
 
   return (
-    <section className="admin-dashboard-grid two" id="settings">
-      <div className="admin-glass-panel">
-        <div className="admin-card-head">
-          <div>
-            <h2>Invite admin</h2>
-            <p>Add someone trusted to help monitor demos and investor metrics.</p>
-          </div>
-          <MailPlus size={20} />
+    <div className="admin-glass-panel">
+      <div className="admin-card-head">
+        <div>
+          <h2>Invite admin</h2>
+          <p>Add someone trusted to help monitor demos and investor metrics.</p>
         </div>
-        {inviteFlash && (
-          <div className={`admin-invite-flash ${inviteFlash.sent ? "sent" : "manual"}`}>
-            <strong>{inviteFlash.message}</strong>
-            <p>{inviteFlash.email}</p>
-            <div>
-              <input readOnly value={inviteFlash.link} />
-              <button className="admin-icon-button" type="button" onClick={copyInvite} aria-label="Copy invite link">
-                {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />}
-              </button>
-            </div>
-          </div>
-        )}
-        <form className="admin-form" action={createAdminInvite}>
-          <label>
-            Name
-            <input name="name" maxLength={120} placeholder="Optional" />
-          </label>
-          <label>
-            Email
-            <input name="email" type="email" maxLength={254} required placeholder="admin@school.org" />
-          </label>
-          <button className="admin-primary-button" type="submit">
-            <MailPlus size={18} />
-            Send invite
-          </button>
-        </form>
+        <MailPlus size={20} />
       </div>
+      {inviteFlash && (
+        <div className={`admin-invite-flash ${inviteFlash.sent ? "sent" : "manual"}`}>
+          <strong>{inviteFlash.message}</strong>
+          <p>{inviteFlash.email}</p>
+          <div>
+            <input readOnly value={inviteFlash.link} />
+            <button className="admin-icon-button" type="button" onClick={copyInvite} aria-label="Copy invite link">
+              {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />}
+            </button>
+          </div>
+        </div>
+      )}
+      <form className="admin-form" action={createAdminInvite}>
+        <label>
+          Name
+          <input name="name" maxLength={120} placeholder="Optional" />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" maxLength={254} required placeholder="admin@school.org" />
+        </label>
+        <button className="admin-primary-button" type="submit">
+          <MailPlus size={18} />
+          Send invite
+        </button>
+      </form>
+    </div>
+  );
+}
 
-      <div className="admin-glass-panel">
-        <div className="admin-card-head">
-          <div>
-            <h2>Feedback passcode</h2>
-            <p>Teachers use this to open the weekly feedback form from the homepage footer.</p>
-          </div>
-          <KeyRound size={20} />
+function FeedbackSettingsPanel({ metrics }: { metrics: AdminMetrics }) {
+  return (
+    <div className="admin-glass-panel">
+      <div className="admin-card-head">
+        <div>
+          <h2>Feedback passcode</h2>
+          <p>Teachers use this to open the weekly feedback form from the homepage footer.</p>
         </div>
-        <div className="admin-passcode-status">
-          <ShieldCheck size={18} />
-          {metrics.settings.configured ? "Feedback passcode is active." : "Set a passcode before sharing feedback."}
-          {metrics.settings.hint ? <span>Hint: {metrics.settings.hint}</span> : null}
-        </div>
-        <form className="admin-form" action={updateFeedbackPasscode}>
-          <label>
-            New passcode
-            <input name="passcode" minLength={6} maxLength={120} required placeholder="Example: week1-demo" />
-          </label>
-          <label>
-            Teacher hint
-            <input name="hint" maxLength={120} placeholder="Optional hint you can recognize" />
-          </label>
-          <button className="admin-primary-button green" type="submit">
-            <Settings size={18} />
-            Save passcode
-          </button>
-        </form>
+        <KeyRound size={20} />
       </div>
-    </section>
+      <div className="admin-passcode-status">
+        <ShieldCheck size={18} />
+        {metrics.settings.configured ? "Feedback passcode is active." : "Set a passcode before sharing feedback."}
+        {metrics.settings.hint ? <span>Hint: {metrics.settings.hint}</span> : null}
+      </div>
+      <form className="admin-form" action={updateFeedbackPasscode}>
+        <label>
+          New passcode
+          <input name="passcode" minLength={6} maxLength={120} required placeholder="Example: week1-demo" />
+        </label>
+        <label>
+          Teacher hint
+          <input name="hint" maxLength={120} placeholder="Optional hint you can recognize" />
+        </label>
+        <button className="admin-primary-button green" type="submit">
+          <Settings size={18} />
+          Save passcode
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -470,11 +483,13 @@ function PeoplePanel({
 export function AdminDashboardClient({
   initialMetrics,
   admin,
-  inviteFlash
+  inviteFlash,
+  view = "dashboard"
 }: {
   initialMetrics: AdminMetrics;
   admin: AdminIdentity;
   inviteFlash: InviteFlash;
+  view?: AdminView;
 }) {
   const [metrics, setMetrics] = useState(initialMetrics);
   const [lastUpdated, setLastUpdated] = useState(new Date(initialMetrics.generatedAt));
@@ -504,6 +519,20 @@ export function AdminDashboardClient({
   }, []);
 
   const gradeBars = useMemo(() => metrics.charts.gradeMix.slice(0, 8), [metrics]);
+  const title = {
+    dashboard: "Main Dashboard",
+    analytics: "Analytics",
+    people: "People",
+    feedback: "Feedback",
+    settings: "Settings"
+  }[view];
+  const subtitle = {
+    dashboard: "Live product, classroom, learning, and feedback metrics for Charlotte AI.",
+    analytics: "Trends, learning quality, grade mix, and classroom traction.",
+    people: "Admin access, owner controls, and invite history.",
+    feedback: "Weekly teacher feedback and product notes.",
+    settings: "Feedback passcode and operational controls."
+  }[view];
 
   return (
     <main className="admin-shell">
@@ -513,11 +542,11 @@ export function AdminDashboardClient({
           <span>Charlotte Admin</span>
         </div>
         <nav aria-label="Admin sections">
-          <a href="#dashboard" className="active"><Gauge size={19} /> Dashboard</a>
-          <a href="#analytics"><BarChart3 size={19} /> Analytics</a>
-          <a href="#people"><UsersRound size={19} /> People</a>
-          <a href="#feedback"><MessageSquareText size={19} /> Feedback</a>
-          <a href="#settings"><Settings size={19} /> Settings</a>
+          <a href="/admin" className={view === "dashboard" ? "active" : ""}><Gauge size={19} /> Dashboard</a>
+          <a href="/admin/analytics" className={view === "analytics" ? "active" : ""}><BarChart3 size={19} /> Analytics</a>
+          <a href="/admin/people" className={view === "people" ? "active" : ""}><UsersRound size={19} /> People</a>
+          <a href="/admin/feedback" className={view === "feedback" ? "active" : ""}><MessageSquareText size={19} /> Feedback</a>
+          <a href="/admin/settings" className={view === "settings" ? "active" : ""}><Settings size={19} /> Settings</a>
         </nav>
         <div className="admin-profile">
           <strong>{admin.name}</strong>
@@ -534,9 +563,9 @@ export function AdminDashboardClient({
       <section className="admin-main" id="dashboard">
         <div className="admin-hero">
           <div>
-            <div className="admin-breadcrumb">Pages / Dashboard</div>
-            <h1>Main Dashboard</h1>
-            <p>Live product, classroom, learning, and feedback metrics for Charlotte AI.</p>
+            <div className="admin-breadcrumb">Pages / {title}</div>
+            <h1>{title}</h1>
+            <p>{subtitle}</p>
           </div>
           <div className={`admin-live-pill ${refreshing ? "refreshing" : ""}`}>
             <span />
@@ -544,58 +573,59 @@ export function AdminDashboardClient({
           </div>
         </div>
 
-        <section className="admin-stat-grid">
-          <MetricCard
-            icon={<UsersRound size={24} />}
-            label="Active users"
-            value={metrics.headline.totalActiveUsers}
-            detail={`${metrics.headline.activeTeachers} teachers - ${metrics.headline.activeStudents} students in 7d`}
-            tone="green"
-          />
-          <MetricCard
-            icon={<ClipboardList size={24} />}
-            label="Classes created"
-            value={metrics.headline.totalClasses}
-            detail={`${metrics.headline.archivedClasses} archived`}
-          />
-          <MetricCard
-            icon={<Sparkles size={24} />}
-            label="Assignments"
-            value={metrics.headline.totalMaterials}
-            detail={`${metrics.headline.publishedMaterials} published - ${metrics.headline.homeMaterials} home`}
-            tone="violet"
-          />
-          <MetricCard
-            icon={<Activity size={24} />}
-            label="Sessions today"
-            value={metrics.headline.todaySessions}
-            detail={`${metrics.headline.todayAnswers} answers submitted today`}
-            tone="orange"
-          />
-        </section>
+        {view === "dashboard" && (
+          <>
+            <section className="admin-stat-grid">
+              <MetricCard icon={<UsersRound size={24} />} label="Active users" value={metrics.headline.totalActiveUsers} detail={`${metrics.headline.activeTeachers} teachers - ${metrics.headline.activeStudents} students in 7d`} tone="green" />
+              <MetricCard icon={<ClipboardList size={24} />} label="Classes created" value={metrics.headline.totalClasses} detail={`${metrics.headline.archivedClasses} archived`} />
+              <MetricCard icon={<Sparkles size={24} />} label="Assignments" value={metrics.headline.totalMaterials} detail={`${metrics.headline.publishedMaterials} published - ${metrics.headline.homeMaterials} home`} tone="violet" />
+              <MetricCard icon={<Activity size={24} />} label="Sessions today" value={metrics.headline.todaySessions} detail={`${metrics.headline.todayAnswers} answers submitted today`} tone="orange" />
+            </section>
+            <section className="admin-dashboard-grid main">
+              <LinePanel metrics={metrics} />
+              <GaugePanel metrics={metrics} />
+            </section>
+            <DataTables metrics={metrics} />
+          </>
+        )}
 
-        <section className="admin-dashboard-grid main" id="analytics">
-          <LinePanel metrics={metrics} />
-          <GaugePanel metrics={metrics} />
-        </section>
+        {view === "analytics" && (
+          <>
+            <section className="admin-dashboard-grid main">
+              <LinePanel metrics={metrics} />
+              <GaugePanel metrics={metrics} />
+            </section>
+            <section className="admin-dashboard-grid three">
+              <MiniBarChart title="New teachers" subtitle="Last 14 days" items={metrics.charts.teachers} tone="blue" />
+              <MiniBarChart title="New classes" subtitle="Last 14 days" items={metrics.charts.classes} tone="green" />
+              <MiniBarChart title="Grade mix" subtitle="Active classrooms" items={gradeBars} tone="orange" />
+            </section>
+            <section className="admin-stat-grid compact">
+              <MetricCard icon={<UsersRound size={22} />} label="Teachers" value={metrics.headline.totalTeachers} detail="Accounts created" />
+              <MetricCard icon={<UsersRound size={22} />} label="Student accounts" value={metrics.headline.totalStudentAccounts} detail={`${metrics.headline.totalStudents} active roster rows`} tone="green" />
+              <MetricCard icon={<CheckCircle2 size={22} />} label="Completed sessions" value={metrics.headline.completedSessions} detail={`${metrics.headline.completionRate}% completion rate`} tone="violet" />
+              <MetricCard icon={<MessageSquareText size={22} />} label="Feedback notes" value={metrics.headline.feedbackCount} detail={`${metrics.headline.contactLeads} contact leads`} tone="orange" />
+            </section>
+          </>
+        )}
 
-        <section className="admin-dashboard-grid three">
-          <MiniBarChart title="New teachers" subtitle="Last 14 days" items={metrics.charts.teachers} tone="blue" />
-          <MiniBarChart title="New classes" subtitle="Last 14 days" items={metrics.charts.classes} tone="green" />
-          <MiniBarChart title="Grade mix" subtitle="Active classrooms" items={gradeBars} tone="orange" />
-        </section>
+        {view === "people" && (
+          <>
+            <PeoplePanel metrics={metrics} admin={admin} />
+            <section className="admin-dashboard-grid two">
+              <AdminInvitePanel inviteFlash={inviteFlash} />
+            </section>
+          </>
+        )}
 
-        <section className="admin-stat-grid compact">
-          <MetricCard icon={<UsersRound size={22} />} label="Teachers" value={metrics.headline.totalTeachers} detail="Accounts created" />
-          <MetricCard icon={<UsersRound size={22} />} label="Student accounts" value={metrics.headline.totalStudentAccounts} detail={`${metrics.headline.totalStudents} active roster rows`} tone="green" />
-          <MetricCard icon={<CheckCircle2 size={22} />} label="Completed sessions" value={metrics.headline.completedSessions} detail={`${metrics.headline.completionRate}% completion rate`} tone="violet" />
-          <MetricCard icon={<MessageSquareText size={22} />} label="Feedback notes" value={metrics.headline.feedbackCount} detail={`${metrics.headline.contactLeads} contact leads`} tone="orange" />
-        </section>
+        {view === "feedback" && <FeedbackPanel metrics={metrics} />}
 
-        <DataTables metrics={metrics} />
-        <PeoplePanel metrics={metrics} admin={admin} />
-        <FeedbackPanel metrics={metrics} />
-        <InviteAndSettings metrics={metrics} inviteFlash={inviteFlash} />
+        {view === "settings" && (
+          <section className="admin-dashboard-grid two">
+            <FeedbackSettingsPanel metrics={metrics} />
+            <AdminInvitePanel inviteFlash={inviteFlash} />
+          </section>
+        )}
       </section>
     </main>
   );

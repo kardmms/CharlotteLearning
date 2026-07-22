@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Montserrat:wght@600;700;800;900&family=Nunito:wght@600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lato:wght@400;700;900&family=Montserrat:wght@600;700;800;900&family=Nunito:wght@600;700;800;900&display=swap");
 
 :root {
   color-scheme: light;
@@ -25,6 +25,7 @@
   --student-yellow: #fbbf24;
   --student-pink: #f472b6;
   --student-purple: #a78bfa;
+  --admin-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 16px 40px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 24px 70px rgba(15, 23, 42, 0.12);
@@ -1636,6 +1637,528 @@ select {
 
 .admin-empty-state strong {
   color: #fff;
+}
+
+.admin-shell,
+.admin-auth-page,
+.admin-shell button,
+.admin-shell input,
+.admin-shell select,
+.admin-shell textarea,
+.admin-auth-page button,
+.admin-auth-page input,
+.admin-auth-page select,
+.admin-auth-page textarea {
+  font-family: var(--admin-font);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell h3,
+.admin-auth-card h1,
+.admin-auth-card h2,
+.admin-auth-card h3 {
+  font-family: var(--admin-font);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.admin-brand,
+.admin-auth-brand {
+  font-family: var(--admin-font);
+  font-weight: 600;
+}
+
+.admin-sidebar nav a,
+.admin-sidebar-button,
+.admin-breadcrumb,
+.admin-live-pill,
+.admin-card-head h2,
+.admin-table td strong,
+.admin-activity-item strong,
+.admin-feedback-card strong,
+.admin-feedback-card b,
+.admin-person-card strong,
+.admin-form label,
+.admin-primary-button,
+.admin-danger-button,
+.admin-icon-button {
+  font-weight: 500;
+}
+
+.admin-stat-card strong {
+  font-family: var(--admin-font);
+  font-weight: 500;
+}
+
+.admin-stat-card p,
+.admin-stat-card small,
+.admin-card-head p,
+.admin-profile span,
+.admin-table th,
+.admin-table td,
+.admin-table td span,
+.admin-activity-item span,
+.admin-feedback-card span,
+.admin-feedback-card p,
+.admin-person-card span,
+.admin-person-card small,
+.admin-passcode-status {
+  font-weight: 400;
+}
+
+.admin-chart-legend,
+.admin-gauge,
+.admin-bar-item,
+.admin-role-pill,
+.admin-access-note,
+.admin-feedback-card em {
+  font-weight: 500;
+}
+
+.admin-shell {
+  grid-template-columns: 248px minmax(0, 1fr);
+  background-size: 30px 30px;
+}
+
+.admin-sidebar {
+  gap: 18px;
+  padding: 22px 14px;
+}
+
+.admin-brand img,
+.admin-auth-brand img {
+  width: 34px;
+  height: 34px;
+}
+
+.admin-sidebar nav {
+  gap: 6px;
+}
+
+.admin-sidebar nav a,
+.admin-sidebar-button {
+  min-height: 42px;
+  border-radius: 11px;
+  font-size: .9rem;
+  padding: 0 12px;
+}
+
+.admin-profile {
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.admin-main {
+  width: min(1320px, calc(100% - 28px));
+  padding: 22px 0 38px;
+}
+
+.admin-hero {
+  margin-bottom: 14px;
+}
+
+.admin-hero h1,
+.admin-auth-card h1 {
+  font-size: clamp(1.7rem, 3vw, 2.45rem);
+  font-weight: 400;
+}
+
+.admin-hero p,
+.admin-auth-card p {
+  margin: 6px 0 0;
+  font-size: .92rem;
+  line-height: 1.45;
+}
+
+.admin-live-pill {
+  min-height: 34px;
+  border-color: rgba(148, 163, 184, .22);
+  background: rgba(15, 23, 42, .5);
+  color: #b8c4d4;
+  font-size: .82rem;
+  padding: 0 12px;
+}
+
+.admin-live-pill span {
+  width: 7px;
+  height: 7px;
+  background: #78a89b;
+}
+
+.admin-stat-grid,
+.admin-dashboard-grid {
+  gap: 12px;
+}
+
+.admin-stat-grid {
+  margin-bottom: 12px;
+}
+
+.admin-dashboard-grid.main,
+.admin-dashboard-grid.two,
+.admin-dashboard-grid.three,
+.admin-stat-grid.compact {
+  margin-top: 12px;
+}
+
+.admin-glass-panel,
+.admin-stat-card,
+.admin-auth-card {
+  border-color: rgba(148, 163, 184, .16);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .018)),
+    #15171d;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .2);
+}
+
+.admin-glass-panel {
+  border-radius: 14px;
+  padding: 15px;
+}
+
+.admin-stat-card {
+  min-height: 84px;
+  border-radius: 14px;
+  gap: 11px;
+  padding: 13px;
+}
+
+.admin-stat-card > span {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: rgba(125, 168, 189, .12);
+  color: #9db9c9;
+}
+
+.admin-stat-card.green > span {
+  background: rgba(110, 168, 137, .12);
+  color: #9ac4ac;
+}
+
+.admin-stat-card.orange > span {
+  background: rgba(185, 134, 88, .12);
+  color: #c7a07b;
+}
+
+.admin-stat-card.violet > span {
+  background: rgba(145, 130, 174, .13);
+  color: #aaa0c5;
+}
+
+.admin-stat-card strong {
+  margin: 3px 0;
+  font-size: clamp(1.25rem, 2vw, 1.85rem);
+}
+
+.admin-stat-card p,
+.admin-stat-card small {
+  font-size: .82rem;
+}
+
+.admin-card-head {
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.admin-card-head h2 {
+  font-size: .98rem;
+}
+
+.admin-card-head p {
+  margin-top: 4px;
+  font-size: .84rem;
+  line-height: 1.35;
+}
+
+.admin-card-head > svg {
+  width: 17px;
+  height: 17px;
+}
+
+.admin-line-wrap {
+  min-height: 172px;
+  border-radius: 11px;
+  padding: 10px;
+}
+
+.admin-line-wrap svg {
+  height: 172px;
+}
+
+.admin-line {
+  stroke-width: 3.25;
+  filter: none;
+}
+
+.admin-grid-line {
+  stroke: rgba(148, 163, 184, .12);
+}
+
+.admin-chart-legend {
+  gap: 11px;
+  margin-top: 9px;
+  color: #adb8c7;
+  font-size: .84rem;
+}
+
+.admin-chart-legend i {
+  width: 9px;
+  height: 9px;
+}
+
+.admin-chart-legend .sessions {
+  background: #8fb3c8;
+}
+
+.admin-chart-legend .students {
+  background: #b98b64;
+}
+
+.admin-gauge-grid {
+  gap: 10px;
+}
+
+.admin-gauge {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  font-size: .9rem;
+}
+
+.admin-gauge > div {
+  width: 64px;
+  height: 64px;
+}
+
+.admin-gauge strong {
+  width: 46px;
+  height: 46px;
+  font-size: .86rem;
+}
+
+.admin-bar-chart {
+  gap: 5px;
+  min-height: 132px;
+  padding-top: 6px;
+}
+
+.admin-bar-item {
+  grid-template-rows: 17px 88px 24px;
+  font-size: .66rem;
+}
+
+.admin-bar-item i.blue {
+  background: linear-gradient(180deg, #8fb3c8, #5f7f96);
+}
+
+.admin-bar-item i.green {
+  background: linear-gradient(180deg, #92b8a3, #638a73);
+}
+
+.admin-bar-item i.orange {
+  background: linear-gradient(180deg, #c7a07b, #967050);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px 7px;
+  font-size: .84rem;
+}
+
+.admin-table tbody tr:hover {
+  background: rgba(148, 163, 184, .07);
+}
+
+.admin-table tbody tr:hover td {
+  color: #d7dee8;
+}
+
+.admin-table tbody tr:hover td strong {
+  color: #f1f5f9;
+}
+
+.admin-table tbody tr:hover td span {
+  color: #aab6c6;
+}
+
+.admin-table-wrap {
+  scrollbar-color: rgba(148, 163, 184, .62) rgba(255, 255, 255, .04);
+  scrollbar-width: thin;
+}
+
+.admin-table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.admin-table-wrap::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, .04);
+  border-radius: 999px;
+}
+
+.admin-table-wrap::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .55);
+}
+
+.admin-table td span,
+.admin-person-card small,
+.admin-activity-item span {
+  font-size: .78rem;
+}
+
+.admin-activity-list,
+.admin-feedback-grid,
+.admin-people-list {
+  gap: 8px;
+}
+
+.admin-activity-item {
+  min-height: 38px;
+}
+
+.admin-activity-item i {
+  width: 7px;
+  height: 7px;
+  background: #78a89b;
+  box-shadow: 0 0 0 4px rgba(120, 168, 155, .09);
+}
+
+.admin-feedback-card,
+.admin-person-card,
+.admin-invite-flash,
+.admin-passcode-status,
+.admin-empty-state {
+  border-color: rgba(148, 163, 184, .14);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .032);
+  padding: 11px;
+}
+
+.admin-feedback-card {
+  gap: 7px;
+}
+
+.admin-feedback-card p {
+  font-size: .84rem;
+  line-height: 1.45;
+}
+
+.admin-feedback-card em,
+.admin-role-pill,
+.admin-access-note {
+  min-height: 28px;
+  font-size: .68rem;
+  padding: 0 9px;
+}
+
+.admin-person-card {
+  min-height: 62px;
+}
+
+.admin-form,
+.feedback-form {
+  gap: 10px;
+}
+
+.admin-form label {
+  gap: 5px;
+  font-size: .86rem;
+}
+
+.admin-form input,
+.admin-form textarea,
+.admin-form select {
+  min-height: 40px;
+  border-radius: 10px;
+  border-color: rgba(148, 163, 184, .18);
+  padding: 8px 10px;
+}
+
+.admin-primary-button,
+.admin-icon-button {
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+.admin-danger-button {
+  min-height: 34px;
+  border-radius: 9px;
+}
+
+.admin-sidebar nav a:hover,
+.admin-sidebar nav a.active,
+.admin-sidebar-button:hover {
+  background: rgba(148, 163, 184, .12);
+}
+
+.admin-primary-button {
+  border-color: rgba(148, 163, 184, .18);
+  background: #2c3d4d;
+  box-shadow: none;
+}
+
+.admin-primary-button:hover {
+  background: #34485a;
+  box-shadow: none;
+}
+
+.admin-primary-button.green {
+  background: #35483f;
+  box-shadow: none;
+}
+
+.admin-primary-button.green:hover {
+  background: #405548;
+}
+
+.admin-danger-button {
+  border-color: rgba(174, 112, 112, .22);
+  background: rgba(120, 70, 70, .16);
+  color: #caa3a3;
+}
+
+.admin-danger-button:hover {
+  background: rgba(120, 70, 70, .24);
+  color: #ddc0c0;
+}
+
+.admin-role-pill.owner {
+  background: rgba(145, 130, 174, .13);
+  color: #b8aecb;
+}
+
+.admin-role-pill.admin,
+.admin-role-pill.sent,
+.admin-role-pill.used,
+.admin-feedback-card em {
+  background: rgba(110, 168, 137, .11);
+  color: #a3c2b0;
+}
+
+.admin-role-pill.manual {
+  background: rgba(125, 168, 189, .11);
+  color: #a9c0cc;
+}
+
+.admin-role-pill.expired {
+  background: rgba(174, 112, 112, .13);
+  color: #d3adad;
+}
+
+.admin-invite-flash.sent {
+  border-color: rgba(110, 168, 137, .2);
+}
+
+.admin-invite-flash.manual {
+  border-color: rgba(185, 139, 100, .2);
+}
+
+.admin-auth-icon {
+  background: rgba(125, 168, 189, .11);
+  color: #a9c0cc;
 }
 
 .admin-empty-state.light {
