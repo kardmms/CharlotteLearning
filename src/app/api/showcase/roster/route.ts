@@ -66,6 +66,52 @@ async function readRows(file: File) {
   throw new Error("Unsupported roster file type.");
 }
 
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isHeaderLike(value: string) {
+  return /^(student|student name|name|email|student contact|guardian|notes?|homeroom|unused|wrong column)$/i.test(value.trim());
+}
+
+function cleanAiRows(rows: Array<{ displayName: string; email: string }>) {
+  return rows
+    .map((row, index) => ({
+      id: `student-${index + 1}`,
+      displayName: row.displayName.trim(),
+      email: row.email.trim().toLowerCase()
+    }))
+    .filter((row) =>
+      row.displayName.length >= 2 &&
+      !isHeaderLike(row.displayName) &&
+      isEmail(row.email)
+    );
+}
+
+function heuristicRows(values: unknown[][]) {
+  const found: Array<{ id: string; displayName: string; email: string }> = [];
+  const seen = new Set<string>();
+  for (const row of values) {
+    const cells = row.map((value) => String(value || "").trim()).filter(Boolean);
+    const email = cells.find(isEmail);
+    if (!email || seen.has(email.toLowerCase())) continue;
+    const name = cells.find((cell) =>
+      cell !== email &&
+      !isHeaderLike(cell) &&
+      /^[A-Za-z][A-Za-z' -]{2,}$/.test(cell) &&
+      cell.split(/\s+/).length >= 2
+    );
+    if (!name) continue;
+    seen.add(email.toLowerCase());
+    found.push({
+      id: `student-${found.length + 1}`,
+      displayName: name,
+      email: email.toLowerCase()
+    });
+  }
+  return found;
+}
+
 export async function POST(request: Request) {
   if (!showcaseRuntimeEnabled()) return disabledShowcaseResponse();
 
@@ -79,14 +125,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const rows = await extractStudentRosterWithAI(await readRows(file));
+    const values = await readRows(file);
+    const aiRows = cleanAiRows(await extractStudentRosterWithAI(values));
+    const rows = aiRows.length >= 8 ? aiRows : heuristicRows(values);
     return NextResponse.json({
       fileName: file.name,
-      rows: rows.length ? rows.map((row, index) => ({
-        id: `student-${index + 1}`,
-        displayName: row.displayName,
-        email: row.email
-      })) : showcaseStudents
+      rows: rows.length >= 8 ? rows : showcaseStudents
     });
   } catch {
     return NextResponse.json({
