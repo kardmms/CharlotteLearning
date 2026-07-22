@@ -296,3 +296,60 @@ export async function getAdminMetrics() {
 }
 
 export type AdminMetrics = Awaited<ReturnType<typeof getAdminMetrics>>;
+
+export function getEmptyAdminMetrics(): AdminMetrics {
+  const now = new Date();
+  const emptyChart = recentDayStarts(14).map((date) => ({
+    label: shortDate(date),
+    value: 0
+  }));
+
+  return {
+    generatedAt: now.toISOString(),
+    headline: {
+      totalActiveUsers: 0,
+      activeTeachers: 0,
+      activeStudents: 0,
+      totalTeachers: 0,
+      totalStudentAccounts: 0,
+      totalClasses: 0,
+      archivedClasses: 0,
+      totalStudents: 0,
+      totalMaterials: 0,
+      publishedMaterials: 0,
+      homeMaterials: 0,
+      totalSessions: 0,
+      completedSessions: 0,
+      completionRate: 0,
+      totalAnswers: 0,
+      correctRate: 0,
+      firstTryRate: 0,
+      focusAlerts: 0,
+      contactLeads: 0,
+      feedbackCount: 0,
+      todaySessions: 0,
+      todayAnswers: 0
+    },
+    charts: {
+      teachers: emptyChart,
+      classes: emptyChart,
+      students: emptyChart,
+      sessions: emptyChart,
+      gradeMix: [],
+      assignmentMix: [
+        { label: "Published", value: 0 },
+        { label: "Draft", value: 0 },
+        { label: "At home", value: 0 }
+      ]
+    },
+    topClassrooms: [],
+    activityTimeline: [],
+    feedback: [],
+    invites: [],
+    admins: [],
+    settings: {
+      configured: false,
+      hint: ""
+    }
+  };
+}
