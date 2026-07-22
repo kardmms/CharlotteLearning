@@ -1361,6 +1361,85 @@ select {
   color: #cbd5e1;
 }
 
+.admin-people-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-person-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 78px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .04);
+  padding: 14px;
+}
+
+.admin-person-card strong,
+.admin-person-card span,
+.admin-person-card small {
+  display: block;
+}
+
+.admin-person-card strong {
+  color: #fff;
+}
+
+.admin-person-card span {
+  margin-top: 3px;
+  color: #cbd5e1;
+  overflow-wrap: anywhere;
+}
+
+.admin-person-card small {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.admin-role-pill,
+.admin-access-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 11px;
+  font-size: .78rem;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-role-pill.owner {
+  background: rgba(167, 139, 250, .16);
+  color: #c4b5fd;
+}
+
+.admin-role-pill.admin,
+.admin-role-pill.sent,
+.admin-role-pill.used {
+  background: rgba(34, 197, 94, .14);
+  color: #86efac;
+}
+
+.admin-role-pill.manual {
+  background: rgba(56, 189, 248, .14);
+  color: #7dd3fc;
+}
+
+.admin-role-pill.expired {
+  background: rgba(239, 68, 68, .14);
+  color: #fca5a5;
+}
+
+.admin-access-note {
+  color: #94a3b8;
+}
+
 .admin-form,
 .feedback-form {
   display: grid;
@@ -1402,6 +1481,7 @@ select {
 }
 
 .admin-primary-button,
+.admin-danger-button,
 .admin-icon-button {
   display: inline-flex;
   align-items: center;
@@ -1429,6 +1509,19 @@ select {
 .admin-primary-button.green {
   background: #16a34a;
   box-shadow: 0 18px 34px rgba(22, 163, 74, .2);
+}
+
+.admin-danger-button {
+  min-height: 40px;
+  border-color: rgba(239, 68, 68, .2);
+  background: rgba(239, 68, 68, .12);
+  color: #fca5a5;
+  padding: 0 13px;
+}
+
+.admin-danger-button:hover {
+  background: rgba(239, 68, 68, .2);
+  color: #fee2e2;
 }
 
 .admin-icon-button {
@@ -5510,7 +5603,7 @@ tr:last-child td {
   }
 
   .admin-sidebar nav {
-    grid-template-columns: repeat(4, minmax(0, auto));
+    grid-template-columns: repeat(5, minmax(0, auto));
     flex: 1 1 auto;
   }
 
@@ -5833,8 +5926,10 @@ tr:last-child td {
   }
 
   .admin-invite-flash div,
-  .admin-card-head {
+  .admin-card-head,
+  .admin-person-card {
     align-items: stretch;
+    grid-template-columns: 1fr;
     flex-direction: column;
   }
 

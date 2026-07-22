@@ -247,6 +247,34 @@ export async function createAdminInvite(formData: FormData) {
   redirect("/admin?invited=1");
 }
 
+export async function revokeAdminAccess(formData: FormData) {
+  const admin = await requireAdmin();
+  const adminId = formText(formData, "adminId");
+
+  await enforceOrRedirect("/admin", async () => {
+    await enforceRateLimit({ scope: "admin-revoke-access", limit: 20, windowSeconds: 60 * 60, identifier: admin.id });
+  });
+
+  if (admin.role !== AdminRole.OWNER) {
+    errorRedirect("/admin", "Only the owner can revoke admin access.");
+  }
+  if (!adminId || adminId === admin.id) {
+    errorRedirect("/admin", "You cannot revoke your own admin access.");
+  }
+
+  const target = await prisma.adminUser.findUnique({
+    where: { id: adminId },
+    select: { id: true, role: true }
+  });
+  if (!target) errorRedirect("/admin", "Admin user not found.");
+  if (target.role === AdminRole.OWNER) {
+    errorRedirect("/admin", "Owner access cannot be revoked from this dashboard.");
+  }
+
+  await prisma.adminUser.delete({ where: { id: target.id } });
+  redirect("/admin?revoked=1");
+}
+
 export async function acceptAdminInvite(formData: FormData) {
   const token = formText(formData, "token");
   const password = boundedText(formData, "password", 1024);

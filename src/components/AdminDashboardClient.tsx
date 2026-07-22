@@ -18,9 +18,15 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  UserCog,
   UsersRound
 } from "lucide-react";
-import { createAdminInvite, logoutAdmin, updateFeedbackPasscode } from "@/app/admin/actions";
+import {
+  createAdminInvite,
+  logoutAdmin,
+  revokeAdminAccess,
+  updateFeedbackPasscode
+} from "@/app/admin/actions";
 import type { AdminMetrics } from "@/lib/admin-metrics";
 
 type AdminIdentity = {
@@ -382,6 +388,85 @@ function FeedbackPanel({ metrics }: { metrics: AdminMetrics }) {
   );
 }
 
+function PeoplePanel({
+  metrics,
+  admin
+}: {
+  metrics: AdminMetrics;
+  admin: AdminIdentity;
+}) {
+  const isOwner = admin.role === "OWNER";
+
+  return (
+    <section className="admin-dashboard-grid two" id="people">
+      <div className="admin-glass-panel">
+        <div className="admin-card-head">
+          <div>
+            <h2>People with admin access</h2>
+            <p>Owner controls stay here so access is easy to audit.</p>
+          </div>
+          <UserCog size={20} />
+        </div>
+        <div className="admin-people-list">
+          {metrics.admins.map((person) => {
+            const isSelf = person.username === admin.username;
+            const canRevoke = isOwner && person.role !== "OWNER" && !isSelf;
+            return (
+              <article className="admin-person-card" key={person.id}>
+                <div>
+                  <strong>{person.name}</strong>
+                  <span>{person.email}</span>
+                  <small>@{person.username}</small>
+                </div>
+                <em className={`admin-role-pill ${person.role.toLowerCase()}`}>{person.role}</em>
+                {canRevoke ? (
+                  <form action={revokeAdminAccess}>
+                    <input type="hidden" name="adminId" value={person.id} />
+                    <button className="admin-danger-button" type="submit">
+                      Revoke
+                    </button>
+                  </form>
+                ) : (
+                  <span className="admin-access-note">
+                    {isSelf ? "You" : person.role === "OWNER" ? "Protected" : "Owner only"}
+                  </span>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="admin-glass-panel">
+        <div className="admin-card-head">
+          <div>
+            <h2>Admin invitations</h2>
+            <p>Recent invite status for your access pipeline.</p>
+          </div>
+          <MailPlus size={20} />
+        </div>
+        <div className="admin-people-list">
+          {metrics.invites.map((invite) => (
+            <article className="admin-person-card invite" key={invite.id}>
+              <div>
+                <strong>{invite.name || invite.email}</strong>
+                <span>{invite.email}</span>
+                <small>Invited by {invite.invitedBy}</small>
+              </div>
+              <em className={`admin-role-pill ${
+                invite.used ? "used" : invite.expired ? "expired" : invite.sent ? "sent" : "manual"
+              }`}>
+                {invite.used ? "USED" : invite.expired ? "EXPIRED" : invite.sent ? "SENT" : "LINK"}
+              </em>
+            </article>
+          ))}
+          {metrics.invites.length === 0 && <p>No admin invitations yet.</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function AdminDashboardClient({
   initialMetrics,
   admin,
@@ -430,6 +515,7 @@ export function AdminDashboardClient({
         <nav aria-label="Admin sections">
           <a href="#dashboard" className="active"><Gauge size={19} /> Dashboard</a>
           <a href="#analytics"><BarChart3 size={19} /> Analytics</a>
+          <a href="#people"><UsersRound size={19} /> People</a>
           <a href="#feedback"><MessageSquareText size={19} /> Feedback</a>
           <a href="#settings"><Settings size={19} /> Settings</a>
         </nav>
@@ -507,6 +593,7 @@ export function AdminDashboardClient({
         </section>
 
         <DataTables metrics={metrics} />
+        <PeoplePanel metrics={metrics} admin={admin} />
         <FeedbackPanel metrics={metrics} />
         <InviteAndSettings metrics={metrics} inviteFlash={inviteFlash} />
       </section>
