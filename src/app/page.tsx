@@ -202,6 +202,9 @@ export default async function HomePage() {
             <Link href="/teacher/login">Teacher login</Link>
             <Link href="/student/login">Student sign in</Link>
             <Link href="/privacy">Privacy</Link>
+            <Link className="quiet-footer-link" href="/showcase">
+              showcase mode
+            </Link>
             <Link className="quiet-footer-link" href="/feedback">Weekly feedback</Link>
             <Link className="quiet-footer-link" href="/admin">Admin</Link>
             <BookOpen size={18} color="#64748B" />
