@@ -13,14 +13,10 @@ import {
   UsersRound
 } from "lucide-react";
 import { PublicTopbar } from "@/components/AppTopbar";
-import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const teacherCount = await prisma.teacher.count();
-  const teacherHref = teacherCount === 0 ? "/teacher/setup" : "/teacher/login";
-
   return (
     <>
       <PublicTopbar />
@@ -51,8 +47,8 @@ export default async function HomePage() {
                 </span>
               </div>
               <div className="actions">
-                <Link className="button" href={teacherHref}>
-                  Start teacher setup
+                <Link className="button" href="/teacher/signup">
+                  Create teacher account
                   <ArrowRight size={18} />
                 </Link>
                 <Link className="ghost-button" href="/student/login">

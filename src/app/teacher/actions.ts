@@ -132,6 +132,41 @@ export async function createFirstTeacher(formData: FormData) {
   redirect(classroomCount > 0 ? "/teacher/classes" : "/teacher");
 }
 
+export async function createTeacherAccount(formData: FormData) {
+  const signupPath = "/teacher/signup";
+  const name = boundedText(formData, "name", 120);
+  const email = normalizeEmail(formText(formData, "email"));
+  const password = boundedText(formData, "password", 1024);
+
+  await enforceOrRedirect(signupPath, async () => {
+    await enforceRateLimit({ scope: "teacher-signup-ip", limit: 20, windowSeconds: 60 * 60 });
+    await enforceRateLimit({ scope: "teacher-signup-email", limit: 5, windowSeconds: 24 * 60 * 60, identifier: email });
+    await enforceTurnstile(formData, "teacher_signup");
+  });
+
+  if (name.length < 2) errorRedirect(signupPath, "Please enter the teacher name.");
+  if (!email.includes("@")) errorRedirect(signupPath, "Please enter a valid email.");
+  if (password.length < 10) {
+    errorRedirect(signupPath, "Use a password with at least 10 characters.");
+  }
+
+  const existing = await prisma.teacher.findUnique({ where: { email } });
+  if (existing) {
+    errorRedirect("/teacher/login", "An account already exists for this email. Sign in instead.");
+  }
+
+  const teacher = await prisma.teacher.create({
+    data: {
+      name,
+      email,
+      passwordHash: await hashPassword(password)
+    }
+  });
+
+  await setTeacherSession(teacher);
+  redirect("/teacher");
+}
+
 export async function loginTeacher(formData: FormData) {
   const email = normalizeEmail(formText(formData, "email"));
   const password = boundedText(formData, "password", 1024);

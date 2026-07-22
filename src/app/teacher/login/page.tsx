@@ -40,7 +40,7 @@ export default async function TeacherLoginPage({
             </button>
           </form>
           <p>
-            First time here? <Link href="/teacher/setup">Create the first teacher account</Link>
+            New to Charlotte? <Link href="/teacher/signup">Create a teacher account</Link>
           </p>
         </div>
       </main>

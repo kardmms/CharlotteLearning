@@ -1,23 +1,19 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { KeyRound } from "lucide-react";
-import { createFirstTeacher } from "@/app/teacher/actions";
+import { UserRoundPlus } from "lucide-react";
+import { createTeacherAccount } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
 import { TurnstileField } from "@/components/TurnstileField";
-import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeacherSetupPage({
+export default async function TeacherSignupPage({
   searchParams
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
   const params = await searchParams;
-  const existing = await prisma.teacher.count();
-  if (existing > 0) redirect("/teacher/signup");
 
   return (
     <>
@@ -26,16 +22,17 @@ export default async function TeacherSetupPage({
         <div className="panel">
           <div className="panel-header">
             <div>
-              <div className="eyebrow">Teacher setup</div>
-              <h1>Create the first teacher account.</h1>
+              <div className="eyebrow">Teacher signup</div>
+              <h1>Create your teacher account.</h1>
             </div>
-            <KeyRound color="#2f7d4a" />
+            <UserRoundPlus color="#2f7d4a" />
           </div>
           <p>
-            This account controls classes, uploads, question review, student progress, and exports.
+            Start with your account, then create a class, save the classroom recovery key,
+            and add your students.
           </p>
           <Message error={params.error} />
-          <form className="form-grid" action={createFirstTeacher}>
+          <form className="form-grid" action={createTeacherAccount}>
             <label>
               Teacher name
               <input name="name" autoComplete="name" maxLength={120} required />
@@ -51,13 +48,13 @@ export default async function TeacherSetupPage({
               autoComplete="new-password"
               helpText="Use at least 10 characters. Longer is better."
             />
-            <TurnstileField action="teacher_setup" />
+            <TurnstileField action="teacher_signup" />
             <button className="button" type="submit">
               Create teacher account
             </button>
           </form>
           <p>
-            Already set up? <Link href="/teacher/login">Sign in</Link>
+            Already have an account? <Link href="/teacher/login">Sign in</Link>
           </p>
         </div>
       </main>
