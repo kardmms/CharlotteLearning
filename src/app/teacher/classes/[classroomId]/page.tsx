@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BellRing, CheckCircle2, ChevronLeft, ChevronRight, FileUp, Sparkles, Target, Trophy } from "lucide-react";
+import { ArrowRight, BellRing, ChevronLeft, ChevronRight, FileUp } from "lucide-react";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { requireTeacher } from "@/lib/auth";
@@ -119,6 +119,10 @@ function barWidth(value: number, max: number) {
   return Math.max(0, Math.min(100, Math.round((value / max) * 100)));
 }
 
+function weeklyValueLabel(value: number, suffix: string) {
+  return suffix === "%" ? `${value}%` : String(value);
+}
+
 export default async function ClassOverviewPage({
   params,
   searchParams
@@ -189,41 +193,41 @@ export default async function ClassOverviewPage({
   const weeklyMetrics = [
     {
       label: "Finished every activity",
-      Icon: CheckCircle2,
+      shortLabel: "Finished all",
       thisValue: thisWeekStats.completedAll,
       lastValue: lastWeekStats.completedAll,
-      thisWidth: barWidth(thisWeekStats.completedAll, studentScale),
-      lastWidth: barWidth(lastWeekStats.completedAll, studentScale),
+      thisHeight: barWidth(thisWeekStats.completedAll, studentScale),
+      lastHeight: barWidth(lastWeekStats.completedAll, studentScale),
       suffix: " students",
       detail: `${thisWeekStats.activityCount} activities this week`
     },
     {
       label: "Scored 80% or higher",
-      Icon: Trophy,
+      shortLabel: "80%+ scores",
       thisValue: thisWeekStats.highScorers,
       lastValue: lastWeekStats.highScorers,
-      thisWidth: barWidth(thisWeekStats.highScorers, studentScale),
-      lastWidth: barWidth(lastWeekStats.highScorers, studentScale),
+      thisHeight: barWidth(thisWeekStats.highScorers, studentScale),
+      lastHeight: barWidth(lastWeekStats.highScorers, studentScale),
       suffix: " students",
       detail: `${thisWeekStats.scoredSessions} finished scores`
     },
     {
       label: "Class average score",
-      Icon: Target,
+      shortLabel: "Average",
       thisValue: thisWeekStats.averageScore,
       lastValue: lastWeekStats.averageScore,
-      thisWidth: thisWeekStats.averageScore,
-      lastWidth: lastWeekStats.averageScore,
+      thisHeight: thisWeekStats.averageScore,
+      lastHeight: lastWeekStats.averageScore,
       suffix: "%",
       detail: "Average of finished work"
     },
     {
       label: "First-try correct answers",
-      Icon: Sparkles,
+      shortLabel: "First try",
       thisValue: thisWeekStats.firstTryRate,
       lastValue: lastWeekStats.firstTryRate,
-      thisWidth: thisWeekStats.firstTryRate,
-      lastWidth: lastWeekStats.firstTryRate,
+      thisHeight: thisWeekStats.firstTryRate,
+      lastHeight: lastWeekStats.firstTryRate,
       suffix: "%",
       detail: `${thisWeekStats.gradedAnswers} graded answers`
     }
@@ -322,44 +326,58 @@ export default async function ClassOverviewPage({
               <span><i className="last-week-key" /> Last week</span>
             </div>
           </div>
-          <div className="weekly-metric-list">
-            {weeklyMetrics.map((metric) => {
-              const Icon = metric.Icon;
-              const change = metric.thisValue - metric.lastValue;
-              const changeLabel = change > 0 ? `+${change}${metric.suffix}` : `${change}${metric.suffix}`;
-              return (
-                <article className="weekly-metric-card" key={metric.label}>
-                  <div className="weekly-metric-title">
-                    <span>
-                      <Icon size={20} />
-                    </span>
-                    <div>
-                      <strong>{metric.label}</strong>
-                      <small>{metric.detail}</small>
+          <div className="weekly-chart" aria-label="Weekly improvement grouped bar chart">
+            <div className="weekly-chart-scale" aria-hidden="true">
+              <span>100%</span>
+              <span>75%</span>
+              <span>50%</span>
+              <span>25%</span>
+              <span>0</span>
+            </div>
+            <div className="weekly-chart-groups">
+              {weeklyMetrics.map((metric) => {
+                const change = metric.thisValue - metric.lastValue;
+                const changeLabel = change > 0
+                  ? `+${weeklyValueLabel(change, metric.suffix)}`
+                  : weeklyValueLabel(change, metric.suffix);
+                return (
+                  <article className="weekly-chart-group" key={metric.label}>
+                    <div className="weekly-bar-pair">
+                      <div className="weekly-column-wrap">
+                        <span
+                          className="weekly-column-value"
+                          style={{ bottom: `calc(${metric.thisHeight}% + 8px)` }}
+                        >
+                          {weeklyValueLabel(metric.thisValue, metric.suffix)}
+                        </span>
+                        <i
+                          className="weekly-column this-week"
+                          style={{ height: `${metric.thisHeight}%` }}
+                        />
+                      </div>
+                      <div className="weekly-column-wrap">
+                        <span
+                          className="weekly-column-value"
+                          style={{ bottom: `calc(${metric.lastHeight}% + 8px)` }}
+                        >
+                          {weeklyValueLabel(metric.lastValue, metric.suffix)}
+                        </span>
+                        <i
+                          className="weekly-column last-week"
+                          style={{ height: `${metric.lastHeight}%` }}
+                        />
+                      </div>
                     </div>
+                    <strong>{metric.shortLabel}</strong>
+                    <span>{metric.label}</span>
+                    <small>{metric.detail}</small>
                     <em className={change >= 0 ? "weekly-up" : "weekly-down"}>
                       {change === 0 ? "Same" : changeLabel}
                     </em>
-                  </div>
-                  <div className="weekly-bars">
-                    <div className="weekly-bar-row">
-                      <span>This week</span>
-                      <div className="weekly-bar-track">
-                        <b style={{ width: `${metric.thisWidth}%` }} />
-                      </div>
-                      <strong>{metric.thisValue}{metric.suffix}</strong>
-                    </div>
-                    <div className="weekly-bar-row last-week">
-                      <span>Last week</span>
-                      <div className="weekly-bar-track">
-                        <b style={{ width: `${metric.lastWidth}%` }} />
-                      </div>
-                      <strong>{metric.lastValue}{metric.suffix}</strong>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
       </main>

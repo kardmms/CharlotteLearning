@@ -2,12 +2,13 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { normalizeStudentEmail } from "@/lib/codes";
+import { getAuthSecret } from "@/lib/security";
 
 export const SCHOOL_PRIVACY_KEY_MIN_LENGTH = 12;
 
 const CIPHER_PREFIX = "v1";
 const CLASS_KEY_CONTEXT = "charlotte-class-identity-v1";
-const EMAIL_LOOKUP_CONTEXT = "charlotte-student-email-lookup-v1";
+const EMAIL_LOOKUP_CONTEXT = "charlotte-student-email-lookup-v2";
 const VERIFIER_MESSAGE = "charlotte-school-held-privacy-key";
 
 export function cleanPrivacyKey(value: string) {
@@ -22,12 +23,12 @@ export function createPrivacyKeySalt() {
   return crypto.randomBytes(16).toString("base64url");
 }
 
-export function deriveClassPrivacyKey(rawKey: string, salt: string) {
-  return crypto.scryptSync(cleanPrivacyKey(rawKey), `${CLASS_KEY_CONTEXT}:${salt}`, 32);
+export function createClassPrivacyRecoveryKey() {
+  return `charlotte-${crypto.randomBytes(18).toString("base64url")}`;
 }
 
-function deriveEmailLookupKey(rawKey: string) {
-  return crypto.scryptSync(cleanPrivacyKey(rawKey), EMAIL_LOOKUP_CONTEXT, 32);
+export function deriveClassPrivacyKey(rawKey: string, salt: string) {
+  return crypto.scryptSync(cleanPrivacyKey(rawKey), `${CLASS_KEY_CONTEXT}:${salt}`, 32);
 }
 
 export function privacyKeyVerifierFromDerivedKey(derivedKey: Buffer) {
@@ -48,7 +49,13 @@ export function verifyClassPrivacyKey(rawKey: string, salt?: string | null, veri
 
 export function emailKeyHashForPrivacyKey(rawKey: string, email: string) {
   const normalizedEmail = normalizeStudentEmail(email).slice(0, 254);
-  const lookupKey = deriveEmailLookupKey(rawKey);
+  const lookupKey = crypto.scryptSync(cleanPrivacyKey(rawKey), EMAIL_LOOKUP_CONTEXT, 32);
+  return crypto.createHmac("sha256", lookupKey).update(normalizedEmail).digest("base64url");
+}
+
+export function studentEmailLookupHash(email: string) {
+  const normalizedEmail = normalizeStudentEmail(email).slice(0, 254);
+  const lookupKey = crypto.createHmac("sha256", getAuthSecret()).update(EMAIL_LOOKUP_CONTEXT).digest();
   return crypto.createHmac("sha256", lookupKey).update(normalizedEmail).digest("base64url");
 }
 

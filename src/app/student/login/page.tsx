@@ -34,14 +34,6 @@ export default async function StudentLoginPage({
               Student email
               <input name="email" type="email" autoComplete="email" maxLength={254} required />
             </label>
-            <PasswordField
-              name="privacyKey"
-              label="Class privacy key"
-              required={false}
-              minLength={12}
-              autoComplete="off"
-              helpText="Only use this if your teacher gave you one."
-            />
             <PasswordField name="password" label="Password" autoComplete="current-password" />
             <TurnstileField action="student_login" />
             <button className="button" type="submit">

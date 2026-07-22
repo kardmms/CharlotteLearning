@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { ActivityKind, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
 import { readSheet } from "read-excel-file/node";
 import { prisma } from "@/lib/db";
@@ -19,13 +20,14 @@ import { normalizeGrade } from "@/lib/grade";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import {
   cleanPrivacyKey,
+  createClassPrivacyRecoveryKey,
   createPrivacyKeySalt,
   decryptIdentityValue,
   deriveClassPrivacyKey,
-  emailKeyHashForPrivacyKey,
   encryptIdentityValue,
   isUsablePrivacyKey,
   privacyKeyVerifierFromDerivedKey,
+  studentEmailLookupHash,
   verifyClassPrivacyKey
 } from "@/lib/school-privacy";
 
@@ -68,6 +70,21 @@ function boundedText(formData: FormData, key: string, maxLength: number) {
 function teacherReturnPath(formData: FormData, fallback: string) {
   const returnPath = formText(formData, "returnPath");
   return returnPath.startsWith("/teacher") ? returnPath : fallback;
+}
+
+async function setClassRecoveryKeyFlash(classroomId: string, className: string, recoveryKey: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(
+    "charlotte_class_recovery_key_flash",
+    Buffer.from(JSON.stringify({ classroomId, className, recoveryKey })).toString("base64url"),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/teacher",
+      maxAge: 60 * 30
+    }
+  );
 }
 
 function optionalDate(value: string) {
@@ -150,31 +167,28 @@ export async function createClassroom(formData: FormData) {
   });
   const name = boundedText(formData, "name", 120);
   const gradeLevel = normalizeGrade(formText(formData, "gradeLevel"));
-  const privacyKey = cleanPrivacyKey(formText(formData, "privacyKey"));
-  const privacyKeyHint = boundedText(formData, "privacyKeyHint", 80) || null;
 
   if (name.length < 2) errorRedirect(errorPath, "Please name the class.");
   if (!gradeLevel) errorRedirect(errorPath, "Please enter a grade level.");
-  if (privacyKey && !isUsablePrivacyKey(privacyKey)) {
-    errorRedirect(errorPath, "Use a school privacy key with at least 12 characters.");
-  }
 
-  const privacySalt = privacyKey ? createPrivacyKeySalt() : null;
-  const derivedPrivacyKey = privacyKey && privacySalt ? deriveClassPrivacyKey(privacyKey, privacySalt) : null;
+  const recoveryKey = createClassPrivacyRecoveryKey();
+  const privacySalt = createPrivacyKeySalt();
+  const derivedPrivacyKey = deriveClassPrivacyKey(recoveryKey, privacySalt);
 
   const classroom = await prisma.classroom.create({
     data: {
       name,
       gradeLevel,
       teacherId: teacher.id,
-      identityMode: derivedPrivacyKey ? IdentityMode.SCHOOL_KEY : IdentityMode.STANDARD,
+      identityMode: IdentityMode.SCHOOL_KEY,
       privacyKeySalt: privacySalt,
-      privacyKeyVerifier: derivedPrivacyKey ? privacyKeyVerifierFromDerivedKey(derivedPrivacyKey) : null,
-      privacyKeyHint: derivedPrivacyKey ? privacyKeyHint : null
+      privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
+      privacyKeyHint: null
     }
   });
 
-  redirect(`/teacher/classes/${classroom.id}`);
+  await setClassRecoveryKeyFlash(classroom.id, classroom.name, recoveryKey);
+  redirect(`/teacher/classes/${classroom.id}/roster`);
 }
 
 export async function deleteClassroom(formData: FormData) {
@@ -270,7 +284,7 @@ async function createStudentsFromRows(
 
   if (usesPrivacyKey) {
     if (!isUsablePrivacyKey(privacyKey)) {
-      errorRedirect(errorPath, "Enter this class privacy key before adding students.");
+      errorRedirect(errorPath, "Enter this classroom recovery key before adding students.");
     }
 
     const existingStudentCount = await prisma.student.count({ where: { classroomId } });
@@ -279,12 +293,12 @@ async function createStudentsFromRows(
     const verifier = privacyKeyVerifierFromDerivedKey(derivedKey);
 
     if (classroom.privacyKeyVerifier && classroom.privacyKeyVerifier !== verifier) {
-      errorRedirect(errorPath, "That privacy key does not match this class.");
+      errorRedirect(errorPath, "That recovery key does not match this class.");
     }
 
     const rowsWithHashes = cleaned.map((row) => ({
       ...row,
-      emailKeyHash: emailKeyHashForPrivacyKey(privacyKey, row.email)
+      emailKeyHash: studentEmailLookupHash(row.email)
     }));
     const seenHashes = new Set<string>();
     for (const row of rowsWithHashes) {
@@ -412,7 +426,7 @@ export async function revealRosterIdentities(
   }
 
   if (!isUsablePrivacyKey(privacyKey)) {
-    return { rows: [], error: "Enter the full school privacy key." };
+    return { rows: [], error: "Enter the full classroom recovery key." };
   }
 
   const classroom = await prisma.classroom.findFirst({
@@ -436,10 +450,10 @@ export async function revealRosterIdentities(
   });
   if (!classroom) return { rows: [], error: "Class not found." };
   if (classroom.identityMode !== IdentityMode.SCHOOL_KEY) {
-    return { rows: [], error: "This class does not use a school privacy key." };
+    return { rows: [], error: "This class does not use a classroom recovery key." };
   }
   if (!verifyClassPrivacyKey(privacyKey, classroom.privacyKeySalt, classroom.privacyKeyVerifier)) {
-    return { rows: [], error: "That privacy key does not match this class." };
+    return { rows: [], error: "That recovery key does not match this class." };
   }
 
   const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);

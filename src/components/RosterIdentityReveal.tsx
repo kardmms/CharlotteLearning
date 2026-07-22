@@ -25,11 +25,11 @@ export function RosterIdentityReveal({
         <input type="hidden" name="classroomId" value={classroomId} />
         <PasswordField
           name="privacyKey"
-          label="Reveal roster with school privacy key"
+          label="Reveal roster with classroom recovery key"
           required
           minLength={12}
           autoComplete="off"
-          helpText={privacyKeyHint ? `Hint: ${privacyKeyHint}` : "The key is checked once and not stored."}
+          helpText={privacyKeyHint ? `Hint: ${privacyKeyHint}` : "The recovery key is checked once and not stored."}
         />
         <button className="ghost-button" disabled={pending} type="submit">
           <Eye size={17} />

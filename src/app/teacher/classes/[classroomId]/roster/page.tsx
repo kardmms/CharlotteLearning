@@ -1,4 +1,5 @@
 import { FileSpreadsheet, ShieldCheck, UserPlus } from "lucide-react";
+import { cookies } from "next/headers";
 import { addStudents } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
@@ -13,6 +14,19 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
+function readRecoveryKeyFlash(value?: string) {
+  if (!value) return null;
+  try {
+    return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      classroomId: string;
+      className: string;
+      recoveryKey: string;
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default async function RosterPage({
   params,
   searchParams
@@ -23,6 +37,10 @@ export default async function RosterPage({
   const teacher = await requireTeacher();
   const { classroomId } = await params;
   const query = await searchParams;
+  const cookieStore = await cookies();
+  const recoveryKeyFlash = readRecoveryKeyFlash(
+    cookieStore.get("charlotte_class_recovery_key_flash")?.value
+  );
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id },
     include: {
@@ -38,6 +56,9 @@ export default async function RosterPage({
   });
   if (!classroom) notFound();
   const isPrivacyProtected = classroom.identityMode === "SCHOOL_KEY";
+  const recoveryKeyToSave = recoveryKeyFlash?.classroomId === classroom.id
+    ? recoveryKeyFlash.recoveryKey
+    : null;
 
   return (
     <>
@@ -61,17 +82,30 @@ export default async function RosterPage({
         </section>
 
         <section className="panel privacy-roster-panel" style={{ marginTop: 18 }}>
+          {recoveryKeyToSave && (
+            <div className="recovery-key-notice">
+              <div>
+                <div className="eyebrow">Save this recovery key</div>
+                <h2>Classroom recovery key</h2>
+                <p>
+                  Keep this with the school or teacher. It can reveal encrypted roster identities
+                  when the school chooses to share it with an admin.
+                </p>
+              </div>
+              <code>{recoveryKeyToSave}</code>
+            </div>
+          )}
           <div className="panel-header">
             <div>
               <div className="eyebrow">Student privacy</div>
-              <h2>{isPrivacyProtected ? "School-key protected roster" : "Standard roster"}</h2>
+              <h2>{isPrivacyProtected ? "Recovery-key protected roster" : "Standard roster"}</h2>
             </div>
             <ShieldCheck color={isPrivacyProtected ? "#15803d" : "#376c8f"} />
           </div>
           <p>
             {isPrivacyProtected
-              ? "Student names and emails are stored as encrypted identity data. Keep the school privacy key outside Charlotte; it is needed when adding more students."
-              : "This class stores student names and emails normally. Create a new class with a school privacy key when you need database-anonymous student identities."}
+              ? "Student names and emails are stored as encrypted identity data. Students only use email and password. The classroom recovery key is for teachers and approved admin recovery."
+              : "This class stores student names and emails normally. New classes use classroom recovery keys for database-anonymous student identities."}
           </p>
           {isPrivacyProtected && classroom.privacyKeyHint && (
             <span className="status-pill status-blue">Hint: {classroom.privacyKeyHint}</span>
@@ -117,11 +151,11 @@ export default async function RosterPage({
               {isPrivacyProtected && (
                 <PasswordField
                   name="privacyKey"
-                  label="School privacy key"
+                  label="Classroom recovery key"
                   required
                   minLength={12}
                   autoComplete="off"
-                  helpText="Charlotte uses this once to encrypt the roster entry. The key is not stored."
+                  helpText="Students do not need this. Charlotte uses it to encrypt the roster entry, then does not store the raw key."
                 />
               )}
               <div className="student-entry-fields">
@@ -177,7 +211,7 @@ export default async function RosterPage({
                   <tr key={student.id}>
                     <td>{student.displayName}</td>
                     <td>
-                      {student.email || (student.emailKeyHash ? "Encrypted with school key" : "No email linked")}
+                      {student.email || (student.emailKeyHash ? "Encrypted with recovery key" : "No email linked")}
                     </td>
                     <td>{student._count.sessions}</td>
                     <td>

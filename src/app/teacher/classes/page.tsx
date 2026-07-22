@@ -4,7 +4,6 @@ import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassActionsMenu } from "@/components/ClassActionsMenu";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { formatDateTime } from "@/lib/date-groups";
 import { gradeLabel } from "@/lib/grade";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +39,6 @@ export default async function TeacherClassesPage() {
             <span>Name</span>
             <span>Students</span>
             <span>Assignments</span>
-            <span>Created</span>
             <span>Manage</span>
           </div>
           {classrooms.map((classroom) => (
@@ -58,7 +56,6 @@ export default async function TeacherClassesPage() {
               </div>
               <span>{classroom._count.students}</span>
               <span>{classroom._count.materials}</span>
-              <span>{formatDateTime(classroom.createdAt)}</span>
               <div className="doc-actions">
                 <Link className="ghost-button" href={`/teacher/classes/${classroom.id}/roster`}>
                   <UserPlus size={16} />

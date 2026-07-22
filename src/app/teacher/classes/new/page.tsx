@@ -4,7 +4,6 @@ import { createClassroom } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { GradeSlider } from "@/components/GradeSlider";
 import { Message } from "@/components/Message";
-import { PasswordField } from "@/components/PasswordField";
 import { requireTeacher } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -37,18 +36,10 @@ export default async function NewClassPage({
               <input name="name" placeholder="Period 2 Literacy" required />
             </label>
             <GradeSlider defaultValue="3" />
-            <PasswordField
-              name="privacyKey"
-              label="School privacy key"
-              required={false}
-              minLength={12}
-              autoComplete="off"
-              helpText="Optional. If used, student names and emails are encrypted with a key the school keeps."
-            />
-            <label>
-              Privacy key hint
-              <input name="privacyKeyHint" maxLength={80} placeholder="Kept by grade team" />
-            </label>
+            <p className="form-note">
+              Charlotte will generate a classroom recovery key after setup. Save it somewhere
+              safe; students will not need it.
+            </p>
             <button className="button" type="submit">
               Create class
             </button>

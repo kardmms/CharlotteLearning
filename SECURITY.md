@@ -9,14 +9,14 @@ This project is a classroom application, so privacy and simple access matter tog
 - Contact leads require only name, email, and grade level. Phone and school are optional.
 - Uploaded files are processed in memory. The app stores extracted reading text needed for question generation and practice, not the original upload binary.
 - Contact leads are removed by the scheduled privacy-retention job after `CONTACT_LEAD_RETENTION_DAYS`, defaulting to 180 days.
-- For school-key protected classes, roster identity data is stored as pseudonyms, encrypted name/email values, and keyed lookup hashes. Standard classes still store student names and emails normally.
+- For recovery-key protected classes, roster identity data is stored as pseudonyms, encrypted name/email values, and one-way lookup hashes. Standard classes still store student names and emails normally.
 
 ## Encryption And Hosting
 
 - Production must run on HTTPS. Vercel provides HTTPS/TLS for public traffic and the app sends HSTS plus `upgrade-insecure-requests`.
 - Use managed Postgres or another managed database service. Do not self-host this database on a VM unless there is a dedicated patching, backup, monitoring, and incident-response process.
 - Keep provider-managed encryption at rest enabled for hosting, database storage, backups, and logs.
-- School-key protected classes use a school-held encryption key for student identity fields. The app stores a verifier, salt, encrypted identity blobs, and lookup hashes, but not the raw key. If the school loses the key, Charlotte cannot decrypt those identities.
+- Recovery-key protected classes use a teacher-held classroom recovery key for student identity fields. The app stores a verifier, salt, encrypted identity blobs, and lookup hashes, but not the raw key. Students do not need the recovery key. If the school loses the key, Charlotte cannot decrypt those identities.
 - Store secrets only in the cloud provider environment or secret manager. Never commit `.env`, API keys, database URLs, private keys, or exported Vercel environment files.
 
 ## Network Access

@@ -40,7 +40,7 @@ Open `http://localhost:3000`.
 
 - Teacher passwords are hashed.
 - Students create a global email/password account after a teacher enrolls their email in a class. No class code is required for normal classroom access.
-- Teachers can create school-key protected classes. Those rosters store student pseudonyms, encrypted identity data, and keyed lookup hashes instead of readable student names and emails.
+- New classes receive a teacher-held classroom recovery key. Protected rosters store student pseudonyms, encrypted identity data, and one-way lookup hashes instead of readable student names and emails. Students do not need the recovery key.
 - OpenAI calls happen only on the server.
 - Teacher and student sessions are stored in HTTP-only cookies.
 - Teachers can only access their own classes, materials, students, and exports.

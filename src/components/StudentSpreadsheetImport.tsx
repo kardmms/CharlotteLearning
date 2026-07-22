@@ -58,14 +58,14 @@ export function StudentSpreadsheetImport({
           {privacyProtected && (
             <PasswordField
               name="privacyKey"
-              label="School privacy key"
+              label="Classroom recovery key"
               required
               minLength={12}
               autoComplete="off"
               helpText={
                 privacyKeyHint
                   ? `Hint: ${privacyKeyHint}`
-                  : "Charlotte uses this once to encrypt the roster entry. The key is not stored."
+                  : "Students do not need this. Charlotte uses it to encrypt the roster entry, then does not store the raw key."
               }
             />
           )}

@@ -1028,6 +1028,11 @@ p {
   font-weight: 900;
 }
 
+.class-doc-list .doc-list-head,
+.class-doc-list .doc-row {
+  grid-template-columns: minmax(260px, 1.6fr) 140px 140px minmax(220px, .9fr);
+}
+
 .assignment-head,
 .assignment-row {
   grid-template-columns: minmax(250px, 1.5fr) 160px 110px 100px 80px 52px;
@@ -1235,7 +1240,7 @@ p {
 .individual-response-meta span { color: var(--muted); }
 .individual-respondent-heading h2,
 .individual-respondent-heading p { margin: 0; }
-.individual-response-score { display: grid; align-content: center; justify-items: end; }
+.individual-response-score { display: grid; align-content: center; justify-items: flex-end; }
 .individual-response-score strong { font-size: 1.55rem; }
 .individual-response-meta {
   grid-column: 1 / -1;
@@ -1345,7 +1350,7 @@ p {
 
 .kebab-menu {
   position: relative;
-  justify-self: end;
+  justify-self: flex-end;
 }
 
 .class-doc-list,
@@ -1554,62 +1559,8 @@ p {
   border-radius: 50%;
 }
 
-.this-week-key { background: var(--success); }
-.last-week-key { background: var(--student-blue); }
-
-.weekly-metric-list {
-  display: grid;
-  gap: 14px;
-}
-
-.weekly-metric-card {
-  display: grid;
-  gap: 15px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: white;
-  padding: 18px;
-}
-
-.weekly-metric-title {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.weekly-metric-title > span {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: #ecfdf5;
-  color: #15803d;
-}
-
-.weekly-metric-title div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.weekly-metric-title strong {
-  font-size: 1.12rem;
-}
-
-.weekly-metric-title small {
-  color: var(--muted);
-  font-weight: 800;
-}
-
-.weekly-metric-title em {
-  border-radius: 999px;
-  font-style: normal;
-  font-weight: 900;
-  padding: 7px 10px;
-  white-space: nowrap;
-}
+.this-week-key { background: #0f766e; }
+.last-week-key { background: #f97316; }
 
 .weekly-up {
   background: var(--success-soft);
@@ -1621,45 +1572,117 @@ p {
   color: #b91c1c;
 }
 
-.weekly-bars {
+.weekly-chart {
+  position: relative;
   display: grid;
-  gap: 9px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  min-height: 360px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    linear-gradient(to top, rgba(100, 116, 139, 0.15) 1px, transparent 1px) 46px 36px / calc(100% - 46px) 58px,
+    #fff;
+  padding: 28px 18px 18px 0;
 }
 
-.weekly-bar-row {
+.weekly-chart-scale {
   display: grid;
-  grid-template-columns: 100px minmax(0, 1fr) 110px;
-  align-items: center;
-  gap: 12px;
-}
-
-.weekly-bar-row > span {
+  grid-template-rows: repeat(5, 1fr);
+  align-items: start;
   color: var(--muted);
-  font-size: .88rem;
+  font-size: .78rem;
+  font-weight: 900;
+  text-align: right;
+  padding-right: 10px;
+}
+
+.weekly-chart-scale span:last-child {
+  align-self: flex-end;
+}
+
+.weekly-chart-groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: clamp(12px, 2.4vw, 28px);
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.weekly-chart-group {
+  display: grid;
+  justify-items: center;
+  align-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+  text-align: center;
+}
+
+.weekly-bar-pair {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 210px;
+  padding-inline: 4px;
+}
+
+.weekly-column-wrap {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: min(42%, 54px);
+  height: 100%;
+  min-width: 32px;
+}
+
+.weekly-column {
+  display: block;
+  width: 100%;
+  min-height: 8px;
+  border-radius: 12px 12px 5px 5px;
+  box-shadow: inset 0 -2px 0 rgba(15, 23, 42, .12);
+}
+
+.weekly-column.this-week {
+  background: linear-gradient(180deg, #14b8a6, #0f766e);
+}
+
+.weekly-column.last-week {
+  background: linear-gradient(180deg, #fb923c, #ea580c);
+}
+
+.weekly-column-value {
+  position: absolute;
+  color: var(--ink);
+  font-size: .82rem;
   font-weight: 900;
 }
 
-.weekly-bar-row > strong {
-  text-align: right;
-  font-size: 1.02rem;
+.weekly-chart-group strong {
+  font-size: 1rem;
 }
 
-.weekly-bar-track {
-  height: 22px;
-  overflow: hidden;
+.weekly-chart-group > span,
+.weekly-chart-group small {
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.weekly-chart-group > span {
+  min-height: 2.5em;
+}
+
+.weekly-chart-group em {
   border-radius: 999px;
-  background: #e2e8f0;
-}
-
-.weekly-bar-track b {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--teal), var(--success));
-}
-
-.weekly-bar-row.last-week .weekly-bar-track b {
-  background: linear-gradient(90deg, #60a5fa, var(--blue));
+  font-size: .78rem;
+  font-style: normal;
+  font-weight: 900;
+  padding: 6px 9px;
+  white-space: nowrap;
 }
 
 .page-exit-button {
@@ -2037,6 +2060,16 @@ textarea {
   font-weight: 600;
 }
 
+.form-note {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fafc;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+  padding: 13px 14px;
+}
+
 .notice,
 .error,
 .success {
@@ -2397,6 +2430,41 @@ tr:last-child td {
   align-items: start;
 }
 
+.recovery-key-notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
+  gap: 18px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid #fed7aa;
+  border-radius: 18px;
+  background: #fff7ed;
+  padding: 18px;
+}
+
+.recovery-key-notice h2,
+.recovery-key-notice p {
+  margin: 0;
+}
+
+.recovery-key-notice p {
+  margin-top: 6px;
+  color: #9a3412;
+  line-height: 1.5;
+}
+
+.recovery-key-notice code {
+  display: block;
+  border: 1px solid #fdba74;
+  border-radius: 14px;
+  background: #fff;
+  color: #9a3412;
+  font-size: clamp(.92rem, 1.8vw, 1.12rem);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+  padding: 14px;
+}
+
 .roster-reveal {
   display: grid;
   gap: 14px;
@@ -2407,7 +2475,7 @@ tr:last-child td {
 
 .roster-reveal form {
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  align-items: flex-end;
 }
 
 .roster-reveal .password-field {
@@ -2492,7 +2560,7 @@ tr:last-child td {
 
 .summary-action {
   display: grid;
-  justify-items: end;
+  justify-items: flex-end;
   gap: 12px;
   max-width: 420px;
 }
@@ -3608,7 +3676,7 @@ tr:last-child td {
 .contact-cta-card { align-content: center; }
 
 .question-randomize-control {
-  align-self: end;
+  align-self: flex-end;
   min-height: 48px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -4397,6 +4465,25 @@ tr:last-child td {
 :root[data-theme="dark"] thead,
 :root[data-theme="dark"] th { background: #0f172a; }
 :root[data-theme="dark"] .student-entry-head { background: #0f172a; }
+:root[data-theme="dark"] .form-note {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+:root[data-theme="dark"] .recovery-key-notice {
+  background: #291711;
+  border-color: #9a3412;
+}
+
+:root[data-theme="dark"] .recovery-key-notice p,
+:root[data-theme="dark"] .recovery-key-notice code {
+  color: #fed7aa;
+}
+
+:root[data-theme="dark"] .recovery-key-notice code {
+  background: #0f172a;
+  border-color: #9a3412;
+}
 
 .activity-alert a:hover {
   color: var(--blue);
@@ -4499,6 +4586,13 @@ tr:last-child td {
   border-color: #334155;
 }
 
+:root[data-theme="dark"] .weekly-chart {
+  background:
+    linear-gradient(to top, rgba(148, 163, 184, 0.2) 1px, transparent 1px) 46px 36px / calc(100% - 46px) 58px,
+    #0f172a;
+  border-color: #334155;
+}
+
 :root[data-theme="dark"] .weekly-metric-card,
 :root[data-theme="dark"] .weekly-legend span,
 :root[data-theme="dark"] .submit-review-card,
@@ -4516,6 +4610,10 @@ tr:last-child td {
 
 :root[data-theme="dark"] .weekly-bar-track {
   background: #334155;
+}
+
+:root[data-theme="dark"] .weekly-column-value {
+  color: #f8fafc;
 }
 
 :root[data-theme="dark"] .submit-review-answer p {
@@ -4672,6 +4770,18 @@ tr:last-child td {
 
   .weekly-legend {
     justify-content: flex-start;
+  }
+
+  .weekly-chart {
+    overflow-x: auto;
+  }
+
+  .weekly-chart-groups {
+    min-width: 620px;
+  }
+
+  .recovery-key-notice {
+    grid-template-columns: 1fr;
   }
 
   .activity-ring {

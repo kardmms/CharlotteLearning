@@ -53,7 +53,7 @@ export default async function StudentClassesPage({
               <h2>No classes yet</h2>
               <p>
                 {account.emailKeyHash
-                  ? "Ask your teacher to add your email with the class privacy key."
+                  ? "Ask your teacher to add your email to a class."
                   : `Ask your teacher to add ${account.email} to a class.`}
               </p>
             </div>
