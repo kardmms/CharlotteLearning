@@ -9,6 +9,7 @@ import { getAuthSecret } from "@/lib/security";
 
 const teacherCookie = "charlotte_teacher_session";
 const studentCookie = "charlotte_student_session";
+const adminCookie = "charlotte_admin_session";
 const studentCompletionLockCookie = "charlotte_student_completion_lock";
 
 type TeacherJwt = {
@@ -27,6 +28,15 @@ type StudentJwt = {
   classroomId?: string;
 };
 
+type AdminJwt = {
+  sub: string;
+  role: "admin";
+  adminRole: "OWNER" | "ADMIN";
+  name: string;
+  email: string;
+  username: string;
+};
+
 function secretKey() {
   return new TextEncoder().encode(getAuthSecret());
 }
@@ -40,6 +50,14 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 async function signToken(payload: TeacherJwt | StudentJwt, expiresIn: string) {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(expiresIn)
+    .sign(secretKey());
+}
+
+async function signAdminToken(payload: AdminJwt, expiresIn: string) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -68,6 +86,34 @@ export async function setTeacherSession(teacher: {
   );
   const cookieStore = await cookies();
   cookieStore.set(teacherCookie, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 8
+  });
+}
+
+export async function setAdminSession(admin: {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  role: "OWNER" | "ADMIN";
+}) {
+  const token = await signAdminToken(
+    {
+      sub: admin.id,
+      role: "admin",
+      adminRole: admin.role,
+      name: admin.name,
+      email: admin.email,
+      username: admin.username
+    },
+    "8h"
+  );
+  const cookieStore = await cookies();
+  cookieStore.set(adminCookie, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -114,6 +160,11 @@ export async function clearStudentSession() {
   cookieStore.delete(studentCompletionLockCookie);
 }
 
+export async function clearAdminSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete(adminCookie);
+}
+
 export async function setStudentCompletionLock(materialId: string) {
   const cookieStore = await cookies();
   cookieStore.set(studentCompletionLockCookie, materialId, {
@@ -144,6 +195,13 @@ export async function getStudentSession() {
   return jwt;
 }
 
+export async function getAdminSession() {
+  const cookieStore = await cookies();
+  const jwt = await verifyToken<AdminJwt>(cookieStore.get(adminCookie)?.value);
+  if (!jwt || jwt.role !== "admin") return null;
+  return jwt;
+}
+
 export async function requireTeacher() {
   const session = await getTeacherSession();
   if (!session) redirect("/teacher/login");
@@ -155,6 +213,19 @@ export async function requireTeacher() {
 
   if (!teacher) redirect("/teacher/login");
   return teacher;
+}
+
+export async function requireAdmin() {
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/login");
+
+  const admin = await prisma.adminUser.findUnique({
+    where: { id: session.sub },
+    select: { id: true, name: true, email: true, username: true, role: true }
+  });
+
+  if (!admin) redirect("/admin/login");
+  return admin;
 }
 
 export async function requireStudent() {
