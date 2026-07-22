@@ -5,6 +5,7 @@ import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
+import { RecoveryKeyPopup } from "@/components/RecoveryKeyPopup";
 import { RosterIdentityReveal } from "@/components/RosterIdentityReveal";
 import { StudentSpreadsheetImport } from "@/components/StudentSpreadsheetImport";
 import { requireTeacher } from "@/lib/auth";
@@ -63,6 +64,9 @@ export default async function RosterPage({
   return (
     <>
       <TeacherTopbar name={teacher.name} classroomId={classroomId} />
+      {recoveryKeyToSave && (
+        <RecoveryKeyPopup classroomName={classroom.name} recoveryKey={recoveryKeyToSave} />
+      )}
       <main className="page">
         <section className="panel">
           <div className="eyebrow">Students</div>
@@ -82,19 +86,6 @@ export default async function RosterPage({
         </section>
 
         <section className="panel privacy-roster-panel" style={{ marginTop: 18 }}>
-          {recoveryKeyToSave && (
-            <div className="recovery-key-notice">
-              <div>
-                <div className="eyebrow">Save this recovery key</div>
-                <h2>Classroom recovery key</h2>
-                <p>
-                  Keep this with the school or teacher. It can reveal encrypted roster identities
-                  when the school chooses to share it with an admin.
-                </p>
-              </div>
-              <code>{recoveryKeyToSave}</code>
-            </div>
-          )}
           <div className="panel-header">
             <div>
               <div className="eyebrow">Student privacy</div>

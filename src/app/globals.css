@@ -2430,39 +2430,66 @@ tr:last-child td {
   align-items: start;
 }
 
-.recovery-key-notice {
+.recovery-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
-  gap: 18px;
-  align-items: center;
-  width: 100%;
-  border: 1px solid #fed7aa;
-  border-radius: 18px;
-  background: #fff7ed;
-  padding: 18px;
+  place-items: center;
+  background: rgba(15, 23, 42, .48);
+  padding: 22px;
 }
 
-.recovery-key-notice h2,
-.recovery-key-notice p {
+.recovery-popup {
+  display: grid;
+  gap: 18px;
+  width: min(100%, 620px);
+  border: 1px solid #fed7aa;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+  padding: clamp(22px, 4vw, 34px);
+}
+
+.recovery-popup-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.recovery-popup h2,
+.recovery-popup p {
   margin: 0;
 }
 
-.recovery-key-notice p {
-  margin-top: 6px;
-  color: #9a3412;
-  line-height: 1.5;
+.recovery-popup p {
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
-.recovery-key-notice code {
+.recovery-popup code {
   display: block;
   border: 1px solid #fdba74;
-  border-radius: 14px;
-  background: #fff;
+  border-radius: 16px;
+  background: #fff7ed;
   color: #9a3412;
-  font-size: clamp(.92rem, 1.8vw, 1.12rem);
+  font-size: clamp(.96rem, 2vw, 1.18rem);
   font-weight: 900;
+  line-height: 1.45;
   overflow-wrap: anywhere;
-  padding: 14px;
+  padding: 16px;
+}
+
+.recovery-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .roster-reveal {
@@ -4470,18 +4497,15 @@ tr:last-child td {
   border-color: #334155;
 }
 
-:root[data-theme="dark"] .recovery-key-notice {
-  background: #291711;
+:root[data-theme="dark"] .recovery-popup {
+  background: #111827;
   border-color: #9a3412;
 }
 
-:root[data-theme="dark"] .recovery-key-notice p,
-:root[data-theme="dark"] .recovery-key-notice code {
+:root[data-theme="dark"] .recovery-popup-icon,
+:root[data-theme="dark"] .recovery-popup code {
+  background: #291711;
   color: #fed7aa;
-}
-
-:root[data-theme="dark"] .recovery-key-notice code {
-  background: #0f172a;
   border-color: #9a3412;
 }
 
@@ -4780,8 +4804,14 @@ tr:last-child td {
     min-width: 620px;
   }
 
-  .recovery-key-notice {
-    grid-template-columns: 1fr;
+  .recovery-popup-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recovery-popup-actions .button,
+  .recovery-popup-actions .ghost-button {
+    width: 100%;
   }
 
   .activity-ring {

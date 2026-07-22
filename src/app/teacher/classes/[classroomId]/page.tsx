@@ -9,13 +9,13 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type WeekAnswer = {
+type AssignmentAnswer = {
   isCorrect: boolean | null;
   firstTryCorrect: boolean | null;
   attemptCount: number;
 };
 
-type WeekSession = {
+type AssignmentSession = {
   studentId: string;
   status: string;
   completedCharlotte: boolean;
@@ -24,36 +24,18 @@ type WeekSession = {
   lastSeenAt: Date;
   signedOutAt: Date | null;
   completedAt: Date | null;
-  answers: WeekAnswer[];
+  answers: AssignmentAnswer[];
 };
 
-type WeekMaterial = {
+type AssignmentMaterial = {
   status: string;
   isAdaptiveHome: boolean;
   createdAt: Date;
   availableAt: Date | null;
-  sessions: WeekSession[];
+  sessions: AssignmentSession[];
 };
 
-function startOfWeek(date: Date) {
-  const output = new Date(date);
-  const daysSinceMonday = (output.getDay() + 6) % 7;
-  output.setHours(0, 0, 0, 0);
-  output.setDate(output.getDate() - daysSinceMonday);
-  return output;
-}
-
-function addDays(date: Date, days: number) {
-  const output = new Date(date);
-  output.setDate(output.getDate() + days);
-  return output;
-}
-
-function isInRange(date: Date, start: Date, end: Date) {
-  return date >= start && date < end;
-}
-
-function sessionSortTime(session: WeekSession) {
+function sessionSortTime(session: AssignmentSession) {
   return (
     session.completedAt?.getTime() ??
     session.signedOutAt?.getTime() ??
@@ -62,36 +44,32 @@ function sessionSortTime(session: WeekSession) {
   );
 }
 
-function latestSessionForStudent(sessions: WeekSession[], studentId: string) {
+function latestSessionForStudent(sessions: AssignmentSession[], studentId: string) {
   return sessions
     .filter((session) => session.studentId === studentId)
     .sort((a, b) => sessionSortTime(b) - sessionSortTime(a))[0];
 }
 
-function buildWeekStats(materials: WeekMaterial[], studentIds: string[], start: Date, end: Date) {
-  const weekMaterials = materials.filter((material) => {
-    const assignedAt = material.availableAt || material.createdAt;
-    return material.status === "PUBLISHED" && !material.isAdaptiveHome && isInRange(assignedAt, start, end);
-  });
-  const latestSessions = weekMaterials.flatMap((material) =>
-    studentIds
-      .map((studentId) => latestSessionForStudent(material.sessions, studentId))
-      .filter((session): session is WeekSession => Boolean(session))
-  );
+function buildAssignmentStats(material: AssignmentMaterial | undefined, studentIds: string[]) {
+  if (!material) {
+    return {
+      completedAll: 0,
+      highScorers: 0,
+      averageScore: 0,
+      firstTryRate: 0,
+      scoredSessions: 0,
+      gradedAnswers: 0
+    };
+  }
+
+  const latestSessions = studentIds
+    .map((studentId) => latestSessionForStudent(material.sessions, studentId))
+    .filter((session): session is AssignmentSession => Boolean(session));
   const finalizedSessions = latestSessions.filter((session) => session.status !== "IN_PROGRESS");
-  const completedAll = weekMaterials.length
-    ? studentIds.filter((studentId) =>
-        weekMaterials.every((material) => latestSessionForStudent(material.sessions, studentId)?.completedCharlotte)
-      ).length
-    : 0;
-  const highScorers = studentIds.filter((studentId) => {
-    const studentSessions = weekMaterials
-      .map((material) => latestSessionForStudent(material.sessions, studentId))
-      .filter((session): session is WeekSession => Boolean(session && session.status !== "IN_PROGRESS"));
-    if (!studentSessions.length) return false;
-    const average = studentSessions.reduce((sum, session) => sum + Math.min(100, session.pointsEarned), 0) / studentSessions.length;
-    return average >= 80;
-  }).length;
+  const completedAll = studentIds.filter((studentId) =>
+    latestSessionForStudent(material.sessions, studentId)?.completedCharlotte
+  ).length;
+  const highScorers = finalizedSessions.filter((session) => Math.min(100, session.pointsEarned) >= 80).length;
   const averageScore = finalizedSessions.length
     ? Math.round(finalizedSessions.reduce((sum, session) => sum + Math.min(100, session.pointsEarned), 0) / finalizedSessions.length)
     : 0;
@@ -104,7 +82,6 @@ function buildWeekStats(materials: WeekMaterial[], studentIds: string[], start: 
   const firstTryRate = gradedAnswers.length ? Math.round((firstTryCorrect / gradedAnswers.length) * 100) : 0;
 
   return {
-    activityCount: weekMaterials.length,
     completedAll,
     highScorers,
     averageScore,
@@ -119,8 +96,12 @@ function barWidth(value: number, max: number) {
   return Math.max(0, Math.min(100, Math.round((value / max) * 100)));
 }
 
-function weeklyValueLabel(value: number, suffix: string) {
+function metricValueLabel(value: number, suffix: string) {
   return suffix === "%" ? `${value}%` : String(value);
+}
+
+function assignmentDetail(material: AssignmentMaterial | undefined, fallback: string) {
+  return material ? fallback : "No assignment yet";
 }
 
 export default async function ClassOverviewPage({
@@ -184,52 +165,49 @@ export default async function ClassOverviewPage({
   });
   const focusAlertCount = studentRows.filter((row) => (row.session?.focusViolationCount ?? 0) > 0).length;
   const studentIds = classroom.students.map((student) => student.id);
-  const thisWeekStart = startOfWeek(new Date());
-  const nextWeekStart = addDays(thisWeekStart, 7);
-  const lastWeekStart = addDays(thisWeekStart, -7);
-  const thisWeekStats = buildWeekStats(classroom.materials, studentIds, thisWeekStart, nextWeekStart);
-  const lastWeekStats = buildWeekStats(classroom.materials, studentIds, lastWeekStart, thisWeekStart);
+  const thisAssignmentStats = buildAssignmentStats(latestActivity, studentIds);
+  const lastAssignmentStats = buildAssignmentStats(olderActivity, studentIds);
   const studentScale = Math.max(1, classroom.students.length);
-  const weeklyMetrics = [
+  const assignmentMetrics = [
     {
-      label: "Finished every activity",
-      shortLabel: "Finished all",
-      thisValue: thisWeekStats.completedAll,
-      lastValue: lastWeekStats.completedAll,
-      thisHeight: barWidth(thisWeekStats.completedAll, studentScale),
-      lastHeight: barWidth(lastWeekStats.completedAll, studentScale),
+      label: "Finished this assignment",
+      shortLabel: "Finished",
+      thisValue: thisAssignmentStats.completedAll,
+      lastValue: lastAssignmentStats.completedAll,
+      thisHeight: barWidth(thisAssignmentStats.completedAll, studentScale),
+      lastHeight: barWidth(lastAssignmentStats.completedAll, studentScale),
       suffix: " students",
-      detail: `${thisWeekStats.activityCount} activities this week`
+      detail: assignmentDetail(latestActivity, "Completed the activity")
     },
     {
       label: "Scored 80% or higher",
       shortLabel: "80%+ scores",
-      thisValue: thisWeekStats.highScorers,
-      lastValue: lastWeekStats.highScorers,
-      thisHeight: barWidth(thisWeekStats.highScorers, studentScale),
-      lastHeight: barWidth(lastWeekStats.highScorers, studentScale),
+      thisValue: thisAssignmentStats.highScorers,
+      lastValue: lastAssignmentStats.highScorers,
+      thisHeight: barWidth(thisAssignmentStats.highScorers, studentScale),
+      lastHeight: barWidth(lastAssignmentStats.highScorers, studentScale),
       suffix: " students",
-      detail: `${thisWeekStats.scoredSessions} finished scores`
+      detail: `${thisAssignmentStats.scoredSessions} finished scores`
     },
     {
       label: "Class average score",
       shortLabel: "Average",
-      thisValue: thisWeekStats.averageScore,
-      lastValue: lastWeekStats.averageScore,
-      thisHeight: thisWeekStats.averageScore,
-      lastHeight: lastWeekStats.averageScore,
+      thisValue: thisAssignmentStats.averageScore,
+      lastValue: lastAssignmentStats.averageScore,
+      thisHeight: thisAssignmentStats.averageScore,
+      lastHeight: lastAssignmentStats.averageScore,
       suffix: "%",
-      detail: "Average of finished work"
+      detail: assignmentDetail(latestActivity, "Average of finished submissions")
     },
     {
       label: "First-try correct answers",
       shortLabel: "First try",
-      thisValue: thisWeekStats.firstTryRate,
-      lastValue: lastWeekStats.firstTryRate,
-      thisHeight: thisWeekStats.firstTryRate,
-      lastHeight: lastWeekStats.firstTryRate,
+      thisValue: thisAssignmentStats.firstTryRate,
+      lastValue: lastAssignmentStats.firstTryRate,
+      thisHeight: thisAssignmentStats.firstTryRate,
+      lastHeight: lastAssignmentStats.firstTryRate,
       suffix: "%",
-      detail: `${thisWeekStats.gradedAnswers} graded answers`
+      detail: `${thisAssignmentStats.gradedAnswers} graded answers`
     }
   ];
 
@@ -317,16 +295,16 @@ export default async function ClassOverviewPage({
         <section className="weekly-improvement-panel" style={{ marginTop: 18 }}>
           <div className="weekly-improvement-heading">
             <div>
-              <div className="eyebrow">Weekly improvement</div>
-              <h2>This week vs last week</h2>
+              <div className="eyebrow">Assignment improvement</div>
+              <h2>This assignment vs last assignment</h2>
               <p>Simple class goals students can read from across the room.</p>
             </div>
-            <div className="weekly-legend" aria-label="Weekly comparison legend">
-              <span><i className="this-week-key" /> This week</span>
-              <span><i className="last-week-key" /> Last week</span>
+            <div className="weekly-legend" aria-label="Assignment comparison legend">
+              <span><i className="this-week-key" /> This assignment</span>
+              <span><i className="last-week-key" /> Last assignment</span>
             </div>
           </div>
-          <div className="weekly-chart" aria-label="Weekly improvement grouped bar chart">
+          <div className="weekly-chart" aria-label="Assignment improvement grouped bar chart">
             <div className="weekly-chart-scale" aria-hidden="true">
               <span>100%</span>
               <span>75%</span>
@@ -335,11 +313,11 @@ export default async function ClassOverviewPage({
               <span>0</span>
             </div>
             <div className="weekly-chart-groups">
-              {weeklyMetrics.map((metric) => {
+              {assignmentMetrics.map((metric) => {
                 const change = metric.thisValue - metric.lastValue;
                 const changeLabel = change > 0
-                  ? `+${weeklyValueLabel(change, metric.suffix)}`
-                  : weeklyValueLabel(change, metric.suffix);
+                  ? `+${metricValueLabel(change, metric.suffix)}`
+                  : metricValueLabel(change, metric.suffix);
                 return (
                   <article className="weekly-chart-group" key={metric.label}>
                     <div className="weekly-bar-pair">
@@ -348,7 +326,7 @@ export default async function ClassOverviewPage({
                           className="weekly-column-value"
                           style={{ bottom: `calc(${metric.thisHeight}% + 8px)` }}
                         >
-                          {weeklyValueLabel(metric.thisValue, metric.suffix)}
+                          {metricValueLabel(metric.thisValue, metric.suffix)}
                         </span>
                         <i
                           className="weekly-column this-week"
@@ -360,7 +338,7 @@ export default async function ClassOverviewPage({
                           className="weekly-column-value"
                           style={{ bottom: `calc(${metric.lastHeight}% + 8px)` }}
                         >
-                          {weeklyValueLabel(metric.lastValue, metric.suffix)}
+                          {metricValueLabel(metric.lastValue, metric.suffix)}
                         </span>
                         <i
                           className="weekly-column last-week"

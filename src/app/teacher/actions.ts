@@ -87,6 +87,18 @@ async function setClassRecoveryKeyFlash(classroomId: string, className: string, 
   );
 }
 
+export async function clearClassRecoveryKeyFlash() {
+  await requireTeacher();
+  const cookieStore = await cookies();
+  cookieStore.set("charlotte_class_recovery_key_flash", "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/teacher",
+    maxAge: 0
+  });
+}
+
 function optionalDate(value: string) {
   if (!value) return null;
   const date = new Date(value);
