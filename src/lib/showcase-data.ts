@@ -21,7 +21,7 @@ export type ShowcaseStudent = {
 
 export const showcaseSteps = [
   "Create a showcase class",
-  "Import the messy roster",
+  "Import the roster",
   "Create an AI assignment",
   "Publish the assignment",
   "Run student simulation",

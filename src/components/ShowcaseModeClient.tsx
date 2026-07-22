@@ -464,52 +464,45 @@ export function ShowcaseModeClient() {
         />
       )}
 
-      <main className="admin-shell showcase-admin-shell">
-        <aside className="admin-sidebar showcase-admin-sidebar">
-          <a className="admin-brand" href="/showcase">
-            <img src="/images/charlotte-ai-logo.png" alt="" />
-            <span>Charlotte Showcase</span>
-          </a>
-          <nav aria-label="Showcase navigation">
-            {showcaseNavItems.map(({ target, label, Icon }) => (
-              <button
-                className={`showcase-sidebar-link ${view === target ? "active" : ""}`}
-                data-no-loading="true"
-                key={target}
-                type="button"
-                onClick={() => setView(target)}
-              >
-                <Icon size={18} /> {label}
-              </button>
-            ))}
-          </nav>
-          <FloatingGuide completed={completed} activeIndex={activeIndex} />
-          <div className="admin-profile">
-            <strong>Showcase mode</strong>
-            <span>Local simulation - no real student data</span>
-          </div>
-        </aside>
+      <FloatingGuide completed={completed} activeIndex={activeIndex} />
 
-        <section className="admin-main showcase-admin-main">
-          <div className="admin-hero">
+      <header className="topbar teacher-topbar showcase-topbar">
+        <a className="brand" href="/showcase">
+          <img className="brand-logo" src="/images/charlotte-ai-logo.png" alt="" />
+          <span>Charlotte AI</span>
+        </a>
+        <nav className="teacher-topbar-nav" aria-label="Showcase navigation">
+          {showcaseNavItems.map(({ target, label, Icon }) => (
+            <button
+              className={view === target ? "active" : ""}
+              data-no-loading="true"
+              key={target}
+              type="button"
+              onClick={() => setView(target)}
+            >
+              <Icon size={17} /> {label}
+            </button>
+          ))}
+        </nav>
+        <span className="status-pill status-blue">Showcase mode</span>
+      </header>
+
+      <main className="showcase-page">
+        <section className="workspace-heading showcase-heading">
           <div>
-            <div className="admin-breadcrumb">Pages / Showcase Mode</div>
+            <div className="eyebrow">Local demo workspace</div>
             <h1>Showcase Mode</h1>
             <p>
               A guided classroom simulation for teachers and investors. No real student data is
               saved, and the full showcase stays off production until you are ready.
             </p>
           </div>
-          <div className="admin-live-pill">
-            <span />
-            Local demo
-          </div>
-        </div>
+        </section>
 
         {view === "setup" && (
-          <section className="admin-dashboard-grid two showcase-section-grid">
-            <GlowWrap active={activeIndex === 0} className="admin-glass-panel">
-              <div className="admin-card-head">
+          <section className="grid two showcase-section-grid">
+            <GlowWrap active={activeIndex === 0} className="panel">
+              <div className="panel-header">
                 <div>
                   <div className="eyebrow">Step 1</div>
                   <h2>Create a class</h2>
@@ -541,19 +534,19 @@ export function ShowcaseModeClient() {
               </div>
             </GlowWrap>
 
-            <GlowWrap active={activeIndex === 1} className="admin-glass-panel">
-              <div className="admin-card-head">
+            <GlowWrap active={activeIndex === 1} className="panel">
+              <div className="panel-header">
                 <div>
                   <div className="eyebrow">Step 2</div>
                   <h2>Import students</h2>
-                  <p>Use the intentionally messy roster to show Charlotte cleaning it up.</p>
+                  <p>Use the roster template to show Charlotte organizing the class list.</p>
                 </div>
                 <Sheet color="#14B8A6" />
               </div>
               <div className="form-grid">
                 <a className="ghost-button" href="/showcase/charlotte-showcase-roster.csv" download>
                   <Sheet size={18} />
-                  Download messy roster
+                  Download roster
                 </a>
                 <label>
                   Student spreadsheet
@@ -570,8 +563,8 @@ export function ShowcaseModeClient() {
             </GlowWrap>
 
             {students.length > 0 && (
-              <section className="admin-glass-panel showcase-roster-panel">
-                <div className="admin-card-head">
+              <section className="panel showcase-roster-panel">
+                <div className="panel-header">
                   <div>
                     <h2>Charlotte found {students.length} students</h2>
                     <p>Review before adding, just like the real roster workflow.</p>
@@ -616,9 +609,9 @@ export function ShowcaseModeClient() {
         )}
 
         {view === "assignment" && (
-          <section className="admin-dashboard-grid two showcase-section-grid">
-            <GlowWrap active={activeIndex === 2} className="admin-glass-panel">
-              <div className="admin-card-head">
+          <section className="grid two showcase-section-grid">
+            <GlowWrap active={activeIndex === 2} className="panel">
+              <div className="panel-header">
                 <div>
                   <div className="eyebrow">Step 3</div>
                   <h2>Create the AI assignment</h2>
@@ -644,8 +637,8 @@ export function ShowcaseModeClient() {
             </GlowWrap>
 
             {assignment && (
-              <GlowWrap active={activeIndex === 3} className="admin-glass-panel">
-                <div className="admin-card-head">
+              <GlowWrap active={activeIndex === 3} className="panel">
+                <div className="panel-header">
                   <div>
                     <div className="eyebrow">Editable draft</div>
                     <h2>{assignment.title}</h2>
@@ -686,9 +679,9 @@ export function ShowcaseModeClient() {
         )}
 
         {view === "student" && assignment && (
-          <section className="admin-dashboard-grid two showcase-section-grid">
-            <section className="admin-glass-panel">
-              <div className="admin-card-head">
+          <section className="grid two showcase-section-grid">
+            <section className="panel">
+              <div className="panel-header">
                 <div>
                   <div className="eyebrow">Student side</div>
                   <h2>Preview the station</h2>
@@ -698,8 +691,8 @@ export function ShowcaseModeClient() {
               </div>
               <StudentPreview assignment={assignment} />
             </section>
-            <GlowWrap active={activeIndex === 4} className="admin-glass-panel">
-              <div className="admin-card-head">
+            <GlowWrap active={activeIndex === 4} className="panel">
+              <div className="panel-header">
                 <div>
                   <div className="eyebrow">Step 5</div>
                   <h2>Run simulation</h2>
@@ -724,8 +717,8 @@ export function ShowcaseModeClient() {
               <MetricTile label="Needs grading" value={metrics.pendingFreeResponses} detail="Written responses pending" />
             </GlowWrap>
 
-              <section className="admin-glass-panel response-questions-section">
-              <div className="admin-card-head">
+            <section className="form-response-card response-questions-section">
+              <div className="panel-header">
                 <div>
                   <h2>Response summary</h2>
                   <p>Start broad, then open individual work like a real teacher would.</p>
@@ -768,7 +761,7 @@ export function ShowcaseModeClient() {
             </section>
 
             {selectedSession && (
-              <section className="admin-glass-panel individual-response-workspace showcase-individual-panel">
+              <section className="panel individual-response-workspace showcase-individual-panel">
                 <div className="individual-response-toolbar">
                   <div>
                     <strong>Closer overview</strong>
@@ -800,8 +793,8 @@ export function ShowcaseModeClient() {
         )}
 
         {view === "grading" && assignment && (
-          <GlowWrap active={activeIndex === 6} className="admin-glass-panel">
-            <div className="admin-card-head">
+          <GlowWrap active={activeIndex === 6} className="panel">
+            <div className="panel-header">
               <div>
                 <div className="eyebrow">Free response grading</div>
                 <h2>Grade written responses</h2>
@@ -862,9 +855,9 @@ export function ShowcaseModeClient() {
         )}
 
         {view === "followup" && (
-          <section className="admin-dashboard-grid two showcase-section-grid">
-            <GlowWrap active={activeIndex === 7} className="admin-glass-panel">
-              <div className="admin-card-head">
+          <section className="grid two showcase-section-grid">
+            <GlowWrap active={activeIndex === 7} className="panel">
+              <div className="panel-header">
                 <div>
                   <div className="eyebrow">Follow-up quiz</div>
                   <h2>Generate a multiple-choice quiz</h2>
@@ -888,8 +881,8 @@ export function ShowcaseModeClient() {
             </GlowWrap>
 
             {followUpAssignment && (
-              <GlowWrap active={activeIndex === 8} className="admin-glass-panel">
-                <div className="admin-card-head">
+              <GlowWrap active={activeIndex === 8} className="panel">
+                <div className="panel-header">
                   <div>
                     <div className="eyebrow">Draft ready</div>
                     <h2>{followUpAssignment.title}</h2>
@@ -920,7 +913,7 @@ export function ShowcaseModeClient() {
         )}
 
         {view === "improvements" && (
-          <GlowWrap active={activeIndex === 9} className="admin-glass-panel weekly-improvement-panel">
+          <GlowWrap active={activeIndex === 9} className="panel weekly-improvement-panel">
             <div className="weekly-improvement-heading">
               <div>
                 <div className="eyebrow">Assignment improvement</div>
@@ -950,7 +943,6 @@ export function ShowcaseModeClient() {
             </div>
           </GlowWrap>
         )}
-        </section>
       </main>
     </>
   );
