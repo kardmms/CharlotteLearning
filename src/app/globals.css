@@ -823,6 +823,266 @@ select {
   color: var(--blue);
 }
 
+.showcase-page {
+  width: min(1180px, calc(100% - 340px));
+  margin: 0 24px 0 auto;
+  padding: 30px 0 72px;
+}
+
+.showcase-topbar {
+  z-index: 60;
+}
+
+.showcase-topbar .teacher-topbar-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 850;
+  padding: 0 12px;
+}
+
+.showcase-topbar .teacher-topbar-nav button:hover,
+.showcase-topbar .teacher-topbar-nav button.active {
+  background: #eff6ff;
+  color: var(--blue);
+}
+
+.showcase-guide {
+  position: fixed;
+  top: 96px;
+  left: 18px;
+  z-index: 45;
+  width: 282px;
+  border: 1px solid rgba(226, 232, 240, .96);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: var(--shadow-md);
+  padding: 14px;
+  backdrop-filter: blur(16px);
+}
+
+.showcase-guide > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--navy);
+  margin-bottom: 10px;
+}
+
+.showcase-guide ol {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.showcase-guide li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border-radius: 10px;
+  color: #64748b;
+  padding: 5px;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.showcase-guide li.active {
+  background: #ecfdf5;
+  color: #047857;
+  transform: translateX(2px);
+}
+
+.showcase-guide li.done {
+  color: #64748b;
+}
+
+.showcase-guide li span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: .72rem;
+  font-weight: 900;
+}
+
+.showcase-guide li.active span,
+.showcase-guide li.done span {
+  background: #bbf7d0;
+  color: #047857;
+}
+
+.showcase-guide li p {
+  margin: 0;
+  font-size: .86rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.showcase-guide li.done p {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: #86efac;
+}
+
+.showcase-heading {
+  margin-bottom: 20px;
+}
+
+.showcase-heading p {
+  max-width: 780px;
+}
+
+.showcase-section-grid {
+  align-items: start;
+}
+
+.showcase-glow {
+  position: relative;
+  border-color: rgba(34, 197, 94, .55) !important;
+  box-shadow:
+    0 0 0 4px rgba(34, 197, 94, .12),
+    0 22px 56px rgba(15, 23, 42, .1) !important;
+  animation: showcaseGlow 1.9s ease-in-out infinite;
+}
+
+.showcase-roster-panel {
+  grid-column: 1 / -1;
+}
+
+.showcase-question-stack {
+  max-height: 480px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.showcase-choice-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.showcase-choice-list span {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.showcase-choice-list span.correct {
+  border-color: #86efac;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.showcase-busy-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .48);
+  backdrop-filter: blur(10px);
+}
+
+.showcase-busy-card {
+  width: min(520px, 100%);
+}
+
+.showcase-busy-card .loading-orbit svg {
+  animation: spin 1.2s linear infinite;
+}
+
+.showcase-student-preview {
+  max-height: 760px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #f8fafc;
+}
+
+.showcase-student-preview .station-shell {
+  min-height: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.showcase-individual-panel {
+  margin-top: 18px;
+}
+
+.showcase-grade-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.showcase-grade-buttons .ghost-button {
+  min-height: 38px;
+}
+
+.showcase-improvement-bars {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.showcase-improvement-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.showcase-improvement-row > strong {
+  font-size: 1rem;
+}
+
+.showcase-improvement-row > div {
+  display: grid;
+  gap: 8px;
+}
+
+.showcase-improvement-row span {
+  position: relative;
+  display: block;
+  min-width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: #0f766e;
+  transition: width 420ms ease;
+}
+
+.showcase-improvement-row span.previous {
+  background: #f97316;
+}
+
+.showcase-improvement-row b {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  color: white;
+  font-size: .76rem;
+  transform: translateY(-50%);
+}
+
 .admin-shell {
   min-height: 100vh;
   display: grid;
@@ -6252,6 +6512,21 @@ tr:last-child td {
     display: none;
   }
 
+  .showcase-page {
+    width: min(1180px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+
+  .showcase-guide {
+    position: static;
+    width: min(1180px, calc(100% - 32px));
+    margin: 18px auto 0;
+  }
+
+  .showcase-guide ol {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-shell {
     grid-template-columns: 1fr;
   }
@@ -6525,6 +6800,19 @@ tr:last-child td {
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes showcaseGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px rgba(34, 197, 94, .1),
+      0 22px 56px rgba(15, 23, 42, .1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 7px rgba(34, 197, 94, .18),
+      0 26px 64px rgba(15, 23, 42, .14);
+  }
+}
+
 @media (max-width: 760px) {
   .teacher-topbar { flex-wrap: wrap; }
   .teacher-topbar-nav { order: 3; width: 100%; justify-content: center; }
@@ -6562,6 +6850,20 @@ tr:last-child td {
   .admin-sidebar {
     align-items: stretch;
     padding: 18px;
+  }
+
+  .showcase-guide ol,
+  .showcase-improvement-row {
+    grid-template-columns: 1fr;
+  }
+
+  .showcase-topbar .teacher-topbar-nav {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .showcase-topbar .teacher-topbar-nav button {
+    flex: 0 0 auto;
   }
 
   .admin-sidebar nav {
