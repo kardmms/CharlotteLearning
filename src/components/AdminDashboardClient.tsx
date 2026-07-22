@@ -4,20 +4,26 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
+  Bot,
   CheckCircle2,
   ClipboardList,
+  Cloud,
   Copy,
   Database,
+  DollarSign,
   Gauge,
   KeyRound,
   LineChart,
   LogOut,
   MailPlus,
   MessageSquareText,
+  Server,
   Settings,
   ShieldCheck,
   Sparkles,
+  Terminal,
   UserCog,
   UsersRound
 } from "lucide-react";
@@ -28,6 +34,8 @@ import {
   updateFeedbackPasscode
 } from "@/app/admin/actions";
 import type { AdminMetrics } from "@/lib/admin-metrics";
+import type { OpenAiUsageMetrics } from "@/lib/openai-usage";
+import type { VercelServerMetrics } from "@/lib/vercel-monitoring";
 
 type AdminIdentity = {
   name: string;
@@ -36,7 +44,7 @@ type AdminIdentity = {
   role: string;
 };
 
-export type AdminView = "dashboard" | "analytics" | "people" | "feedback" | "settings";
+export type AdminView = "dashboard" | "analytics" | "people" | "feedback" | "settings" | "server" | "ai-usage";
 
 type InviteFlash = {
   email: string;
@@ -46,9 +54,37 @@ type InviteFlash = {
 } | null;
 
 const numberFormat = new Intl.NumberFormat("en-US");
+const compactNumberFormat = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1
+});
 
 function formatNumber(value: number) {
   return numberFormat.format(value);
+}
+
+function formatCompact(value: number) {
+  return compactNumberFormat.format(value);
+}
+
+function formatCurrency(value: number, currency = "usd") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    maximumFractionDigits: value < 1 ? 4 : 2
+  }).format(value);
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "Unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()) || date.getFullYear() < 2000) return "Unknown";
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 function maxValue(items: Array<{ value: number }>) {
@@ -480,18 +516,267 @@ function PeoplePanel({
   );
 }
 
+function ProviderSetupCard({
+  title,
+  message,
+  variables
+}: {
+  title: string;
+  message?: string;
+  variables: string[];
+}) {
+  return (
+    <section className="admin-glass-panel admin-provider-setup">
+      <div className="admin-card-head">
+        <div>
+          <h2>{title}</h2>
+          <p>{message || "Connect the provider token in production to unlock this page."}</p>
+        </div>
+        <Terminal size={20} />
+      </div>
+      <div className="admin-setup-list">
+        {variables.map((variable) => (
+          <code key={variable}>{variable}</code>
+        ))}
+      </div>
+      <p className="admin-provider-note">
+        These values stay server-side. The browser only receives the summarized dashboard data.
+      </p>
+    </section>
+  );
+}
+
+function ProviderAlert({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <div className="admin-provider-alert">
+      <AlertTriangle size={17} />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function ServerPanel({ metrics }: { metrics?: VercelServerMetrics }) {
+  if (!metrics?.configured) {
+    return (
+      <ProviderSetupCard
+        title="Connect Vercel"
+        message={metrics?.message}
+        variables={["VERCEL_API_TOKEN", "CHARLOTTE_VERCEL_PROJECT_ID", "CHARLOTTE_VERCEL_TEAM_ID"]}
+      />
+    );
+  }
+
+  return (
+    <>
+      <ProviderAlert message={metrics.message} />
+      <section className="admin-stat-grid">
+        <MetricCard icon={<Activity size={22} />} label="Vercel events" value={metrics.headline.events} detail="Recent account and project activity" tone="green" />
+        <MetricCard icon={<Cloud size={22} />} label="Deployments" value={metrics.headline.deployments} detail={`${metrics.headline.productionDeployments} production deploys`} />
+        <MetricCard icon={<CheckCircle2 size={22} />} label="Ready builds" value={metrics.headline.readyDeployments} detail="Recent deployments marked ready" tone="violet" />
+        <MetricCard icon={<AlertTriangle size={22} />} label="Failed builds" value={metrics.headline.failedDeployments} detail="Errors or canceled deploys" tone="orange" />
+      </section>
+
+      <section className="admin-dashboard-grid two">
+        <div className="admin-glass-panel">
+          <div className="admin-card-head">
+            <div>
+              <h2>Vercel activity</h2>
+              <p>Live events from the Vercel account or configured team.</p>
+            </div>
+            <Server size={20} />
+          </div>
+          <div className="admin-provider-list">
+            {metrics.events.map((event) => (
+              <article className="admin-provider-item" key={event.id}>
+                <i />
+                <div>
+                  <strong>{event.text}</strong>
+                  <span>{event.category} - {event.actor}</span>
+                </div>
+                <time>{formatDateTime(event.createdAt)}</time>
+              </article>
+            ))}
+            {metrics.events.length === 0 && <p>No Vercel events returned yet.</p>}
+          </div>
+        </div>
+
+        <div className="admin-glass-panel">
+          <div className="admin-card-head">
+            <div>
+              <h2>Recent deployments</h2>
+              <p>Production and preview builds from Vercel.</p>
+            </div>
+            <Cloud size={20} />
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Deployment</th>
+                  <th>State</th>
+                  <th>Target</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.deployments.map((deployment) => (
+                  <tr key={deployment.id}>
+                    <td>
+                      <strong>{deployment.url}</strong>
+                      <span>{deployment.source} - {deployment.creator}</span>
+                    </td>
+                    <td>{deployment.readyState}</td>
+                    <td>{deployment.target}</td>
+                    <td>{formatDateTime(deployment.createdAt)}</td>
+                  </tr>
+                ))}
+                {metrics.deployments.length === 0 && (
+                  <tr><td colSpan={4}>No deployments returned yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function AiUsageBars({ metrics }: { metrics: OpenAiUsageMetrics }) {
+  const maxTokens = Math.max(1, ...metrics.days.map((day) => day.totalTokens));
+  return (
+    <div className="admin-ops-bars">
+      {metrics.days.map((day) => (
+        <div className="admin-ops-row" key={day.startTime}>
+          <span>{day.label}</span>
+          <div>
+            <i style={{ width: `${Math.max(2, Math.round((day.totalTokens / maxTokens) * 100))}%` }} />
+          </div>
+          <strong>{formatCompact(day.totalTokens)}</strong>
+          <em>{formatCurrency(day.cost, day.currency)}</em>
+        </div>
+      ))}
+      {metrics.days.length === 0 && <p>No OpenAI usage returned for the last 14 days.</p>}
+    </div>
+  );
+}
+
+function AiUsagePanel({ metrics }: { metrics?: OpenAiUsageMetrics }) {
+  if (!metrics?.configured) {
+    return (
+      <ProviderSetupCard
+        title="Connect OpenAI usage"
+        message={metrics?.message}
+        variables={["OPENAI_ADMIN_KEY", "CHARLOTTE_OPENAI_PROJECT_ID"]}
+      />
+    );
+  }
+
+  return (
+    <>
+      <ProviderAlert message={metrics.message} />
+      <section className="admin-stat-grid">
+        <MetricCard icon={<Bot size={22} />} label="Tokens used" value={formatCompact(metrics.headline.totalTokens)} detail={`${formatCompact(metrics.headline.inputTokens)} in - ${formatCompact(metrics.headline.outputTokens)} out`} tone="green" />
+        <MetricCard icon={<DollarSign size={22} />} label="OpenAI cost" value={formatCurrency(metrics.headline.totalCost, metrics.headline.currency)} detail={`${formatCurrency(metrics.headline.avgDailyCost, metrics.headline.currency)} avg per day`} tone="orange" />
+        <MetricCard icon={<Activity size={22} />} label="Requests" value={metrics.headline.requests} detail="Model requests in the last 14 days" />
+        <MetricCard icon={<Sparkles size={22} />} label="Cached tokens" value={formatCompact(metrics.headline.cachedTokens)} detail="Prompt cache savings signal" tone="violet" />
+      </section>
+
+      <section className="admin-dashboard-grid main">
+        <div className="admin-glass-panel">
+          <div className="admin-card-head">
+            <div>
+              <h2>Token and cost trend</h2>
+              <p>Daily OpenAI token volume with cost next to each day.</p>
+            </div>
+            <BarChart3 size={20} />
+          </div>
+          <AiUsageBars metrics={metrics} />
+        </div>
+
+        <div className="admin-glass-panel">
+          <div className="admin-card-head">
+            <div>
+              <h2>Cost breakdown</h2>
+              <p>Largest cost line items from OpenAI.</p>
+            </div>
+            <DollarSign size={20} />
+          </div>
+          <div className="admin-provider-list compact">
+            {metrics.costItems.map((item) => (
+              <article className="admin-provider-item" key={item.label}>
+                <i />
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>OpenAI usage line item</span>
+                </div>
+                <time>{formatCurrency(item.cost, item.currency)}</time>
+              </article>
+            ))}
+            {metrics.costItems.length === 0 && <p>No cost line items returned yet.</p>}
+          </div>
+        </div>
+      </section>
+
+      <section className="admin-glass-panel">
+        <div className="admin-card-head">
+          <div>
+            <h2>Model usage</h2>
+            <p>Which models are using the most tokens.</p>
+          </div>
+          <Bot size={20} />
+        </div>
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Tokens</th>
+                <th>Input</th>
+                <th>Output</th>
+                <th>Requests</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.models.map((model) => (
+                <tr key={model.model}>
+                  <td><strong>{model.model}</strong><span>{formatCompact(model.cachedTokens)} cached input tokens</span></td>
+                  <td>{formatCompact(model.totalTokens)}</td>
+                  <td>{formatCompact(model.inputTokens)}</td>
+                  <td>{formatCompact(model.outputTokens)}</td>
+                  <td>{formatNumber(model.requests)}</td>
+                </tr>
+              ))}
+              {metrics.models.length === 0 && (
+                <tr><td colSpan={5}>No model usage returned yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function AdminDashboardClient({
   initialMetrics,
   admin,
   inviteFlash,
-  view = "dashboard"
+  view = "dashboard",
+  serverMetrics,
+  aiUsageMetrics
 }: {
   initialMetrics: AdminMetrics;
   admin: AdminIdentity;
   inviteFlash: InviteFlash;
   view?: AdminView;
+  serverMetrics?: VercelServerMetrics;
+  aiUsageMetrics?: OpenAiUsageMetrics;
 }) {
   const [metrics, setMetrics] = useState(initialMetrics);
+  const [serverSnapshot, setServerSnapshot] = useState(serverMetrics);
+  const [aiUsageSnapshot, setAiUsageSnapshot] = useState(aiUsageMetrics);
   const [lastUpdated, setLastUpdated] = useState(new Date(initialMetrics.generatedAt));
   const [refreshing, setRefreshing] = useState(false);
 
@@ -518,20 +803,46 @@ export function AdminDashboardClient({
     };
   }, []);
 
+  useEffect(() => {
+    if (view !== "server" && view !== "ai-usage") return;
+    let mounted = true;
+    const url = view === "server" ? "/api/admin/server" : "/api/admin/ai-usage";
+
+    async function refreshProvider() {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok || !mounted) return;
+      if (view === "server") {
+        setServerSnapshot(await response.json() as VercelServerMetrics);
+      } else {
+        setAiUsageSnapshot(await response.json() as OpenAiUsageMetrics);
+      }
+    }
+
+    const timer = window.setInterval(refreshProvider, 15000);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, [view]);
+
   const gradeBars = useMemo(() => metrics.charts.gradeMix.slice(0, 8), [metrics]);
   const title = {
     dashboard: "Main Dashboard",
     analytics: "Analytics",
     people: "People",
     feedback: "Feedback",
-    settings: "Settings"
+    settings: "Settings",
+    server: "Server",
+    "ai-usage": "AI Usage"
   }[view];
   const subtitle = {
     dashboard: "Live product, classroom, learning, and feedback metrics for Charlotte AI.",
     analytics: "Trends, learning quality, grade mix, and classroom traction.",
     people: "Admin access, owner controls, and invite history.",
     feedback: "Weekly teacher feedback and product notes.",
-    settings: "Feedback passcode and operational controls."
+    settings: "Feedback passcode and operational controls.",
+    server: "Vercel deployments, account activity, and production health signals.",
+    "ai-usage": "OpenAI token usage, request volume, and cost trends."
   }[view];
 
   return (
@@ -546,6 +857,8 @@ export function AdminDashboardClient({
           <a href="/admin/analytics" className={view === "analytics" ? "active" : ""}><BarChart3 size={19} /> Analytics</a>
           <a href="/admin/people" className={view === "people" ? "active" : ""}><UsersRound size={19} /> People</a>
           <a href="/admin/feedback" className={view === "feedback" ? "active" : ""}><MessageSquareText size={19} /> Feedback</a>
+          <a href="/admin/server" className={view === "server" ? "active" : ""}><Server size={19} /> Server</a>
+          <a href="/admin/ai-usage" className={view === "ai-usage" ? "active" : ""}><Bot size={19} /> AI Usage</a>
           <a href="/admin/settings" className={view === "settings" ? "active" : ""}><Settings size={19} /> Settings</a>
         </nav>
         <div className="admin-profile">
@@ -626,6 +939,10 @@ export function AdminDashboardClient({
             <AdminInvitePanel inviteFlash={inviteFlash} />
           </section>
         )}
+
+        {view === "server" && <ServerPanel metrics={serverSnapshot} />}
+
+        {view === "ai-usage" && <AiUsagePanel metrics={aiUsageSnapshot} />}
       </section>
     </main>
   );

@@ -3,15 +3,19 @@ import { readInviteFlash } from "@/app/admin/actions";
 import { AdminDashboardClient, type AdminView } from "@/components/AdminDashboardClient";
 import { getAdminMetrics } from "@/lib/admin-metrics";
 import { getAdminSession, requireAdmin } from "@/lib/auth";
+import { getOpenAiUsageMetrics } from "@/lib/openai-usage";
+import { getVercelServerMetrics } from "@/lib/vercel-monitoring";
 
 export async function AdminViewPage({ view }: { view: AdminView }) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const [admin, metrics, inviteFlash] = await Promise.all([
+  const [admin, metrics, inviteFlash, serverMetrics, aiUsageMetrics] = await Promise.all([
     requireAdmin(),
     getAdminMetrics(),
-    readInviteFlash()
+    readInviteFlash(),
+    view === "server" ? getVercelServerMetrics() : Promise.resolve(undefined),
+    view === "ai-usage" ? getOpenAiUsageMetrics() : Promise.resolve(undefined)
   ]);
 
   return (
@@ -25,6 +29,8 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
       initialMetrics={metrics}
       inviteFlash={inviteFlash}
       view={view}
+      serverMetrics={serverMetrics}
+      aiUsageMetrics={aiUsageMetrics}
     />
   );
 }

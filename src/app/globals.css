@@ -2156,6 +2156,147 @@ select {
   border-color: rgba(185, 139, 100, .2);
 }
 
+.admin-provider-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(185, 139, 100, .22);
+  border-radius: 11px;
+  background: rgba(120, 84, 52, .12);
+  color: #c7ad91;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  font-size: .86rem;
+}
+
+.admin-provider-setup {
+  max-width: 760px;
+}
+
+.admin-setup-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.admin-setup-list code {
+  border: 1px solid rgba(148, 163, 184, .16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .04);
+  color: #d7dee8;
+  padding: 7px 9px;
+  font-size: .82rem;
+}
+
+.admin-provider-note {
+  margin: 0;
+  color: #9aa7b7;
+  font-size: .84rem;
+}
+
+.admin-provider-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-provider-list.compact {
+  gap: 7px;
+}
+
+.admin-provider-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .028);
+  padding: 9px 10px;
+}
+
+.admin-provider-item:hover {
+  background: rgba(148, 163, 184, .07);
+}
+
+.admin-provider-item i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #8fb3c8;
+  box-shadow: 0 0 0 4px rgba(143, 179, 200, .08);
+}
+
+.admin-provider-item > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-provider-item strong,
+.admin-provider-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-provider-item strong {
+  color: #edf2f7;
+  font-size: .88rem;
+  font-weight: 500;
+}
+
+.admin-provider-item span,
+.admin-provider-item time {
+  color: #9aa7b7;
+  font-size: .78rem;
+}
+
+.admin-provider-item time {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.admin-ops-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-ops-row {
+  display: grid;
+  grid-template-columns: 78px minmax(140px, 1fr) 70px 84px;
+  align-items: center;
+  gap: 10px;
+  color: #b8c4d4;
+  font-size: .82rem;
+}
+
+.admin-ops-row > div {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .12);
+}
+
+.admin-ops-row i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8fb3c8, #78a89b);
+}
+
+.admin-ops-row strong {
+  color: #f1f5f9;
+  font-weight: 500;
+}
+
+.admin-ops-row em {
+  color: #c7ad91;
+  font-style: normal;
+  text-align: right;
+}
+
 .admin-auth-icon {
   background: rgba(125, 168, 189, .11);
   color: #a9c0cc;
@@ -6126,7 +6267,7 @@ tr:last-child td {
   }
 
   .admin-sidebar nav {
-    grid-template-columns: repeat(5, minmax(0, auto));
+    grid-template-columns: repeat(7, minmax(0, auto));
     flex: 1 1 auto;
   }
 
@@ -6450,10 +6591,18 @@ tr:last-child td {
 
   .admin-invite-flash div,
   .admin-card-head,
-  .admin-person-card {
+  .admin-person-card,
+  .admin-provider-item,
+  .admin-ops-row {
     align-items: stretch;
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .admin-provider-item time,
+  .admin-ops-row em {
+    justify-self: start;
+    text-align: left;
   }
 
   .admin-icon-button,
