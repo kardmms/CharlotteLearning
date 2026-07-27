@@ -48,6 +48,7 @@ type AdminIdentity = {
 export type AdminView = "dashboard" | "analytics" | "people" | "feedback" | "settings" | "server" | "ai-usage";
 
 type InviteFlash = {
+  inviteId: string;
   email: string;
   link: string;
   sent: boolean;
@@ -212,34 +213,41 @@ function LinePanel({ metrics }: { metrics: AdminMetrics }) {
   );
 }
 
-function GaugePanel({ metrics }: { metrics: AdminMetrics }) {
-  const completion = metrics.headline.completionRate;
-  const correct = metrics.headline.correctRate;
-  const firstTry = metrics.headline.firstTryRate;
+function MonthlyScorePanel({ metrics }: { metrics: AdminMetrics }) {
+  const months = metrics.monthlyClassScores;
+  const current = months[months.length - 1];
+  const previous = months[months.length - 2];
+  const change = current?.average !== null && current?.average !== undefined && previous?.average !== null && previous?.average !== undefined
+    ? current.average - previous.average
+    : null;
   return (
     <section className="admin-glass-panel">
       <div className="admin-card-head">
         <div>
-          <h2>Learning quality</h2>
-          <p>Signals investors can understand quickly.</p>
+          <h2>Monthly class score</h2>
+          <p>Each assignment&apos;s class average is weighted equally.</p>
         </div>
-        <Gauge size={20} />
+        <LineChart size={20} />
       </div>
-      <div className="admin-gauge-grid">
-        {[
-          ["Completion", completion, "#6ea889"],
-          ["Accuracy", correct, "#7da8bd"],
-          ["First try", firstTry, "#b98658"]
-        ].map(([label, value, color]) => (
-          <div className="admin-gauge" key={String(label)}>
-            <div
-              style={{
-                background: `conic-gradient(${color} ${value as number}%, rgba(255,255,255,.08) 0)`
-              }}
-            >
-              <strong>{value}%</strong>
-            </div>
-            <span>{label}</span>
+      <div className="admin-month-score-summary">
+        <div>
+          <span>{current?.label ?? "This month"}</span>
+          <strong>{current?.average === null || current?.average === undefined ? "—" : `${current.average}%`}</strong>
+          <small>
+            {current?.assignmentCount ?? 0} assignments · {current?.scoredAssignmentCount ?? 0} with scores
+          </small>
+        </div>
+        <span className={`admin-month-change ${change === null ? "neutral" : change >= 0 ? "up" : "down"}`}>
+          {change === null ? "No prior comparison" : `${change >= 0 ? "+" : ""}${change} pts vs ${previous.shortLabel}`}
+        </span>
+      </div>
+      <div className="admin-month-score-bars" aria-label="Monthly class average scores">
+        {months.map((month) => (
+          <div key={month.key}>
+            <span>{month.average === null ? "—" : `${month.average}%`}</span>
+            <i style={{ height: `${Math.max(4, month.average ?? 0)}%` }} />
+            <small>{month.shortLabel}</small>
+            <em>{month.assignmentCount} asg.</em>
           </div>
         ))}
       </div>
@@ -272,8 +280,10 @@ function DataTables({ metrics }: { metrics: AdminMetrics }) {
               {metrics.topClassrooms.map((row) => (
                 <tr key={row.id}>
                   <td>
-                    <strong>{row.name}</strong>
-                    <span>{row.gradeLevel} - {row.assignments} assignments</span>
+                    <a className="admin-class-link" href={`/admin/classes/${row.id}`}>
+                      <strong>{row.name}</strong>
+                      <span>{row.gradeLevel} - {row.assignments} assignments</span>
+                    </a>
                   </td>
                   <td>{row.teacher}</td>
                   <td>{row.students}</td>
@@ -322,21 +332,13 @@ function InviteAndSettings({
 }) {
   return (
     <section className="admin-dashboard-grid two">
-      <AdminInvitePanel inviteFlash={inviteFlash} />
+      <AdminInvitePanel />
       <FeedbackSettingsPanel metrics={metrics} />
     </section>
   );
 }
 
-function AdminInvitePanel({ inviteFlash }: { inviteFlash: InviteFlash }) {
-  const [copied, setCopied] = useState(false);
-
-  async function copyInvite() {
-    if (!inviteFlash?.link) return;
-    await navigator.clipboard.writeText(inviteFlash.link);
-    setCopied(true);
-  }
-
+function AdminInvitePanel() {
   return (
     <div className="admin-glass-panel">
       <div className="admin-card-head">
@@ -346,18 +348,6 @@ function AdminInvitePanel({ inviteFlash }: { inviteFlash: InviteFlash }) {
         </div>
         <MailPlus size={20} />
       </div>
-      {inviteFlash && (
-        <div className={`admin-invite-flash ${inviteFlash.sent ? "sent" : "manual"}`}>
-          <strong>{inviteFlash.message}</strong>
-          <p>{inviteFlash.email}</p>
-          <div>
-            <input readOnly value={inviteFlash.link} />
-            <button className="admin-icon-button" type="button" onClick={copyInvite} aria-label="Copy invite link">
-              {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />}
-            </button>
-          </div>
-        </div>
-      )}
       <form className="admin-form" action={createAdminInvite}>
         <label>
           Name
@@ -504,12 +494,20 @@ function FeedbackPanel({ metrics }: { metrics: AdminMetrics }) {
 
 function PeoplePanel({
   metrics,
-  admin
+  admin,
+  inviteFlash
 }: {
   metrics: AdminMetrics;
   admin: AdminIdentity;
+  inviteFlash: InviteFlash;
 }) {
   const isOwner = admin.role === "OWNER";
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+
+  async function copyInviteLink(inviteId: string, link: string) {
+    await navigator.clipboard.writeText(link);
+    setCopiedInviteId(inviteId);
+  }
 
   return (
     <section className="admin-dashboard-grid two" id="people">
@@ -555,26 +553,38 @@ function PeoplePanel({
         <div className="admin-card-head">
           <div>
             <h2>Admin invitations</h2>
-            <p>Recent invite status for your access pipeline.</p>
+            <p>Pending invitations. Used, expired, and revoked invitations are removed.</p>
           </div>
           <MailPlus size={20} />
         </div>
         <div className="admin-people-list">
           {metrics.invites.map((invite) => {
-            const canRevoke = isOwner && !invite.used && !invite.expired;
+            const inviteLink = inviteFlash?.inviteId === invite.id ? inviteFlash.link : null;
             return (
               <article className="admin-person-card invite" key={invite.id}>
-                <div>
+                <div className="admin-person-details">
                   <strong>{invite.name || invite.email}</strong>
                   <span>{invite.email}</span>
                   <small>Invited by {invite.invitedBy}</small>
+                  {inviteLink && (
+                    <div className="admin-invite-link">
+                      <span>{inviteLink}</span>
+                      <button
+                        className="admin-icon-button"
+                        type="button"
+                        onClick={() => copyInviteLink(invite.id, inviteLink)}
+                        aria-label={`Copy invite link for ${invite.name || invite.email}`}
+                        title="Copy invite link"
+                      >
+                        {copiedInviteId === invite.id ? <CheckCircle2 size={18} /> : <Copy size={18} />}
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <em className={`admin-role-pill ${
-                  invite.used ? "used" : invite.expired ? "expired" : invite.sent ? "sent" : "manual"
-                }`}>
-                  {invite.used ? "USED" : invite.expired ? "EXPIRED" : invite.sent ? "SENT" : "LINK"}
+                <em className={`admin-role-pill ${invite.sent ? "sent" : "manual"}`}>
+                  {invite.sent ? "SENT" : "LINK"}
                 </em>
-                {canRevoke && (
+                {isOwner && (
                   <form
                     action={revokeAdminInvite}
                     onSubmit={(event) => {
@@ -592,7 +602,7 @@ function PeoplePanel({
               </article>
             );
           })}
-          {metrics.invites.length === 0 && <p>No admin invitations yet.</p>}
+          {metrics.invites.length === 0 && <p>No active admin invitations.</p>}
         </div>
       </div>
     </section>
@@ -979,7 +989,7 @@ export function AdminDashboardClient({
             </section>
             <section className="admin-dashboard-grid main">
               <LinePanel metrics={metrics} />
-              <GaugePanel metrics={metrics} />
+              <MonthlyScorePanel metrics={metrics} />
             </section>
             <DataTables metrics={metrics} />
           </>
@@ -989,7 +999,7 @@ export function AdminDashboardClient({
           <>
             <section className="admin-dashboard-grid main">
               <LinePanel metrics={metrics} />
-              <GaugePanel metrics={metrics} />
+              <MonthlyScorePanel metrics={metrics} />
             </section>
             <section className="admin-dashboard-grid three">
               <MiniBarChart title="New teachers" subtitle="Last 14 days" items={metrics.charts.teachers} tone="blue" />
@@ -1007,20 +1017,26 @@ export function AdminDashboardClient({
 
         {view === "people" && (
           <>
-            <PeoplePanel metrics={metrics} admin={admin} />
+            <PeoplePanel metrics={metrics} admin={admin} inviteFlash={inviteFlash} />
             <section className="admin-dashboard-grid two">
-              <AdminInvitePanel inviteFlash={inviteFlash} />
+              <AdminInvitePanel />
             </section>
           </>
         )}
 
-        {view === "feedback" && <FeedbackPanel metrics={metrics} />}
+        {view === "feedback" && (
+          <>
+            <FeedbackPanel metrics={metrics} />
+            <section className="admin-dashboard-grid two">
+              <FeedbackSettingsPanel metrics={metrics} />
+            </section>
+          </>
+        )}
 
         {view === "settings" && (
           <>
             <section className="admin-dashboard-grid two">
-              <FeedbackSettingsPanel metrics={metrics} />
-              <AdminInvitePanel inviteFlash={inviteFlash} />
+              <AdminInvitePanel />
             </section>
             <AuditPanel metrics={metrics} />
           </>

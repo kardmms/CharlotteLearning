@@ -78,7 +78,7 @@ async function deliverEmail(input: {
   }
 
   const apiKey = process.env.RESEND_API_KEY || "";
-  const from = process.env.EMAIL_FROM || process.env.ADMIN_INVITE_FROM || "";
+  const from = process.env.EMAIL_FROM || "";
   if (!apiKey || !from) {
     return { status: "skipped", errorCode: "provider_not_configured" };
   }
@@ -213,6 +213,28 @@ export async function sendStudentEnrollmentEmail(input: {
     teacherId: input.teacherId,
     studentId: input.studentId,
     classroomId: input.classroomId
+  });
+}
+
+export async function sendAdminInviteEmail(input: {
+  email: string;
+  invitedByName: string;
+  inviteUrl: string;
+}) {
+  const subject = "Charlotte AI admin invitation";
+  const content = `
+    <h1 style="font-size:26px;margin:0 0 12px;">You were invited to Charlotte AI admin.</h1>
+    <p>${escapeHtml(input.invitedByName)} invited you to help monitor Charlotte AI.</p>
+    ${actionButton("Create admin password", input.inviteUrl)}
+    <p>After setup, go to the Charlotte AI homepage, scroll to the bottom, and click <strong>Admin</strong> to sign in again.</p>
+    <p style="color:#597060;">This one-time link expires in 7 days.</p>
+  `;
+
+  return deliverEmail({
+    to: cleanEmail(input.email),
+    subject,
+    html: emailFrame(content),
+    text: `${input.invitedByName} invited you to help monitor Charlotte AI. Create your admin account: ${input.inviteUrl} This one-time link expires in 7 days.`
   });
 }
 

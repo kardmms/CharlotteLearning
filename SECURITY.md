@@ -43,7 +43,7 @@ This project is a classroom application, so privacy and simple access matter tog
 - `DATABASE_BACKUPS_CONFIRMED="true"`: set only after confirming snapshot retention and testing a restore into a non-production database.
 - `OPENAI_API_KEY` or `OPEN_AI_KEY`: server-only OpenAI key.
 - `CRON_SECRET`: at least 16 random characters so Vercel can authenticate scheduled maintenance jobs.
-- `NEXT_PUBLIC_SITE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_DELIVERY_ENABLED="true"`: required for transactional and weekly email delivery.
+- `NEXT_PUBLIC_SITE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_DELIVERY_ENABLED="true"`: required for teacher, student, admin-invitation, and weekly email delivery.
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"`: required when bot protection is ready to enforce in production.
 
 ## Controls That Need Platform Settings

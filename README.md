@@ -72,10 +72,10 @@ The app is configured for Vercel with managed Postgres.
 3. Set `DATABASE_ENVIRONMENT=production` only for Production. Set it to `preview` for Preview and `development` locally.
 4. In the Prisma Console, confirm automatic snapshots are available and test a restore into a non-production database. Then set `DATABASE_BACKUPS_CONFIRMED=true` in Production.
 5. Add `AUTH_SECRET` (at least 32 random characters), `OPENAI_API_KEY` or `OPEN_AI_KEY`, `CRON_SECRET`, and optionally `OPENAI_MODEL`.
-6. Verify a sending domain in Resend, then add `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_DELIVERY_ENABLED=true`, and the canonical `NEXT_PUBLIC_SITE_URL`.
+6. Verify a sending domain in Resend, then add `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_DELIVERY_ENABLED=true`, and the canonical `NEXT_PUBLIC_SITE_URL`. The same settings deliver teacher, student, and admin invitation emails; no separate admin sender variable is needed.
 7. If `ALLOWED_OUTBOUND_HOSTS` is explicitly set, include `api.openai.com` and `api.resend.com`.
 8. Deploy with `pnpm vercel-build`. The production-readiness check runs first, then applies checked-in migrations and builds Next.js.
-9. Verify `/api/health` returns `{ "ok": true }`, create a teacher account, and confirm the welcome message and a test student invitation arrive.
+9. Verify `/api/health` returns `{ "ok": true }`, create a teacher account, and confirm the welcome message, a test student invitation, and a test admin invitation arrive.
 10. Confirm the weekly cron is scheduled for Mondays at 15:00 UTC and test it against non-production data before onboarding classrooms.
 
 The removed presentation-reset utility must not be restored or executed against production. Use a separately provisioned development database for disposable demos and tests.

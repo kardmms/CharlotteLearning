@@ -14,7 +14,7 @@ import {
   verifyPassword
 } from "@/lib/auth";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
-import { restrictedFetch } from "@/lib/outbound";
+import { sendAdminInviteEmail } from "@/lib/email";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { hashText } from "@/lib/security";
 
@@ -73,6 +73,7 @@ function makeInviteToken() {
 }
 
 async function flashInviteLink(payload: {
+  inviteId: string;
   email: string;
   link: string;
   sent: boolean;
@@ -89,46 +90,20 @@ async function flashInviteLink(payload: {
 }
 
 async function sendInviteEmail(email: string, link: string, invitedByName: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.ADMIN_INVITE_FROM;
-  if (!apiKey || !from) {
+  const result = await sendAdminInviteEmail({ email, inviteUrl: link, invitedByName });
+  if (result.status === "sent") {
+    return { sent: true, message: "Invite email sent." };
+  }
+  if (result.status === "skipped") {
     return {
       sent: false,
-      message: "Invite link created. Add RESEND_API_KEY and ADMIN_INVITE_FROM to send email automatically."
+      message: "Invite link created, but email delivery is not configured. Copy the link below."
     };
   }
-
-  const response = await restrictedFetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      from,
-      to: email,
-      subject: "Charlotte AI admin invitation",
-      html: `
-        <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
-          <h1 style="font-size: 24px;">You were invited to Charlotte AI admin</h1>
-          <p>${invitedByName} invited you to help monitor Charlotte AI.</p>
-          <p><a href="${link}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:700;">Create admin password</a></p>
-          <p>After setup, go to the Charlotte AI homepage, scroll to the bottom, and click <strong>Admin</strong> to sign in again.</p>
-          <p>This link expires in 7 days.</p>
-        </div>
-      `
-    }),
-    signal: AbortSignal.timeout(10000)
-  });
-
-  if (!response.ok) {
-    return {
-      sent: false,
-      message: "Invite link created, but email delivery failed. Copy the link below."
-    };
-  }
-
-  return { sent: true, message: "Invite email sent." };
+  return {
+    sent: false,
+    message: "Invite link created, but email delivery failed. Copy the link below."
+  };
 }
 
 export async function readInviteFlash() {
@@ -139,6 +114,7 @@ export async function readInviteFlash() {
   if (!value) return null;
   try {
     return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      inviteId: string;
       email: string;
       link: string;
       sent: boolean;
@@ -232,34 +208,41 @@ export async function logoutAdmin() {
 
 export async function createAdminInvite(formData: FormData) {
   const admin = await requireAdmin();
+  const peoplePath = "/admin/people";
   const email = normalizeEmail(formText(formData, "email"));
   const name = boundedText(formData, "name", 120);
 
-  await enforceOrRedirect("/admin", async () => {
+  await enforceOrRedirect(peoplePath, async () => {
     await enforceRateLimit({ scope: "admin-create-invite", limit: 30, windowSeconds: 60 * 60, identifier: admin.id });
   });
 
-  if (!email.includes("@")) errorRedirect("/admin", "Enter a valid admin email.");
+  if (!email.includes("@")) errorRedirect(peoplePath, "Enter a valid admin email.");
   const existing = await prisma.adminUser.findUnique({ where: { email } });
-  if (existing) errorRedirect("/admin", "That email already has admin access.");
+  if (existing) errorRedirect(peoplePath, "That email already has admin access.");
 
   const token = makeInviteToken();
   const link = `${await siteOrigin()}/admin/invite/${token}`;
-  const delivery = await sendInviteEmail(email, link, admin.name);
-
-  await prisma.adminInvite.create({
+  const invite = await prisma.adminInvite.create({
     data: {
       email,
       name: name || null,
       tokenHash: hashText(token),
       invitedById: admin.id,
-      sentAt: delivery.sent ? new Date() : null,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    }
+    },
+    select: { id: true }
   });
 
-  await flashInviteLink({ email, link, sent: delivery.sent, message: delivery.message });
-  redirect("/admin?invited=1");
+  const delivery = await sendInviteEmail(email, link, admin.name);
+  if (delivery.sent) {
+    await prisma.adminInvite.update({
+      where: { id: invite.id },
+      data: { sentAt: new Date() }
+    });
+  }
+
+  await flashInviteLink({ inviteId: invite.id, email, link, sent: delivery.sent, message: delivery.message });
+  redirect(`${peoplePath}?invited=1`);
 }
 
 export async function revokeAdminAccess(formData: FormData) {
@@ -407,14 +390,15 @@ export async function acceptAdminInvite(formData: FormData) {
 
 export async function updateFeedbackPasscode(formData: FormData) {
   const admin = await requireAdmin();
+  const feedbackPath = "/admin/feedback";
   const passcode = boundedText(formData, "passcode", 120);
   const hint = boundedText(formData, "hint", 120);
 
-  await enforceOrRedirect("/admin", async () => {
+  await enforceOrRedirect(feedbackPath, async () => {
     await enforceRateLimit({ scope: "admin-feedback-passcode", limit: 20, windowSeconds: 60 * 60, identifier: admin.id });
   });
 
-  if (passcode.length < 6) errorRedirect("/admin", "Use a feedback passcode with at least 6 characters.");
+  if (passcode.length < 6) errorRedirect(feedbackPath, "Use a feedback passcode with at least 6 characters.");
   const passcodeHash = await hashPassword(passcode);
 
   await prisma.$transaction([
@@ -430,7 +414,7 @@ export async function updateFeedbackPasscode(formData: FormData) {
     })
   ]);
 
-  redirect("/admin?feedbackPasscode=1");
+  redirect(`${feedbackPath}?feedbackPasscode=1`);
 }
 
 export async function submitTeacherFeedback(formData: FormData) {

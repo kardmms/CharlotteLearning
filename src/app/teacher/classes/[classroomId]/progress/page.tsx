@@ -5,6 +5,7 @@ import { BubbleState, StatusBubble } from "@/components/StatusBubble";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gradeLabel } from "@/lib/grade";
+import { buildStudentMonthlyScores, recentMonthStarts } from "@/lib/monthly-performance";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,13 @@ function scoreLabel(session?: { pointsEarned: number; answers: Array<{ isCorrect
   const graded = session.answers.filter((answer) => answer.isCorrect !== null);
   if (graded.length === 0) return "Review";
   return `${Math.min(100, session.pointsEarned)}%`;
+}
+
+function monthlyScoreClass(score: number | null) {
+  if (score === null) return "score-muted";
+  if (score >= 80) return "score-strong";
+  if (score >= 60) return "score-mid";
+  return "score-low";
 }
 
 function parseChoices(choicesJson?: string | null) {
@@ -74,8 +82,9 @@ export default async function ProgressPage({
   });
   if (!classroom) notFound();
   const material = classroom.materials[0];
-  const sessions = material
-    ? await prisma.studentSession.findMany({
+  const [sessions, monthlyMaterials] = await Promise.all([
+    material
+      ? prisma.studentSession.findMany({
         where: {
           materialId: material.id,
           student: { classroomId: classroom.id, active: true }
@@ -83,7 +92,42 @@ export default async function ProgressPage({
         orderBy: { signInAt: "desc" },
         include: { answers: true }
       })
-    : [];
+      : Promise.resolve([]),
+    prisma.material.findMany({
+      where: {
+        classroomId: classroom.id,
+        teacherId: teacher.id,
+        status: "PUBLISHED",
+        activityKind: "IN_CLASS",
+        isAdaptiveHome: false,
+        createdAt: { gte: recentMonthStarts(1)[0] }
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        sessions: {
+          where: { status: { in: ["COMPLETED", "PARTIAL"] } },
+          select: {
+            studentId: true,
+            status: true,
+            pointsEarned: true,
+            signInAt: true,
+            lastSeenAt: true,
+            signedOutAt: true,
+            completedAt: true
+          }
+        }
+      }
+    })
+  ]);
+  const studentMonthlyScores = buildStudentMonthlyScores(
+    monthlyMaterials,
+    classroom.students.map((student) => student.id),
+    1
+  );
+  const monthlyScoreByStudent = new Map(
+    studentMonthlyScores.map((student) => [student.studentId, student.months[0]])
+  );
   const latestSessionByStudent = new Map<string, (typeof sessions)[number]>();
   const latestFinalizedSessionByStudent = new Map<string, (typeof sessions)[number]>();
   for (const session of sessions) {
@@ -155,9 +199,20 @@ export default async function ProgressPage({
                 {classroom.students.map((student) => {
                   const latest = latestSessionByStudent.get(student.id);
                   const latestFinalized = latestFinalizedSessionByStudent.get(student.id);
+                  const monthly = monthlyScoreByStudent.get(student.id);
                   return (
                     <tr key={student.id}>
-                      <td>{student.displayName}</td>
+                      <td>
+                        <div className="progress-student-identity">
+                          <span>{student.displayName}</span>
+                          <span
+                            className={`monthly-average-bubble ${monthlyScoreClass(monthly?.average ?? null)}`}
+                            title={`${monthly?.label ?? "This month"}: ${monthly?.assignmentCount ?? 0} scored assignments`}
+                          >
+                            {monthly?.shortLabel ?? "Month"} {monthly?.average === null || monthly?.average === undefined ? "—" : `${monthly.average}%`}
+                          </span>
+                        </div>
+                      </td>
                       {material?.questions.map((question, index) => {
                         const answer = latest?.answers.find((item) => item.questionId === question.id);
                         const state = questionState(question, answer);

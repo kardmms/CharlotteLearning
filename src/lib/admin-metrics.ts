@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
+import { buildMonthlyClassScores, recentMonthStarts } from "@/lib/monthly-performance";
 
 const dayMs = 24 * 60 * 60 * 1000;
 const feedbackPasscodeHashKey = "feedback_passcode_hash";
@@ -65,6 +66,7 @@ export async function getAdminMetrics() {
   const since7d = new Date(now.getTime() - 7 * dayMs);
   const since14d = new Date(now.getTime() - 14 * dayMs);
   const since30d = new Date(now.getTime() - 30 * dayMs);
+  const monthlyScoreStart = recentMonthStarts(6, now)[0];
 
   const [
     totalTeachers,
@@ -104,7 +106,8 @@ export async function getAdminMetrics() {
     classrooms,
     auditEvents,
     emailDeliveries,
-    settings
+    settings,
+    monthlyScoreMaterials
   ] = await Promise.all([
     prisma.teacher.count(),
     prisma.studentAccount.count(),
@@ -145,6 +148,10 @@ export async function getAdminMetrics() {
       _count: { _all: true }
     }),
     prisma.adminInvite.findMany({
+      where: {
+        usedAt: null,
+        expiresAt: { gte: now }
+      },
       take: 8,
       orderBy: { createdAt: "desc" },
       include: { invitedBy: { select: { name: true, email: true } } }
@@ -203,7 +210,31 @@ export async function getAdminMetrics() {
         sentAt: true
       }
     }),
-    getFeedbackSettings()
+    getFeedbackSettings(),
+    prisma.material.findMany({
+      where: {
+        status: "PUBLISHED",
+        activityKind: "IN_CLASS",
+        isAdaptiveHome: false,
+        createdAt: { gte: monthlyScoreStart }
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        sessions: {
+          where: { status: { in: ["COMPLETED", "PARTIAL"] } },
+          select: {
+            studentId: true,
+            status: true,
+            pointsEarned: true,
+            signInAt: true,
+            lastSeenAt: true,
+            signedOutAt: true,
+            completedAt: true
+          }
+        }
+      }
+    })
   ]);
 
   const activeTeacherIds = new Set([
@@ -287,6 +318,7 @@ export async function getAdminMetrics() {
         { label: "At home", value: homeMaterials }
       ]
     },
+    monthlyClassScores: buildMonthlyClassScores(monthlyScoreMaterials, 6, now),
     topClassrooms,
     activityTimeline,
     feedback: feedback.map((item) => ({
@@ -381,6 +413,7 @@ export function getEmptyAdminMetrics(): AdminMetrics {
         { label: "At home", value: 0 }
       ]
     },
+    monthlyClassScores: buildMonthlyClassScores([], 6, now),
     topClassrooms: [],
     activityTimeline: [],
     feedback: [],
