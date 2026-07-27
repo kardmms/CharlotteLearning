@@ -2996,6 +2996,46 @@ p {
   padding: 32px;
 }
 
+.draft-ready-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 20px 22px;
+  border: 1px solid #f2c665;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.96));
+  box-shadow: var(--shadow-sm);
+}
+
+.draft-ready-banner > div:nth-child(2) {
+  flex: 1 1 320px;
+}
+
+.draft-ready-banner h2 {
+  margin: 8px 0 4px;
+}
+
+.draft-ready-banner p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.draft-ready-banner .button {
+  margin-left: auto;
+}
+
+.draft-ready-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .activity-dashboard {
   display: block;
 }

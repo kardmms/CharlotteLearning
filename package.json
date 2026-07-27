@@ -1,6 +1,7 @@
 {
   "name": "charlotte-teaching-ai",
   "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,7 +20,7 @@
     "jose": "^5.9.6",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.8.0",
-    "next": "^15.3.4",
+    "next": "^15.5.22",
     "openai": "^4.104.0",
     "pdf-parse": "^1.1.1",
     "react": "^19.1.0",

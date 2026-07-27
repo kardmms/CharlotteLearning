@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BellRing, ChevronLeft, ChevronRight, FileUp } from "lucide-react";
+import { ArrowRight, BellRing, ChevronLeft, ChevronRight, FilePenLine, FileUp } from "lucide-react";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { requireTeacher } from "@/lib/auth";
@@ -114,34 +114,51 @@ export default async function ClassOverviewPage({
   const teacher = await requireTeacher();
   const { classroomId } = await params;
   const query = await searchParams;
-  const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id },
-    include: {
-      students: {
-        where: { active: true },
-        orderBy: { displayName: "asc" }
-      },
-      materials: {
-        where: { isAdaptiveHome: false },
-        orderBy: { createdAt: "desc" },
-        include: {
-          _count: { select: { questions: true, sessions: true } },
-          sessions: {
-            orderBy: { lastSeenAt: "desc" },
-            include: {
-              student: true,
-              answers: true
+  const [classroom, latestDraft] = await Promise.all([
+    prisma.classroom.findFirst({
+      where: { id: classroomId, teacherId: teacher.id },
+      include: {
+        students: {
+          where: { active: true },
+          orderBy: { displayName: "asc" },
+          select: { id: true }
+        },
+        materials: {
+          where: {
+            isAdaptiveHome: false,
+            status: "PUBLISHED",
+            activityKind: "IN_CLASS"
+          },
+          orderBy: { createdAt: "desc" },
+          include: {
+            _count: { select: { questions: true } },
+            sessions: {
+              orderBy: { lastSeenAt: "desc" },
+              include: { answers: true }
             }
           }
         }
       }
-    }
-  });
+    }),
+    prisma.material.findFirst({
+      where: {
+        classroomId,
+        teacherId: teacher.id,
+        isAdaptiveHome: false,
+        status: "DRAFT",
+        activityKind: "IN_CLASS"
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        _count: { select: { questions: true } }
+      }
+    })
+  ]);
   if (!classroom) notFound();
 
-  const activities = classroom.materials.filter(
-    (material) => material.status === "PUBLISHED" && material.activityKind === "IN_CLASS"
-  );
+  const activities = classroom.materials;
   const selectedIndex = Math.max(0, activities.findIndex((material) => material.id === query.materialId));
   const latestActivity = activities[selectedIndex];
   const newerActivity = activities[selectedIndex - 1];
@@ -228,16 +245,41 @@ export default async function ClassOverviewPage({
         </section>
         <ClassNav classroomId={classroom.id} />
 
+        {latestDraft && (
+          <section className="draft-ready-banner" aria-labelledby="draft-ready-title">
+            <div className="draft-ready-icon" aria-hidden="true">
+              <FilePenLine size={22} />
+            </div>
+            <div>
+              <span className="status-pill status-yellow">Draft ready</span>
+              <h2 id="draft-ready-title">{latestDraft.title}</h2>
+              <p>
+                Charlotte created {latestDraft._count.questions} questions. Review the draft, then publish it to assign
+                the activity to this class.
+              </p>
+            </div>
+            <Link
+              className="button"
+              href={`/teacher/classes/${classroom.id}/materials/${latestDraft.id}/review`}
+            >
+              Review and assign
+              <ArrowRight size={16} />
+            </Link>
+          </section>
+        )}
+
         <section className="activity-dashboard" style={{ marginTop: 18 }}>
           <div className="activity-main">
             <div className="activity-title-row">
               <div>
                 <div className="eyebrow">{selectedIndex === 0 ? "Most recent activity" : "Previous activity"}</div>
-                <h2>{latestActivity?.title ?? "No activity assigned yet"}</h2>
+                <h2>{latestActivity?.title ?? "No published activity yet"}</h2>
                 <p>
                   {latestActivity
                     ? `${latestActivity.status.toLowerCase()} - ${latestActivity.estimatedMinutes} minutes - ${latestActivity._count.questions} questions`
-                    : "Upload material to create a station for students."}
+                    : latestDraft
+                      ? "Your draft is ready above. Publish it to make the activity available to students."
+                      : "Upload material to create a station for students."}
                 </p>
               </div>
               <div className="activity-title-actions">

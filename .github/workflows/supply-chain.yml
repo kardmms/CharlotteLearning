@@ -21,7 +21,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Review dependency changes
         uses: actions/dependency-review-action@v4
@@ -38,10 +38,9 @@ jobs:
       attestations: write
       contents: read
       id-token: write
-      security-events: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
@@ -52,22 +51,15 @@ jobs:
           upload-artifact: false
 
       - name: Scan SBOM
-        id: grype
         uses: anchore/scan-action@v7
         with:
           sbom: charlotte-learning-sbom.spdx.json
           fail-build: true
           severity-cutoff: high
-          output-format: sarif
-
-      - name: Upload Grype SARIF
-        if: always() && steps.grype.outputs.sarif != ''
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ${{ steps.grype.outputs.sarif }}
+          output-format: table
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: charlotte-learning-sbom
           path: charlotte-learning-sbom.spdx.json
