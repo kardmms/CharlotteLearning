@@ -66,6 +66,14 @@ const nextConfig: NextConfig = {
         headers: securityHeaders
       }
     ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/favicon.png",
+        destination: "/images/charlotte-ai-logo.png"
+      }
+    ];
   }
 };
 
