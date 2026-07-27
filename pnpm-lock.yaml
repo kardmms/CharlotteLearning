@@ -22,8 +22,8 @@ importers:
         specifier: ^5.9.6
         version: 5.10.0
       lucide-react:
-        specifier: ^0.468.0
-        version: 0.468.0(react@19.2.7)
+        specifier: ^1.27.0
+        version: 1.27.0(react@19.2.7)
       mammoth:
         specifier: ^1.8.0
         version: 1.12.0
@@ -564,10 +564,10 @@ packages:
   lop@0.4.2:
     resolution: {integrity: sha512-RefILVDQ4DKoRZsJ4Pj22TxE3omDO47yFpkIBoDKzkqPRISs5U1cnAdg/5583YPkWPaLIYHOKRMQSvjFsO26cw==}
 
-  lucide-react@0.468.0:
-    resolution: {integrity: sha512-6koYRhnM2N0GGZIdXzSeiNwguv1gt/FAjZOiPl76roBi3xKEXa4WmfpxgQwTTL4KipXjefrnf3oV4IsYhi4JFA==}
+  lucide-react@1.27.0:
+    resolution: {integrity: sha512-rJicGl/3Fly/E0rOH1YmPZ6e49JCnKknh1ox1vpHnkfjujAkKA6sqUZvH3MTAaXXjgexyUwgNwTJzTtYuAFYJw==}
     peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   mammoth@1.12.0:
     resolution: {integrity: sha512-cwnK1RIcRdDMi2HRx2EXGYlxqIEh0Oo3bLhorgnsVJi2UkbX1+jKxuBNR9PC5+JaX7EkmJxFPmo6mjLpqShI2w==}
@@ -1248,7 +1248,7 @@ snapshots:
       option: 0.2.4
       underscore: 1.13.8
 
-  lucide-react@0.468.0(react@19.2.7):
+  lucide-react@1.27.0(react@19.2.7):
     dependencies:
       react: 19.2.7
 
