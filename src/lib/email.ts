@@ -52,11 +52,11 @@ function emailFrame(content: string) {
     <div style="background:#f6f4ee;padding:32px 16px;font-family:Arial,sans-serif;color:#173321;">
       <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #dfe8df;border-radius:18px;overflow:hidden;">
         <div style="background:#214f35;color:#ffffff;padding:22px 28px;">
-          <div style="font-size:20px;font-weight:800;">Charlotte Literacy</div>
+          <div style="font-size:20px;font-weight:800;">Charlotte Learning</div>
         </div>
         <div style="padding:28px;line-height:1.6;">${content}</div>
         <div style="padding:18px 28px;background:#f7faf7;color:#597060;font-size:12px;">
-          This message was sent because this email is connected to a Charlotte Literacy classroom.
+          This message was sent because this email is connected to a Charlotte Learning classroom.
         </div>
       </div>
     </div>
@@ -166,7 +166,7 @@ export async function sendTeacherWelcomeEmail(teacher: {
   email: string;
 }) {
   const loginUrl = appUrl("/teacher/login");
-  const subject = "Welcome to Charlotte Literacy";
+  const subject = "Welcome to Charlotte Learning";
   const content = `
     <h1 style="font-size:26px;margin:0 0 12px;">Welcome, ${escapeHtml(teacher.name)}!</h1>
     <p>Your teacher account is ready. You can now create a class, save its recovery key, add students, and build reading practice.</p>
@@ -178,7 +178,7 @@ export async function sendTeacherWelcomeEmail(teacher: {
     to: teacher.email,
     subject,
     html: emailFrame(content),
-    text: `Welcome, ${teacher.name}! Your Charlotte Literacy teacher account is ready.${loginUrl ? ` Sign in: ${loginUrl}` : ""}`,
+    text: `Welcome, ${teacher.name}! Your Charlotte Learning teacher account is ready.${loginUrl ? ` Sign in: ${loginUrl}` : ""}`,
     teacherId: teacher.id
   });
 }
@@ -200,7 +200,7 @@ export async function sendStudentEnrollmentEmail(input: {
   const subject = `You were added to ${input.teacherName}'s class`;
   const content = `
     <h1 style="font-size:26px;margin:0 0 12px;">You were added to ${escapeHtml(input.classroomName)}.</h1>
-    <p>${escapeHtml(input.teacherName)} added you to their Charlotte Literacy class.</p>
+    <p>${escapeHtml(input.teacherName)} added you to their Charlotte Learning class.</p>
     ${destination ? actionButton(input.hasAccount ? "Sign in to Charlotte" : "Create your Charlotte login", destination) : ""}
     <p>${input.hasAccount ? "Use your existing student email and password." : "Use this email address to create one student login for all of your Charlotte classes."}</p>
   `;

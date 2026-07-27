@@ -261,7 +261,7 @@ function plainTextSummary(input: {
     )
   ].join("\n")).join("\n\n");
   return [
-    `Charlotte Literacy weekly summary for ${input.period}`,
+    `Charlotte Learning weekly summary for ${input.period}`,
     `Hello ${input.teacherName},`,
     input.narrative,
     classText,
