@@ -31,6 +31,7 @@ import {
   createAdminInvite,
   logoutAdmin,
   revokeAdminAccess,
+  revokeAdminInvite,
   updateFeedbackPasscode
 } from "@/app/admin/actions";
 import type { AdminMetrics } from "@/lib/admin-metrics";
@@ -559,20 +560,38 @@ function PeoplePanel({
           <MailPlus size={20} />
         </div>
         <div className="admin-people-list">
-          {metrics.invites.map((invite) => (
-            <article className="admin-person-card invite" key={invite.id}>
-              <div>
-                <strong>{invite.name || invite.email}</strong>
-                <span>{invite.email}</span>
-                <small>Invited by {invite.invitedBy}</small>
-              </div>
-              <em className={`admin-role-pill ${
-                invite.used ? "used" : invite.expired ? "expired" : invite.sent ? "sent" : "manual"
-              }`}>
-                {invite.used ? "USED" : invite.expired ? "EXPIRED" : invite.sent ? "SENT" : "LINK"}
-              </em>
-            </article>
-          ))}
+          {metrics.invites.map((invite) => {
+            const canRevoke = isOwner && !invite.used && !invite.expired;
+            return (
+              <article className="admin-person-card invite" key={invite.id}>
+                <div>
+                  <strong>{invite.name || invite.email}</strong>
+                  <span>{invite.email}</span>
+                  <small>Invited by {invite.invitedBy}</small>
+                </div>
+                <em className={`admin-role-pill ${
+                  invite.used ? "used" : invite.expired ? "expired" : invite.sent ? "sent" : "manual"
+                }`}>
+                  {invite.used ? "USED" : invite.expired ? "EXPIRED" : invite.sent ? "SENT" : "LINK"}
+                </em>
+                {canRevoke && (
+                  <form
+                    action={revokeAdminInvite}
+                    onSubmit={(event) => {
+                      if (!window.confirm("Revoke this invitation? Their link will stop working immediately.")) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
+                    <input type="hidden" name="inviteId" value={invite.id} />
+                    <button className="admin-danger-button" type="submit">
+                      Revoke
+                    </button>
+                  </form>
+                )}
+              </article>
+            );
+          })}
           {metrics.invites.length === 0 && <p>No admin invitations yet.</p>}
         </div>
       </div>

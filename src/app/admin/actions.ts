@@ -301,6 +301,46 @@ export async function revokeAdminAccess(formData: FormData) {
   redirect("/admin?revoked=1");
 }
 
+export async function revokeAdminInvite(formData: FormData) {
+  const admin = await requireAdmin();
+  const inviteId = formText(formData, "inviteId");
+  const peoplePath = "/admin/people";
+
+  await enforceOrRedirect(peoplePath, async () => {
+    await enforceRateLimit({ scope: "admin-revoke-invite", limit: 30, windowSeconds: 60 * 60, identifier: admin.id });
+  });
+
+  if (admin.role !== AdminRole.OWNER) {
+    errorRedirect(peoplePath, "Only the owner can revoke admin invitations.");
+  }
+  if (!inviteId) errorRedirect(peoplePath, "Admin invitation not found.");
+
+  const revoked = await prisma.$transaction(async (tx) => {
+    const deletion = await tx.adminInvite.deleteMany({
+      where: {
+        id: inviteId,
+        usedAt: null,
+        expiresAt: { gte: new Date() }
+      }
+    });
+    if (deletion.count !== 1) return false;
+
+    await tx.auditEvent.create({
+      data: auditEventData({
+        actorType: "admin",
+        actorId: admin.id,
+        action: "admin.invite_revoked",
+        targetType: "admin_invite",
+        targetId: inviteId
+      })
+    });
+    return true;
+  });
+
+  if (!revoked) errorRedirect(peoplePath, "That invitation is expired, already used, or no longer exists.");
+  redirect(`${peoplePath}?inviteRevoked=1`);
+}
+
 export async function acceptAdminInvite(formData: FormData) {
   const token = formText(formData, "token");
   const password = boundedText(formData, "password", 1024);
