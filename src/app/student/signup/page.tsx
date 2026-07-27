@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function StudentSignupPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; email?: string; name?: string }>;
 }) {
   const query = await searchParams;
   return (
@@ -26,8 +26,8 @@ export default async function StudentSignupPage({
           <p>Your teacher must add your email to a class first. You only need one account for every Charlotte class.</p>
           <Message error={query.error} />
           <form className="form-grid" action={registerStudent}>
-            <label>Your name<input name="displayName" autoComplete="name" maxLength={120} required /></label>
-            <label>Student email<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
+            <label>Your name<input name="displayName" autoComplete="name" maxLength={120} defaultValue={query.name?.slice(0, 120)} required /></label>
+            <label>Student email<input name="email" type="email" autoComplete="email" maxLength={254} defaultValue={query.email?.slice(0, 254)} required /></label>
             <PasswordField name="password" label="Password" minLength={10} autoComplete="new-password" helpText="Use at least 10 characters." />
             <PasswordField name="confirmPassword" label="Confirm password" minLength={10} autoComplete="new-password" />
             <TurnstileField action="student_signup" />

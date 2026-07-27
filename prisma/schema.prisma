@@ -40,51 +40,68 @@ enum AdminRole {
   ADMIN
 }
 
+enum EmailKind {
+  TEACHER_WELCOME
+  STUDENT_ENROLLMENT
+  WEEKLY_TEACHER_SUMMARY
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 model Teacher {
-  id           String      @id @default(cuid())
-  name         String
-  email        String      @unique
-  passwordHash String
-  createdAt    DateTime    @default(now())
-  classrooms   Classroom[]
-  materials    Material[]
-  homeResources AtHomeResource[]
+  id                   String           @id @default(cuid())
+  name                 String
+  email                String           @unique
+  passwordHash         String
+  weeklySummaryEnabled Boolean          @default(true)
+  createdAt            DateTime         @default(now())
+  classrooms           Classroom[]
+  materials            Material[]
+  homeResources        AtHomeResource[]
+  emailDeliveries      EmailDelivery[]
 }
 
 model Classroom {
-  id                 String       @id @default(cuid())
+  id                 String           @id @default(cuid())
   name               String
   gradeLevel         String
   teacherId          String
-  identityMode       IdentityMode @default(STANDARD)
+  identityMode       IdentityMode     @default(STANDARD)
   privacyKeySalt     String?
   privacyKeyVerifier String?
   privacyKeyHint     String?
-  createdAt          DateTime     @default(now())
+  createdAt          DateTime         @default(now())
   archivedAt         DateTime?
-  teacher            Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher            Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   students           Student[]
   materials          Material[]
-  homeResources AtHomeResource[]
+  homeResources      AtHomeResource[]
+  emailDeliveries    EmailDelivery[]
 
   @@index([teacherId, archivedAt])
 }
 
 model Student {
-  id                   String           @id @default(cuid())
-  classroomId          String
-  accountId            String?
-  displayName          String
-  email                String?
-  displayNameEncrypted String?
-  emailEncrypted       String?
-  emailKeyHash         String?
-  active               Boolean          @default(true)
-  createdAt            DateTime         @default(now())
-  classroom            Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-  account              StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  sessions             StudentSession[]
-  adaptiveHomeMaterials Material[] @relation("AdaptiveHomeTarget")
+  id                    String           @id @default(cuid())
+  classroomId           String
+  accountId             String?
+  displayName           String
+  email                 String?
+  displayNameEncrypted  String?
+  emailEncrypted        String?
+  emailKeyHash          String?
+  active                Boolean          @default(true)
+  createdAt             DateTime         @default(now())
+  classroom             Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  account               StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  sessions              StudentSession[]
+  adaptiveHomeMaterials Material[]       @relation("AdaptiveHomeTarget")
+  emailDeliveries       EmailDelivery[]
 
   @@unique([classroomId, displayName])
   @@unique([classroomId, email])
@@ -106,7 +123,7 @@ model StudentAccount {
 }
 
 model Material {
-  id               String         @id @default(cuid())
+  id               String           @id @default(cuid())
   teacherId        String
   classroomId      String
   title            String
@@ -116,49 +133,49 @@ model Material {
   sourceText       String?
   atHomeScope      String?
   gradeLevel       String
-  estimatedMinutes Int            @default(15)
-  activityKind     ActivityKind   @default(IN_CLASS)
+  estimatedMinutes Int              @default(15)
+  activityKind     ActivityKind     @default(IN_CLASS)
   dueAt            DateTime?
   availableAt      DateTime?
   seriesKey        String?
   dayNumber        Int?
-  status           MaterialStatus @default(DRAFT)
+  status           MaterialStatus   @default(DRAFT)
   generationNotes  String?
-  isAdaptiveHome   Boolean        @default(false)
+  isAdaptiveHome   Boolean          @default(false)
   targetStudentId  String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  teacher          Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  classroom        Classroom      @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  teacher          Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom        Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   questions        Question[]
   sessions         StudentSession[]
-  targetStudent    Student?       @relation("AdaptiveHomeTarget", fields: [targetStudentId], references: [id], onDelete: Cascade)
+  targetStudent    Student?         @relation("AdaptiveHomeTarget", fields: [targetStudentId], references: [id], onDelete: Cascade)
 
+  @@unique([targetStudentId, seriesKey])
   @@index([teacherId, updatedAt])
   @@index([classroomId, createdAt])
   @@index([classroomId, activityKind, isAdaptiveHome, availableAt])
-  @@unique([targetStudentId, seriesKey])
 }
 
 model Question {
-  id            String          @id @default(cuid())
-  materialId    String
-  type          QuestionType
-  prompt        String
-  choicesJson   String?
-  correctAnswer String?
-  rubric        String?
-  skillTag      String?
-  standardCode  String?
-  explanation   String?
-  contextExcerpt String?
-  sourcePage    String?
+  id               String          @id @default(cuid())
+  materialId       String
+  type             QuestionType
+  prompt           String
+  choicesJson      String?
+  correctAnswer    String?
+  rubric           String?
+  skillTag         String?
+  standardCode     String?
+  explanation      String?
+  contextExcerpt   String?
+  sourcePage       String?
   timeLimitSeconds Int?
-  randomizeChoices Boolean       @default(false)
-  difficulty    Int             @default(3)
-  sortOrder     Int
-  material      Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  answers       StudentAnswer[]
+  randomizeChoices Boolean         @default(false)
+  difficulty       Int             @default(3)
+  sortOrder        Int
+  material         Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  answers          StudentAnswer[]
 }
 
 model AtHomeResource {
@@ -180,47 +197,47 @@ model AtHomeResource {
 }
 
 model StudentSession {
-  id                 String          @id @default(cuid())
-  studentId          String
-  materialId         String
-  signInAt           DateTime        @default(now())
-  signedOutAt        DateTime?
-  lastSeenAt         DateTime        @default(now())
-  completedAt        DateTime?
-  status             SessionStatus   @default(IN_PROGRESS)
-  openedBook         Boolean         @default(false)
-  foundChapter       Boolean         @default(false)
-  heardVocabulary    Boolean         @default(false)
-  answeredPrompt     Boolean         @default(false)
-  madePrediction     Boolean         @default(false)
-  completedCharlotte Boolean         @default(false)
-  understoodStory    Boolean         @default(false)
-  pointsEarned       Int             @default(0)
-  focusViolationCount Int            @default(0)
-  flaggedAt          DateTime?
-  endedByFocusLoss   Boolean         @default(false)
-  student            Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  material           Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  answers            StudentAnswer[]
+  id                  String          @id @default(cuid())
+  studentId           String
+  materialId          String
+  signInAt            DateTime        @default(now())
+  signedOutAt         DateTime?
+  lastSeenAt          DateTime        @default(now())
+  completedAt         DateTime?
+  status              SessionStatus   @default(IN_PROGRESS)
+  openedBook          Boolean         @default(false)
+  foundChapter        Boolean         @default(false)
+  heardVocabulary     Boolean         @default(false)
+  answeredPrompt      Boolean         @default(false)
+  madePrediction      Boolean         @default(false)
+  completedCharlotte  Boolean         @default(false)
+  understoodStory     Boolean         @default(false)
+  pointsEarned        Int             @default(0)
+  focusViolationCount Int             @default(0)
+  flaggedAt           DateTime?
+  endedByFocusLoss    Boolean         @default(false)
+  student             Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  material            Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  answers             StudentAnswer[]
 
   @@index([materialId, status, completedAt])
   @@index([studentId, materialId, status])
 }
 
 model StudentAnswer {
-  id          String         @id @default(cuid())
-  sessionId   String
-  questionId  String
-  answerText  String
-  isCorrect   Boolean?
-  attemptCount Int          @default(0)
+  id              String         @id @default(cuid())
+  sessionId       String
+  questionId      String
+  answerText      String
+  isCorrect       Boolean?
+  attemptCount    Int            @default(0)
   firstTryCorrect Boolean?
-  pointsEarned Int          @default(0)
-  revealedAnswer Boolean    @default(false)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  session     StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question    Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  pointsEarned    Int            @default(0)
+  revealedAnswer  Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  session         StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question        Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, questionId])
   @@index([questionId])
@@ -249,14 +266,14 @@ model RateLimitBucket {
 }
 
 model AdminUser {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  username     String        @unique
-  passwordHash String
-  role         AdminRole     @default(ADMIN)
-  createdAt    DateTime      @default(now())
-  invitesSent  AdminInvite[] @relation("AdminInvitesSent")
+  id              String        @id @default(cuid())
+  name            String
+  email           String        @unique
+  username        String        @unique
+  passwordHash    String
+  role            AdminRole     @default(ADMIN)
+  createdAt       DateTime      @default(now())
+  invitesSent     AdminInvite[] @relation("AdminInvitesSent")
   invitesAccepted AdminInvite[] @relation("AdminInvitesAccepted")
 }
 
@@ -299,4 +316,43 @@ model TeacherFeedback {
 
   @@index([createdAt])
   @@index([teacherEmail])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorType  String
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorType, actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
+model EmailDelivery {
+  id                String              @id @default(cuid())
+  kind              EmailKind
+  status            EmailDeliveryStatus @default(PENDING)
+  recipientHash     String
+  subject           String
+  teacherId         String?
+  studentId         String?
+  classroomId       String?
+  periodStart       DateTime?
+  providerMessageId String?
+  errorCode         String?
+  createdAt         DateTime            @default(now())
+  sentAt            DateTime?
+  teacher           Teacher?            @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  student           Student?            @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  classroom         Classroom?          @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+
+  @@unique([kind, teacherId, periodStart])
+  @@index([status, createdAt])
+  @@index([teacherId, createdAt])
+  @@index([classroomId, createdAt])
 }

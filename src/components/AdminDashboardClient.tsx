@@ -408,6 +408,70 @@ function FeedbackSettingsPanel({ metrics }: { metrics: AdminMetrics }) {
   );
 }
 
+function AuditPanel({ metrics }: { metrics: AdminMetrics }) {
+  return (
+    <section className="admin-glass-panel" style={{ marginTop: 18 }}>
+      <div className="admin-card-head">
+        <div>
+          <h2>Audit and email delivery log</h2>
+          <p>Recent account, classroom, destructive-action, and outbound-email events.</p>
+        </div>
+        <ClipboardList size={20} />
+      </div>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Event</th>
+              <th>Actor</th>
+              <th>Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            {metrics.auditEvents.map((event) => (
+              <tr key={event.id}>
+                <td>{formatDateTime(event.createdAt)}</td>
+                <td><strong>{event.action.replace(/[._]/g, " ")}</strong></td>
+                <td>{event.actorType}{event.actorId ? ` · ${event.actorId.slice(0, 8)}` : ""}</td>
+                <td>{event.targetType}{event.targetId ? ` · ${event.targetId.slice(0, 8)}` : ""}</td>
+              </tr>
+            ))}
+            {metrics.auditEvents.length === 0 && (
+              <tr><td colSpan={4}>No audit events recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="admin-table-wrap" style={{ marginTop: 18 }}>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            {metrics.emailDeliveries.map((delivery) => (
+              <tr key={delivery.id}>
+                <td>{formatDateTime(delivery.sentAt || delivery.createdAt)}</td>
+                <td><strong>{delivery.kind.replace(/_/g, " ").toLowerCase()}</strong></td>
+                <td>{delivery.status}{delivery.errorCode ? ` · ${delivery.errorCode}` : ""}</td>
+                <td>{(delivery.classroomId || delivery.teacherId || delivery.studentId || delivery.id).slice(0, 8)}</td>
+              </tr>
+            ))}
+            {metrics.emailDeliveries.length === 0 && (
+              <tr><td colSpan={4}>No email deliveries recorded yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function FeedbackPanel({ metrics }: { metrics: AdminMetrics }) {
   return (
     <section className="admin-glass-panel" id="feedback">
@@ -934,10 +998,13 @@ export function AdminDashboardClient({
         {view === "feedback" && <FeedbackPanel metrics={metrics} />}
 
         {view === "settings" && (
-          <section className="admin-dashboard-grid two">
-            <FeedbackSettingsPanel metrics={metrics} />
-            <AdminInvitePanel inviteFlash={inviteFlash} />
-          </section>
+          <>
+            <section className="admin-dashboard-grid two">
+              <FeedbackSettingsPanel metrics={metrics} />
+              <AdminInvitePanel inviteFlash={inviteFlash} />
+            </section>
+            <AuditPanel metrics={metrics} />
+          </>
         )}
 
         {view === "server" && <ServerPanel metrics={serverSnapshot} />}

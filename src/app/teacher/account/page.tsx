@@ -1,5 +1,5 @@
 import { KeyRound, Mail, UserRound } from "lucide-react";
-import { updateTeacherPassword } from "@/app/teacher/actions";
+import { updateTeacherPassword, updateWeeklySummaryPreference } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function TeacherAccountPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+    searchParams: Promise<{ error?: string; saved?: string; emailSettings?: string }>;
 }) {
   const teacher = await requireTeacher();
   const query = await searchParams;
@@ -76,6 +76,29 @@ export default async function TeacherAccountPage({
             <PasswordField name="confirmPassword" label="Confirm new password" minLength={10} autoComplete="new-password" />
             <button className="button" type="submit">
               Update password
+            </button>
+          </form>
+        </section>
+
+        <section className="panel" style={{ marginTop: 18 }}>
+          <div className="eyebrow">Email reports</div>
+          <h2>Weekly class summary</h2>
+          <p>
+            Receive a Monday email with class participation, question-type strengths,
+            growth areas, and student-level follow-up signals from the previous week.
+          </p>
+          <Message success={query.emailSettings ? "Weekly email preference updated." : undefined} />
+          <form className="form-grid" action={updateWeeklySummaryPreference}>
+            <label className="checkbox-row">
+              <input
+                name="weeklySummaryEnabled"
+                type="checkbox"
+                defaultChecked={teacher.weeklySummaryEnabled}
+              />
+              Send me weekly class summary emails
+            </label>
+            <button className="button secondary" type="submit">
+              Save email preference
             </button>
           </form>
         </section>

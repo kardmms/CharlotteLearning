@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
   clearStudentSession,
@@ -113,6 +114,16 @@ export async function registerStudent(formData: FormData) {
         where: { emailKeyHash, accountId: null },
         data: { accountId: created.id }
       });
+      await transaction.auditEvent.create({
+        data: auditEventData({
+          actorType: "student",
+          actorId: created.id,
+          action: "student_account.created",
+          targetType: "student_account",
+          targetId: created.id,
+          metadata: { identityMode: "SCHOOL_KEY" }
+        })
+      });
       return created;
     });
     await setStudentSession(account);
@@ -134,6 +145,16 @@ export async function registerStudent(formData: FormData) {
     await transaction.student.updateMany({
       where: { email, accountId: null },
       data: { accountId: created.id }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        actorType: "student",
+        actorId: created.id,
+        action: "student_account.created",
+        targetType: "student_account",
+        targetId: created.id,
+        metadata: { identityMode: "STANDARD" }
+      })
     });
     return created;
   });

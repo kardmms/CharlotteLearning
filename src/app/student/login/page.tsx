@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function StudentLoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; email?: string }>;
 }) {
   const params = await searchParams;
 
@@ -32,7 +32,7 @@ export default async function StudentLoginPage({
           <form className="form-grid" action={loginStudent}>
             <label>
               Student email
-              <input name="email" type="email" autoComplete="email" maxLength={254} required />
+              <input name="email" type="email" autoComplete="email" maxLength={254} defaultValue={params.email?.slice(0, 254)} required />
             </label>
             <PasswordField name="password" label="Password" autoComplete="current-password" />
             <TurnstileField action="student_login" />

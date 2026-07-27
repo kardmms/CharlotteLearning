@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { ActivityKind, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
 import { readSheet } from "read-excel-file/node";
+import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
   clearTeacherSession,
@@ -16,6 +17,7 @@ import { normalizeStudentEmail } from "@/lib/codes";
 import { extractStudentRosterWithAI, generateQuestionsFromText } from "@/lib/ai";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
+import { sendStudentEnrollmentEmail, sendTeacherWelcomeEmail } from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import {
@@ -111,6 +113,14 @@ function questionPointValue(sortOrder: number, questionCount: number) {
   return base + (sortOrder <= remainder ? 1 : 0);
 }
 
+async function sendEnrollmentEmails(invitations: Array<Parameters<typeof sendStudentEnrollmentEmail>[0]>) {
+  for (let index = 0; index < invitations.length; index += 5) {
+    await Promise.allSettled(
+      invitations.slice(index, index + 5).map((invitation) => sendStudentEnrollmentEmail(invitation))
+    );
+  }
+}
+
 export async function createFirstTeacher(formData: FormData) {
   await enforceOrRedirect("/teacher/setup", async () => {
     await enforceRateLimit({ scope: "teacher-setup-ip", limit: 10, windowSeconds: 60 * 60 });
@@ -129,14 +139,25 @@ export async function createFirstTeacher(formData: FormData) {
     errorRedirect("/teacher/setup", "Use a password with at least 10 characters.");
   }
 
-  const teacher = await prisma.teacher.create({
-    data: {
-      name,
-      email,
-      passwordHash: await hashPassword(password)
-    }
+  const passwordHash = await hashPassword(password);
+  const teacher = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.teacher.create({
+      data: { name, email, passwordHash }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: created.id,
+        action: "teacher.created",
+        targetType: "teacher",
+        targetId: created.id,
+        metadata: { signupFlow: "first_teacher" }
+      })
+    });
+    return created;
   });
 
+  await sendTeacherWelcomeEmail(teacher).catch(() => null);
   await setTeacherSession(teacher);
   const classroomCount = await prisma.classroom.count({
     where: { teacherId: teacher.id, archivedAt: null }
@@ -167,14 +188,25 @@ export async function createTeacherAccount(formData: FormData) {
     errorRedirect("/teacher/login", "An account already exists for this email. Sign in instead.");
   }
 
-  const teacher = await prisma.teacher.create({
-    data: {
-      name,
-      email,
-      passwordHash: await hashPassword(password)
-    }
+  const passwordHash = await hashPassword(password);
+  const teacher = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.teacher.create({
+      data: { name, email, passwordHash }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: created.id,
+        action: "teacher.created",
+        targetType: "teacher",
+        targetId: created.id,
+        metadata: { signupFlow: "public_signup" }
+      })
+    });
+    return created;
   });
 
+  await sendTeacherWelcomeEmail(teacher).catch(() => null);
   await setTeacherSession(teacher);
   redirect("/teacher");
 }
@@ -222,16 +254,29 @@ export async function createClassroom(formData: FormData) {
   const privacySalt = createPrivacyKeySalt();
   const derivedPrivacyKey = deriveClassPrivacyKey(recoveryKey, privacySalt);
 
-  const classroom = await prisma.classroom.create({
-    data: {
-      name,
-      gradeLevel,
-      teacherId: teacher.id,
-      identityMode: IdentityMode.SCHOOL_KEY,
-      privacyKeySalt: privacySalt,
-      privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
-      privacyKeyHint: null
-    }
+  const classroom = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.classroom.create({
+      data: {
+        name,
+        gradeLevel,
+        teacherId: teacher.id,
+        identityMode: IdentityMode.SCHOOL_KEY,
+        privacyKeySalt: privacySalt,
+        privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
+        privacyKeyHint: null
+      }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "classroom.created",
+        targetType: "classroom",
+        targetId: created.id,
+        metadata: { gradeLevel, identityMode: "SCHOOL_KEY" }
+      })
+    });
+    return created;
   });
 
   await setClassRecoveryKeyFlash(classroom.id, classroom.name, recoveryKey);
@@ -250,7 +295,18 @@ export async function deleteClassroom(formData: FormData) {
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
 
-  await prisma.classroom.delete({ where: { id: classroom.id } });
+  await prisma.$transaction([
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "classroom.deleted",
+        targetType: "classroom",
+        targetId: classroom.id
+      })
+    }),
+    prisma.classroom.delete({ where: { id: classroom.id } })
+  ]);
   redirect("/teacher/classes");
 }
 
@@ -266,10 +322,21 @@ export async function archiveClassroom(formData: FormData) {
   });
   if (!classroom) errorRedirect("/teacher/classes", "Class not found.");
 
-  await prisma.classroom.update({
-    where: { id: classroom.id },
-    data: { archivedAt: new Date() }
-  });
+  await prisma.$transaction([
+    prisma.classroom.update({
+      where: { id: classroom.id },
+      data: { archivedAt: new Date() }
+    }),
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "classroom.archived",
+        targetType: "classroom",
+        targetId: classroom.id
+      })
+    })
+  ]);
   redirect("/teacher/classes");
 }
 
@@ -285,10 +352,21 @@ export async function unarchiveClassroom(formData: FormData) {
   });
   if (!classroom) errorRedirect("/teacher/archive", "Class not found.");
 
-  await prisma.classroom.update({
-    where: { id: classroom.id },
-    data: { archivedAt: null }
-  });
+  await prisma.$transaction([
+    prisma.classroom.update({
+      where: { id: classroom.id },
+      data: { archivedAt: null }
+    }),
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "classroom.restored",
+        targetType: "classroom",
+        targetId: classroom.id
+      })
+    })
+  ]);
   redirect("/teacher/archive");
 }
 
@@ -313,7 +391,8 @@ async function createStudentsFromRows(
   rawPrivacyKey = ""
 ) {
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId }
+    where: { id: classroomId, teacherId },
+    include: { teacher: { select: { name: true } } }
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
 
@@ -356,13 +435,19 @@ async function createStudentsFromRows(
     }
 
     const existingAccounts = await prisma.studentAccount.findMany({
-      where: { emailKeyHash: { in: rowsWithHashes.map((row) => row.emailKeyHash) } },
-      select: { id: true, emailKeyHash: true }
+      where: {
+        OR: [
+          { emailKeyHash: { in: rowsWithHashes.map((row) => row.emailKeyHash) } },
+          { email: { in: rowsWithHashes.map((row) => row.email) } }
+        ]
+      },
+      select: { id: true, email: true, emailKeyHash: true }
     });
     const accountByEmailHash = new Map(
-      existingAccounts
-        .filter((account) => account.emailKeyHash)
-        .map((account) => [account.emailKeyHash as string, account.id])
+      existingAccounts.map((account) => [
+        account.emailKeyHash || studentEmailLookupHash(account.email),
+        account.id
+      ])
     );
     const data = rowsWithHashes.map((row, index) => ({
       classroomId,
@@ -387,11 +472,40 @@ async function createStudentsFromRows(
           });
         }
         await transaction.student.createMany({ data });
+        await transaction.auditEvent.create({
+          data: auditEventData({
+            actorType: "teacher",
+            actorId: teacherId,
+            action: "students.enrolled",
+            targetType: "classroom",
+            targetId: classroomId,
+            metadata: { count: data.length, identityMode: "SCHOOL_KEY" }
+          })
+        });
       });
     } catch {
       errorRedirect(errorPath, "Student invitations must be unique inside the class.");
     }
-    return;
+    const created = await prisma.student.findMany({
+      where: {
+        classroomId,
+        emailKeyHash: { in: rowsWithHashes.map((row) => row.emailKeyHash) }
+      },
+      select: { id: true, emailKeyHash: true }
+    });
+    const studentByHash = new Map(
+      created.filter((student) => student.emailKeyHash).map((student) => [student.emailKeyHash as string, student.id])
+    );
+    return rowsWithHashes.map((row) => ({
+      studentId: studentByHash.get(row.emailKeyHash) as string,
+      studentName: row.displayName,
+      studentEmail: row.email,
+      classroomId,
+      classroomName: classroom.name,
+      teacherId,
+      teacherName: classroom.teacher.name,
+      hasAccount: accountByEmailHash.has(row.emailKeyHash)
+    }));
   }
 
   const seen = new Set<string>();
@@ -414,10 +528,37 @@ async function createStudentsFromRows(
   });
 
   try {
-    await prisma.student.createMany({ data });
+    await prisma.$transaction(async (transaction) => {
+      await transaction.student.createMany({ data });
+      await transaction.auditEvent.create({
+        data: auditEventData({
+          actorType: "teacher",
+          actorId: teacherId,
+          action: "students.enrolled",
+          targetType: "classroom",
+          targetId: classroomId,
+          metadata: { count: data.length, identityMode: "STANDARD" }
+        })
+      });
+    });
   } catch {
     errorRedirect(errorPath, "Student names and emails must be unique inside the class.");
   }
+  const created = await prisma.student.findMany({
+    where: { classroomId, email: { in: cleaned.map((row) => row.email) } },
+    select: { id: true, email: true }
+  });
+  const studentByEmail = new Map(created.filter((student) => student.email).map((student) => [student.email as string, student.id]));
+  return cleaned.map((row) => ({
+    studentId: studentByEmail.get(row.email) as string,
+    studentName: row.displayName,
+    studentEmail: row.email,
+    classroomId,
+    classroomName: classroom.name,
+    teacherId,
+    teacherName: classroom.teacher.name,
+    hasAccount: accountByEmail.has(row.email)
+  }));
 }
 
 export async function addStudents(formData: FormData) {
@@ -434,7 +575,14 @@ export async function addStudents(formData: FormData) {
       email: emails[index] || ""
   }));
 
-  await createStudentsFromRows(teacher.id, classroomId, rows, path, formText(formData, "privacyKey"));
+  const invitations = await createStudentsFromRows(
+    teacher.id,
+    classroomId,
+    rows,
+    path,
+    formText(formData, "privacyKey")
+  );
+  await sendEnrollmentEmails(invitations);
   redirect(`${path}?saved=1`);
 }
 
@@ -832,7 +980,19 @@ export async function deleteMaterial(formData: FormData) {
     where: { id: materialId, classroomId, teacherId: teacher.id }
   });
   if (!material) errorRedirect(`/teacher/classes/${classroomId}/materials`, "Assignment not found.");
-  await prisma.material.delete({ where: { id: materialId } });
+  await prisma.$transaction([
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "material.deleted",
+        targetType: "material",
+        targetId: materialId,
+        metadata: { classroomId }
+      })
+    }),
+    prisma.material.delete({ where: { id: materialId } })
+  ]);
   redirect(`/teacher/classes/${classroomId}/materials?deleted=1`);
 }
 
@@ -893,7 +1053,19 @@ export async function deleteAtHomeResource(formData: FormData) {
     where: { id: resourceId, classroomId, teacherId: teacher.id }
   });
   if (!resource) errorRedirect(path, "At-home resource not found.");
-  await prisma.atHomeResource.delete({ where: { id: resource.id } });
+  await prisma.$transaction([
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "home_resource.deleted",
+        targetType: "at_home_resource",
+        targetId: resource.id,
+        metadata: { classroomId }
+      })
+    }),
+    prisma.atHomeResource.delete({ where: { id: resource.id } })
+  ]);
   redirect(`${path}?deleted=1`);
 }
 
@@ -1020,12 +1192,56 @@ export async function updateTeacherPassword(formData: FormData) {
     errorRedirect("/teacher/account", "The new passwords do not match.");
   }
 
-  await prisma.teacher.update({
-    where: { id: teacher.id },
-    data: { passwordHash: await hashPassword(newPassword) }
-  });
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.$transaction([
+    prisma.teacher.update({
+      where: { id: teacher.id },
+      data: { passwordHash }
+    }),
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "teacher.password_changed",
+        targetType: "teacher",
+        targetId: teacher.id
+      })
+    })
+  ]);
 
   redirect("/teacher/account?saved=1");
+}
+
+export async function updateWeeklySummaryPreference(formData: FormData) {
+  const teacher = await requireTeacher();
+  await enforceOrRedirect("/teacher/account", async () => {
+    await enforceRateLimit({
+      scope: "teacher-weekly-summary-preference",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      identifier: teacher.id
+    });
+  });
+  const enabled = formData.get("weeklySummaryEnabled") === "on";
+
+  await prisma.$transaction([
+    prisma.teacher.update({
+      where: { id: teacher.id },
+      data: { weeklySummaryEnabled: enabled }
+    }),
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "teacher.weekly_summary_preference_changed",
+        targetType: "teacher",
+        targetId: teacher.id,
+        metadata: { enabled }
+      })
+    })
+  ]);
+
+  redirect("/teacher/account?emailSettings=1");
 }
 
 export async function submitContactLead(formData: FormData) {

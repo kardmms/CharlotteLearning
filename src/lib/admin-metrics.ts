@@ -102,6 +102,8 @@ export async function getAdminMetrics() {
     admins,
     feedback,
     classrooms,
+    auditEvents,
+    emailDeliveries,
     settings
   ] = await Promise.all([
     prisma.teacher.count(),
@@ -171,6 +173,34 @@ export async function getAdminMetrics() {
             _count: { select: { sessions: true } }
           }
         }
+      }
+    }),
+    prisma.auditEvent.findMany({
+      take: 40,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        actorType: true,
+        actorId: true,
+        action: true,
+        targetType: true,
+        targetId: true,
+        createdAt: true
+      }
+    }),
+    prisma.emailDelivery.findMany({
+      take: 40,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        teacherId: true,
+        studentId: true,
+        classroomId: true,
+        errorCode: true,
+        createdAt: true,
+        sentAt: true
       }
     }),
     getFeedbackSettings()
@@ -291,6 +321,15 @@ export async function getAdminMetrics() {
       role: admin.role,
       createdAt: admin.createdAt.toISOString()
     })),
+    auditEvents: auditEvents.map((event) => ({
+      ...event,
+      createdAt: event.createdAt.toISOString()
+    })),
+    emailDeliveries: emailDeliveries.map((delivery) => ({
+      ...delivery,
+      createdAt: delivery.createdAt.toISOString(),
+      sentAt: delivery.sentAt?.toISOString() || null
+    })),
     settings
   };
 }
@@ -347,6 +386,8 @@ export function getEmptyAdminMetrics(): AdminMetrics {
     feedback: [],
     invites: [],
     admins: [],
+    auditEvents: [],
+    emailDeliveries: [],
     settings: {
       configured: false,
       hint: ""

@@ -208,7 +208,7 @@ export async function requireTeacher() {
 
   const teacher = await prisma.teacher.findUnique({
     where: { id: session.sub },
-    select: { id: true, name: true, email: true }
+    select: { id: true, name: true, email: true, weeklySummaryEnabled: true }
   });
 
   if (!teacher) redirect("/teacher/login");

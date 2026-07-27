@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminRole } from "@prisma/client";
+import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
   clearAdminSession,
@@ -186,14 +187,28 @@ export async function loginAdmin(formData: FormData) {
       loginMatchesBootstrap &&
       password === bootstrapPassword
     ) {
-      const owner = await prisma.adminUser.create({
-        data: {
-          name: bootstrapName,
-          email: bootstrapEmail,
-          username: bootstrapUsername,
-          role: AdminRole.OWNER,
-          passwordHash: await hashPassword(password)
-        }
+      const passwordHash = await hashPassword(password);
+      const owner = await prisma.$transaction(async (transaction) => {
+        const created = await transaction.adminUser.create({
+          data: {
+            name: bootstrapName,
+            email: bootstrapEmail,
+            username: bootstrapUsername,
+            role: AdminRole.OWNER,
+            passwordHash
+          }
+        });
+        await transaction.auditEvent.create({
+          data: auditEventData({
+            actorType: "admin",
+            actorId: created.id,
+            action: "admin.created",
+            targetType: "admin",
+            targetId: created.id,
+            metadata: { signupFlow: "bootstrap", role: "OWNER" }
+          })
+        });
+        return created;
       });
       await setAdminSession(owner);
       redirect("/admin");
@@ -271,7 +286,18 @@ export async function revokeAdminAccess(formData: FormData) {
     errorRedirect("/admin", "Owner access cannot be revoked from this dashboard.");
   }
 
-  await prisma.adminUser.delete({ where: { id: target.id } });
+  await prisma.$transaction([
+    prisma.auditEvent.create({
+      data: auditEventData({
+        actorType: "admin",
+        actorId: admin.id,
+        action: "admin.access_revoked",
+        targetType: "admin",
+        targetId: target.id
+      })
+    }),
+    prisma.adminUser.delete({ where: { id: target.id } })
+  ]);
   redirect("/admin?revoked=1");
 }
 
@@ -321,6 +347,16 @@ export async function acceptAdminInvite(formData: FormData) {
         usedAt: new Date(),
         createdAdminId: created.id
       }
+    });
+    await tx.auditEvent.create({
+      data: auditEventData({
+        actorType: "admin",
+        actorId: created.id,
+        action: "admin.created",
+        targetType: "admin",
+        targetId: created.id,
+        metadata: { signupFlow: "invite", role: "ADMIN" }
+      })
     });
     return created;
   });

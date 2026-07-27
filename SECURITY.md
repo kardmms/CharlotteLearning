@@ -22,7 +22,7 @@ This project is a classroom application, so privacy and simple access matter tog
 ## Network Access
 
 - Browser access is restricted by Content Security Policy. The app allows itself and Cloudflare Turnstile for public form verification.
-- Server-side outbound requests fail closed through `src/lib/outbound.ts`. The default allowlist is `api.openai.com,challenges.cloudflare.com`.
+- Server-side outbound requests fail closed through `src/lib/outbound.ts`. The default allowlist is `api.openai.com,api.resend.com,api.vercel.com,challenges.cloudflare.com`.
 - Update `ALLOWED_OUTBOUND_HOSTS` only when a new production integration is intentionally added and reviewed.
 - Inbound HTTP methods are deny-by-default through `src/middleware.ts`; normal app traffic uses `GET`, `HEAD`, `POST`, and `OPTIONS`.
 
@@ -39,8 +39,11 @@ This project is a classroom application, so privacy and simple access matter tog
 
 - `AUTH_SECRET`: at least 32 random characters.
 - `DATABASE_URL`: managed Postgres connection string with TLS.
+- `DATABASE_ENVIRONMENT`: `production` only for the production database; previews must use a separately provisioned database labeled `preview`.
+- `DATABASE_BACKUPS_CONFIRMED="true"`: set only after confirming snapshot retention and testing a restore into a non-production database.
 - `OPENAI_API_KEY` or `OPEN_AI_KEY`: server-only OpenAI key.
 - `CRON_SECRET`: at least 16 random characters so Vercel can authenticate scheduled maintenance jobs.
+- `NEXT_PUBLIC_SITE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_DELIVERY_ENABLED="true"`: required for transactional and weekly email delivery.
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"`: required when bot protection is ready to enforce in production.
 
 ## Controls That Need Platform Settings
@@ -49,6 +52,9 @@ This project is a classroom application, so privacy and simple access matter tog
 - Require pull-request review, passing CI, CodeQL, dependency review, and supply-chain workflows before merging to `main`.
 - Enable secret scanning and push protection in GitHub.
 - Keep Vercel and database access limited to named admins with MFA.
+- Keep production database credentials out of Preview and Development. The deployment and runtime guards reject a production-labeled database outside Production.
+- Review the `AuditEvent` and `EmailDelivery` tables during incident response. Delivery records store a recipient hash rather than the email address.
+- Confirm Prisma Postgres snapshots in the provider console and periodically restore a snapshot into an isolated database. A backup that has not been restore-tested is not sufficient.
 - Use Vercel Secure Compute or another private networking option if enterprise customers require stricter outbound networking or dedicated egress IPs.
 
 ## RLS Roadmap

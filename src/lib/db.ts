@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { assertDatabaseEnvironmentSafety } from "@/lib/database-safety";
+
+assertDatabaseEnvironmentSafety();
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
