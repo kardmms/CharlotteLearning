@@ -216,7 +216,7 @@ export default function PrivacyPage() {
                 <li>Cloud hosting and security providers may process ordinary request information such as IP address, browser details, time, requested page, and error information.</li>
                 <li>Audit records for account, classroom, email, and destructive actions, including actor and target IDs and limited event metadata.</li>
                 <li>Email-delivery records containing a recipient hash, subject, delivery status, provider message ID, error code, and relevant class or account IDs.</li>
-                <li>Contact-form information: name, email, grade level, and optional phone number or school name.</li>
+                <li>Contact-form information: name, email, grade level, optional phone number or school name, follow-up status, and submission/update timestamps.</li>
                 <li>Teacher feedback: optional teacher email, school or class, rating, strengths, struggles, and requested improvements.</li>
               </ul>
             </article>

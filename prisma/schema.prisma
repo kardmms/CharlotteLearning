@@ -40,10 +40,19 @@ enum AdminRole {
   ADMIN
 }
 
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  CLOSED
+}
+
 enum EmailKind {
   TEACHER_WELCOME
   STUDENT_ENROLLMENT
   WEEKLY_TEACHER_SUMMARY
+  CONTACT_REQUEST_CONFIRMATION
 }
 
 enum EmailDeliveryStatus {
@@ -244,15 +253,18 @@ model StudentAnswer {
 }
 
 model ContactLead {
-  id         String   @id @default(cuid())
+  id         String     @id @default(cuid())
   name       String
   email      String
   phone      String?
   school     String?
   gradeLevel String
-  createdAt  DateTime @default(now())
+  status     LeadStatus @default(NEW)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 model RateLimitBucket {

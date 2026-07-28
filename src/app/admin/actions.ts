@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { AdminRole } from "@prisma/client";
+import { AdminRole, LeadStatus } from "@prisma/client";
 import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
@@ -322,6 +322,53 @@ export async function revokeAdminInvite(formData: FormData) {
 
   if (!revoked) errorRedirect(peoplePath, "That invitation is expired, already used, or no longer exists.");
   redirect(`${peoplePath}?inviteRevoked=1`);
+}
+
+export async function updateLeadStatus(formData: FormData) {
+  const admin = await requireAdmin();
+  const leadsPath = "/admin/leads";
+  const leadId = formText(formData, "leadId");
+  const requestedStatus = formText(formData, "status") as LeadStatus;
+
+  await enforceOrRedirect(leadsPath, async () => {
+    await enforceRateLimit({
+      scope: "admin-update-lead-status",
+      limit: 120,
+      windowSeconds: 60 * 60,
+      identifier: admin.id
+    });
+  });
+
+  if (!leadId || !Object.values(LeadStatus).includes(requestedStatus)) {
+    errorRedirect(leadsPath, "Choose a valid lead status.");
+  }
+
+  const lead = await prisma.contactLead.findUnique({
+    where: { id: leadId },
+    select: { id: true, status: true }
+  });
+  if (!lead) errorRedirect(leadsPath, "Lead not found.");
+
+  if (lead.status !== requestedStatus) {
+    await prisma.$transaction([
+      prisma.contactLead.update({
+        where: { id: lead.id },
+        data: { status: requestedStatus }
+      }),
+      prisma.auditEvent.create({
+        data: auditEventData({
+          actorType: "admin",
+          actorId: admin.id,
+          action: "contact_lead.status_changed",
+          targetType: "contact_lead",
+          targetId: lead.id,
+          metadata: { from: lead.status, to: requestedStatus }
+        })
+      })
+    ]);
+  }
+
+  redirect(`${leadsPath}?updated=1`);
 }
 
 export async function acceptAdminInvite(formData: FormData) {

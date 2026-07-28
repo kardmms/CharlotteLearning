@@ -17,7 +17,11 @@ import { normalizeStudentEmail } from "@/lib/codes";
 import { extractStudentRosterWithAI, generateQuestionsFromText } from "@/lib/ai";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
-import { sendStudentEnrollmentEmail, sendTeacherWelcomeEmail } from "@/lib/email";
+import {
+  sendContactRequestConfirmation,
+  sendStudentEnrollmentEmail,
+  sendTeacherWelcomeEmail
+} from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import {
@@ -1265,7 +1269,7 @@ export async function submitContactLead(formData: FormData) {
     errorRedirect("/contact", "Enter a valid phone number or leave it blank.");
   }
 
-  await prisma.contactLead.create({
+  const lead = await prisma.contactLead.create({
     data: {
       name,
       email,
@@ -1274,5 +1278,23 @@ export async function submitContactLead(formData: FormData) {
       gradeLevel
     }
   });
-  redirect("/contact?sent=1");
+
+  await prisma.auditEvent.create({
+    data: auditEventData({
+      actorType: "system",
+      action: "contact_lead.created",
+      targetType: "contact_lead",
+      targetId: lead.id,
+      metadata: { status: "NEW" }
+    })
+  });
+
+  let confirmationSent = false;
+  try {
+    const confirmation = await sendContactRequestConfirmation({ name, email });
+    confirmationSent = confirmation.status === "sent";
+  } catch (error) {
+    console.error("Contact request confirmation email failed", error);
+  }
+  redirect(`/contact?sent=1${confirmationSent ? "&confirmed=1" : ""}`);
 }

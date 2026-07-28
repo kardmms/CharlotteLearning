@@ -14,6 +14,7 @@ import {
   Database,
   DollarSign,
   Gauge,
+  Inbox,
   KeyRound,
   LineChart,
   LogOut,
@@ -32,6 +33,7 @@ import {
   logoutAdmin,
   revokeAdminAccess,
   revokeAdminInvite,
+  updateLeadStatus,
   updateFeedbackPasscode
 } from "@/app/admin/actions";
 import type { AdminMetrics } from "@/lib/admin-metrics";
@@ -45,7 +47,7 @@ type AdminIdentity = {
   role: string;
 };
 
-export type AdminView = "dashboard" | "analytics" | "people" | "feedback" | "settings" | "server" | "ai-usage";
+export type AdminView = "dashboard" | "analytics" | "leads" | "people" | "feedback" | "settings" | "server" | "ai-usage";
 
 type InviteFlash = {
   inviteId: string;
@@ -60,6 +62,14 @@ const compactNumberFormat = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 1
 });
+
+const leadStatusOptions = [
+  { value: "NEW", label: "New" },
+  { value: "CONTACTED", label: "Contacted" },
+  { value: "QUALIFIED", label: "Qualified" },
+  { value: "CONVERTED", label: "Converted" },
+  { value: "CLOSED", label: "Closed" }
+] as const;
 
 function formatNumber(value: number) {
   return numberFormat.format(value);
@@ -489,6 +499,86 @@ function FeedbackPanel({ metrics }: { metrics: AdminMetrics }) {
         {metrics.feedback.length === 0 && <p>No teacher feedback submitted yet.</p>}
       </div>
     </section>
+  );
+}
+
+function LeadsPanel({ metrics }: { metrics: AdminMetrics }) {
+  const newLeads = metrics.leads.filter((lead) => lead.status === "NEW").length;
+  const activeLeads = metrics.leads.filter((lead) => (
+    lead.status === "CONTACTED" || lead.status === "QUALIFIED"
+  )).length;
+  const convertedLeads = metrics.leads.filter((lead) => lead.status === "CONVERTED").length;
+
+  return (
+    <>
+      <section className="admin-stat-grid compact">
+        <MetricCard icon={<Inbox size={22} />} label="Total leads" value={metrics.headline.contactLeads} detail="Requests currently retained" />
+        <MetricCard icon={<MailPlus size={22} />} label="New" value={newLeads} detail="Waiting for first contact" tone="orange" />
+        <MetricCard icon={<Activity size={22} />} label="In progress" value={activeLeads} detail="Contacted or qualified" tone="blue" />
+        <MetricCard icon={<CheckCircle2 size={22} />} label="Converted" value={convertedLeads} detail="Moved forward successfully" tone="green" />
+      </section>
+
+      <section className="admin-glass-panel admin-leads-panel">
+        <div className="admin-card-head">
+          <div>
+            <h2>Leads</h2>
+            <p>Classroom-plan requests submitted through the public contact form.</p>
+          </div>
+          <Inbox size={20} />
+        </div>
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-leads-table">
+            <thead>
+              <tr>
+                <th>Contact</th>
+                <th>School</th>
+                <th>Grade</th>
+                <th>Received</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.leads.map((lead) => (
+                <tr key={lead.id}>
+                  <td>
+                    <div className="admin-lead-contact">
+                      <strong>{lead.name}</strong>
+                      <a href={`mailto:${lead.email}`}>{lead.email}</a>
+                      {lead.phone ? <a href={`tel:${lead.phone}`}>{lead.phone}</a> : null}
+                    </div>
+                  </td>
+                  <td>{lead.school || "Not provided"}</td>
+                  <td>{lead.gradeLevel}</td>
+                  <td>
+                    <strong>{lead.time}</strong>
+                    <span>{formatDateTime(lead.createdAt)}</span>
+                  </td>
+                  <td>
+                    <form className="admin-lead-status-form" action={updateLeadStatus}>
+                      <input type="hidden" name="leadId" value={lead.id} />
+                      <select
+                        aria-label={`Status for ${lead.name}`}
+                        className={`admin-lead-status ${lead.status.toLowerCase()}`}
+                        defaultValue={lead.status}
+                        name="status"
+                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                      >
+                        {leadStatusOptions.map((status) => (
+                          <option key={status.value} value={status.value}>{status.label}</option>
+                        ))}
+                      </select>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+              {metrics.leads.length === 0 && (
+                <tr><td colSpan={5}>No contact requests have been submitted yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -922,6 +1012,7 @@ export function AdminDashboardClient({
   const title = {
     dashboard: "Main Dashboard",
     analytics: "Analytics",
+    leads: "Leads",
     people: "People",
     feedback: "Feedback",
     settings: "Settings",
@@ -931,6 +1022,7 @@ export function AdminDashboardClient({
   const subtitle = {
     dashboard: "Live product, classroom, learning, and feedback metrics for Charlotte AI.",
     analytics: "Trends, learning quality, grade mix, and classroom traction.",
+    leads: "Contact requests, follow-up status, and classroom sales opportunities.",
     people: "Admin access, owner controls, and invite history.",
     feedback: "Weekly teacher feedback and product notes.",
     settings: "Feedback passcode and operational controls.",
@@ -948,6 +1040,7 @@ export function AdminDashboardClient({
         <nav aria-label="Admin sections">
           <a href="/admin" className={view === "dashboard" ? "active" : ""}><Gauge size={19} /> Dashboard</a>
           <a href="/admin/analytics" className={view === "analytics" ? "active" : ""}><BarChart3 size={19} /> Analytics</a>
+          <a href="/admin/leads" className={view === "leads" ? "active" : ""}><Inbox size={19} /> Leads</a>
           <a href="/admin/people" className={view === "people" ? "active" : ""}><UsersRound size={19} /> People</a>
           <a href="/admin/feedback" className={view === "feedback" ? "active" : ""}><MessageSquareText size={19} /> Feedback</a>
           <a href="/admin/server" className={view === "server" ? "active" : ""}><Server size={19} /> Server</a>
@@ -1014,6 +1107,8 @@ export function AdminDashboardClient({
             </section>
           </>
         )}
+
+        {view === "leads" && <LeadsPanel metrics={metrics} />}
 
         {view === "people" && (
           <>

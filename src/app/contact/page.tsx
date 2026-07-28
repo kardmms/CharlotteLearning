@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function ContactPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string; confirmed?: string }>;
 }) {
   const query = await searchParams;
 
@@ -26,7 +26,11 @@ export default async function ContactPage({
         <section className="panel contact-form-panel">
           <Message
             error={query.error}
-            success={query.sent ? "Thanks! We received your request and will be in touch." : undefined}
+            success={query.sent
+              ? query.confirmed
+                ? "Thanks! We received your request, sent a confirmation email, and will be in touch shortly."
+                : "Thanks! We received your request and will be in touch shortly."
+              : undefined}
           />
           {!query.sent && (
             <form className="form-grid" action={submitContactLead}>

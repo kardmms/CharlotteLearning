@@ -56,7 +56,7 @@ function emailFrame(content: string) {
         </div>
         <div style="padding:28px;line-height:1.6;">${content}</div>
         <div style="padding:18px 28px;background:#f7faf7;color:#597060;font-size:12px;">
-          This message was sent because this email is connected to a Charlotte Learning classroom.
+          This message was sent by Charlotte Learning.
         </div>
       </div>
     </div>
@@ -213,6 +213,27 @@ export async function sendStudentEnrollmentEmail(input: {
     teacherId: input.teacherId,
     studentId: input.studentId,
     classroomId: input.classroomId
+  });
+}
+
+export async function sendContactRequestConfirmation(input: {
+  name: string;
+  email: string;
+}) {
+  const subject = "We received your Charlotte Learning request";
+  const content = `
+    <h1 style="font-size:26px;margin:0 0 12px;">Thanks for reaching out, ${escapeHtml(input.name)}.</h1>
+    <p>We received your request to learn more about bringing Charlotte AI to your classroom.</p>
+    <p>Someone from Charlotte Learning will review the details and be in touch shortly.</p>
+    <p style="color:#597060;">If you did not send this request, you can ignore this email or reply to let us know.</p>
+  `;
+
+  return sendTrackedEmail({
+    kind: EmailKind.CONTACT_REQUEST_CONFIRMATION,
+    to: input.email,
+    subject,
+    html: emailFrame(content),
+    text: `Thanks for reaching out, ${input.name}. We received your request to learn more about bringing Charlotte AI to your classroom. Someone from Charlotte Learning will be in touch shortly. If you did not send this request, you can ignore this email or reply to let us know.`
   });
 }
 

@@ -1,0 +1,9 @@
+CREATE TYPE "LeadStatus" AS ENUM ('NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'CLOSED');
+
+ALTER TYPE "EmailKind" ADD VALUE 'CONTACT_REQUEST_CONFIRMATION';
+
+ALTER TABLE "ContactLead"
+  ADD COLUMN "status" "LeadStatus" NOT NULL DEFAULT 'NEW',
+  ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX "ContactLead_status_createdAt_idx" ON "ContactLead"("status", "createdAt");

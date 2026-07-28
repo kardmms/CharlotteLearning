@@ -45,7 +45,7 @@ Open `http://localhost:3000`.
 - Teacher and student sessions are stored in HTTP-only cookies.
 - Teachers can only access their own classes, materials, students, and exports.
 - Students can only access published material for their own class.
-- Contact forms require only name, email, and grade level; phone and school are optional.
+- Contact forms require only name, email, and grade level; phone and school are optional. Submissions appear in the admin Leads page with follow-up statuses, and requesters receive a tracked confirmation email.
 - Contact leads are pruned by a protected Vercel Cron job after the configured retention window.
 - Teacher welcome emails and student enrollment invitations are delivered through Resend and recorded without storing recipient addresses in the delivery log.
 - Teachers can opt in or out of Monday summary emails from Account settings. Weekly emails include participation, completion, accuracy, question-type strengths, growth areas, and per-student signals.

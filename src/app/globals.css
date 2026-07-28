@@ -7432,3 +7432,84 @@ tr:last-child td {
   .admin-month-score-bars { gap: 5px; }
   .admin-month-score-bars em { display: none; }
 }
+
+.admin-leads-panel {
+  margin-top: 18px;
+}
+
+.admin-leads-table {
+  min-width: 820px;
+}
+
+.admin-lead-contact {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-lead-contact a {
+  color: #2563eb;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.admin-lead-contact a:hover {
+  text-decoration: underline;
+}
+
+.admin-lead-status-form {
+  margin: 0;
+}
+
+.admin-lead-status {
+  min-width: 132px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.035em;
+  min-height: 38px;
+  padding: 7px 34px 7px 13px;
+  text-transform: uppercase;
+}
+
+.admin-lead-status.new {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.admin-lead-status.contacted {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-lead-status.qualified {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.admin-lead-status.converted {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.admin-lead-status.closed {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+:root[data-theme="dark"] .admin-lead-contact a {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .admin-lead-status {
+  background: #172033;
+}

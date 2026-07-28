@@ -85,6 +85,7 @@ export async function getAdminMetrics() {
     firstTryAnswers,
     focusAlerts,
     contactLeads,
+    leads,
     feedbackCount,
     recentTeachers,
     recentClasses,
@@ -128,6 +129,10 @@ export async function getAdminMetrics() {
     prisma.studentAnswer.count({ where: { firstTryCorrect: true } }),
     prisma.studentSession.count({ where: { focusViolationCount: { gt: 0 } } }),
     prisma.contactLead.count(),
+    prisma.contactLead.findMany({
+      take: 200,
+      orderBy: { createdAt: "desc" }
+    }),
     prisma.teacherFeedback.count(),
     prisma.teacher.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
     prisma.classroom.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
@@ -320,6 +325,18 @@ export async function getAdminMetrics() {
     },
     monthlyClassScores: buildMonthlyClassScores(monthlyScoreMaterials, 6, now),
     topClassrooms,
+    leads: leads.map((lead) => ({
+      id: lead.id,
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      school: lead.school,
+      gradeLevel: lead.gradeLevel,
+      status: lead.status,
+      createdAt: lead.createdAt.toISOString(),
+      updatedAt: lead.updatedAt.toISOString(),
+      time: timeAgo(lead.createdAt)
+    })),
     activityTimeline,
     feedback: feedback.map((item) => ({
       id: item.id,
@@ -415,6 +432,7 @@ export function getEmptyAdminMetrics(): AdminMetrics {
     },
     monthlyClassScores: buildMonthlyClassScores([], 6, now),
     topClassrooms: [],
+    leads: [],
     activityTimeline: [],
     feedback: [],
     invites: [],
