@@ -32,5 +32,8 @@ export async function startShowcase() {
   const passwordHash = await hashPassword(crypto.randomBytes(32).toString("base64url"));
   const workspace = await createShowcaseWorkspace(passwordHash);
   await setShowcaseTeacherSession(workspace.teacher);
-  redirect(`/teacher/classes/${workspace.classroomId}`);
+  // Resolve the classroom from the session on the next request. If two tabs
+  // start a showcase together, whichever session cookie wins also determines
+  // the destination instead of leaving the other tab on a mismatched class ID.
+  redirect("/teacher/showcase");
 }

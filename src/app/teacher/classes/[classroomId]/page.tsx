@@ -5,7 +5,7 @@ import { ClassNav } from "@/components/ClassNav";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gradeLabel } from "@/lib/grade";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +156,16 @@ export default async function ClassOverviewPage({
       }
     })
   ]);
+  if (!classroom && teacher.isShowcase) {
+    const activeShowcaseClass = await prisma.classroom.findFirst({
+      where: { teacherId: teacher.id, archivedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: { id: true }
+    });
+    if (activeShowcaseClass) {
+      redirect(`/teacher/classes/${activeShowcaseClass.id}`);
+    }
+  }
   if (!classroom) notFound();
 
   const activities = classroom.materials;
