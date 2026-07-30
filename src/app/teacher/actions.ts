@@ -594,7 +594,9 @@ export async function addStudents(formData: FormData) {
     path,
     formText(formData, "privacyKey")
   );
-  await sendEnrollmentEmails(invitations);
+  if (!teacher.isShowcase) {
+    await sendEnrollmentEmails(invitations);
+  }
   redirect(`${path}?saved=1`);
 }
 

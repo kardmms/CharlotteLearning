@@ -276,7 +276,16 @@ export async function requireTeacher() {
     }
   });
 
+  if (!teacher && session.showcase) {
+    const restoredTeacherSession = await clearTeacherSession();
+    redirect(restoredTeacherSession ? "/teacher/classes" : "/showcase?expired=1");
+  }
   if (!teacher) redirect("/teacher/login");
+  if (teacher.isShowcase && (!teacher.showcaseExpiresAt || teacher.showcaseExpiresAt <= new Date())) {
+    await prisma.teacher.delete({ where: { id: teacher.id } }).catch(() => undefined);
+    const restoredTeacherSession = await clearTeacherSession();
+    redirect(restoredTeacherSession ? "/teacher/classes" : "/showcase?expired=1");
+  }
   return teacher;
 }
 
