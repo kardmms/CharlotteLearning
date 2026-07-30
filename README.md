@@ -36,6 +36,20 @@ It gives teachers a setup flow, secure teacher/student access, source-based 15-m
 
 Open `http://localhost:3000`.
 
+## Showcase mode
+
+`/showcase` creates an isolated, two-hour workspace and opens the normal teacher portal routes.
+There is no separate showcase dashboard: the class overview, assignments, progress, responses,
+analytics, roster, appearance, and account screens are the same pages used by signed-in teachers.
+
+While a showcase session is open, a server-side simulator gradually creates fictional student
+sessions and answers in the same records consumed by the teacher portal. Multiple-choice behavior
+uses stable proficiency profiles. Free responses use the assignment grade level, question rubric,
+and source excerpt with `OPENAI_API_KEY` (or `OPEN_AI_KEY`) when configured. Set
+`SHOWCASE_OPENAI_MODEL` to override the showcase-only model. A varied local fallback keeps the
+showcase working if the OpenAI API is unavailable. Showcase workspaces expire automatically,
+do not send student enrollment email, and are deleted when the visitor exits the showcase.
+
 ## Security baseline
 
 - Teacher passwords are hashed.

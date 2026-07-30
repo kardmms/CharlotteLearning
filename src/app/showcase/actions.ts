@@ -4,9 +4,20 @@ import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { getTeacherSession, hashPassword, setShowcaseTeacherSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { createShowcaseWorkspace } from "@/lib/showcase";
 
 export async function startShowcase() {
+  try {
+    await enforceRateLimit({ scope: "showcase-start", limit: 8, windowSeconds: 60 * 60 });
+    await clearExpiredRateLimits();
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      redirect(`/showcase?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
   const currentSession = await getTeacherSession();
   if (currentSession) {
     const currentTeacher = await prisma.teacher.findUnique({

@@ -315,6 +315,7 @@ export async function sendWeeklyTeacherSummaries(now = new Date()) {
   const { periodStart, periodEnd } = previousWeeklyPeriod(now);
   const teachers = await prisma.teacher.findMany({
     where: {
+      isShowcase: false,
       weeklySummaryEnabled: true,
       classrooms: { some: { archivedAt: null } }
     },

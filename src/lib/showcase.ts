@@ -222,6 +222,17 @@ function gradeWritingGuidance(gradeLevel: string) {
 }
 
 function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, index: number) {
+  const seed = stableNumber(`${task.studentId}:${task.questionId}:writing`);
+  const elementaryOpeners = [
+    "I think", "My answer is", "One clue is", "The story shows", "I noticed", "This means",
+    "A detail is", "Mara learns", "The group learns", "It seems", "I predict", "The lesson is"
+  ];
+  const evidenceOpeners = [
+    "For example", "One detail is", "The clearest evidence is", "This is supported when",
+    "The text explains that", "A moment that shows this is", "We can see this when", "The story says"
+  ];
+  const elementaryOpener = elementaryOpeners[seed % elementaryOpeners.length];
+  const evidenceOpener = evidenceOpeners[Math.floor(seed / elementaryOpeners.length) % evidenceOpeners.length];
   const evidence = task.contextExcerpt
     .replace(/\s+/g, " ")
     .split(/[.!?]/)
@@ -232,26 +243,30 @@ function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, 
   const shortEvidence = evidence || "the characters solve one part at a time";
   if (Number.isFinite(grade) && grade <= 2) {
     return index % 2 === 0
-      ? "They will get ready and help each other."
-      : "The big job got easier when friends helped.";
+      ? `${elementaryOpener} they will get ready and help each other.`
+      : `${elementaryOpener} the big job got easier when friends helped.`;
   }
   if (task.profile === "needs_support") {
     return index % 2 === 0
-      ? "I think they will be ready because they made a plan for next time."
-      : "Mara learns that people can help with a big problem. They each did a small part.";
+      ? `${elementaryOpener} they will be ready because they made a plan for next time.`
+      : `${elementaryOpener} people can help with a big problem. They each did a small part.`;
   }
   if (task.profile === "developing") {
-    return `The group will probably work together again. The text says ${shortEvidence.toLowerCase()}.`;
+    return `The group will probably work together again. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
   }
   if (task.profile === "strong") {
-    return `Mara learns that planning and teamwork can make a difficult problem manageable. One useful detail is that ${shortEvidence.toLowerCase()}.`;
+    return `Mara learns that planning and teamwork can make a difficult problem manageable. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
   }
   return index % 2 === 0
-    ? `They will probably follow their storm plan and divide the work. This makes sense because ${shortEvidence.toLowerCase()}.`
-    : `The lesson is that a large problem becomes easier when people plan and cooperate. The story shows this when ${shortEvidence.toLowerCase()}.`;
+    ? `They will probably follow their storm plan and divide the work. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`
+    : `The lesson is that a large problem becomes easier when people plan and cooperate. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
 }
 
-async function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel: string) {
+async function generateWrittenResponses(
+  tasks: ShowcaseWrittenTask[],
+  gradeLevel: string,
+  existingAnswerTexts: string[]
+) {
   const fallback = new Map(tasks.map((task, index) => [
     `${task.studentId}:${task.questionId}`,
     fallbackWrittenResponse(task, gradeLevel, index)
@@ -264,7 +279,33 @@ async function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel
     const model = process.env.SHOWCASE_OPENAI_MODEL || "gpt-5.6-terra";
     const completion = await openai.chat.completions.create({
       model,
-      response_format: { type: "json_object" },
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "showcase_student_responses",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              responses: {
+                type: "array",
+                maxItems: 6,
+                items: {
+                  type: "object",
+                  properties: {
+                    studentId: { type: "string" },
+                    answerText: { type: "string" }
+                  },
+                  required: ["studentId", "answerText"],
+                  additionalProperties: false
+                }
+              }
+            },
+            required: ["responses"],
+            additionalProperties: false
+          }
+        }
+      },
       messages: [
         {
           role: "system",
@@ -298,7 +339,8 @@ async function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel
     const raw = completion.choices[0]?.message.content;
     if (!raw) return { responses: fallback, usedOpenAI: false };
     const parsed = ShowcaseResponseSchema.parse(JSON.parse(raw));
-    const seen = new Set<string>();
+    const seen = new Set(existingAnswerTexts.map((answer) => answer.replace(/\s+/g, " ").trim().toLowerCase()));
+    let acceptedResponses = 0;
     for (const item of parsed.responses) {
       const task = tasks.find((candidate) => candidate.studentId === item.studentId);
       if (!task) continue;
@@ -307,8 +349,9 @@ async function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel
       if (!normalized || seen.has(duplicateKey)) continue;
       seen.add(duplicateKey);
       fallback.set(`${task.studentId}:${task.questionId}`, normalized);
+      acceptedResponses += 1;
     }
-    return { responses: fallback, usedOpenAI: parsed.responses.length > 0 };
+    return { responses: fallback, usedOpenAI: acceptedResponses > 0 };
   } catch (error) {
     console.error("Showcase response generation fell back to local samples", error);
     return { responses: fallback, usedOpenAI: false };
@@ -438,7 +481,17 @@ export async function runShowcaseTick(teacherId: string) {
       contextExcerpt: question.contextExcerpt || material.sourcePreview || material.sourceText?.slice(0, 800) || ""
     } satisfies ShowcaseWrittenTask];
   });
-  const generated = await generateWrittenResponses(writtenTasks, material.classroom.gradeLevel);
+  const writtenQuestionIds = new Set(
+    material.questions.filter((question) => parseChoices(question.choicesJson).length === 0).map((question) => question.id)
+  );
+  const existingWrittenAnswers = material.sessions.flatMap((session) => session.answers)
+    .filter((answer) => writtenQuestionIds.has(answer.questionId))
+    .map((answer) => answer.answerText);
+  const generated = await generateWrittenResponses(
+    writtenTasks,
+    material.gradeLevel || material.classroom.gradeLevel,
+    existingWrittenAnswers
+  );
 
   let completed = 0;
   await prisma.$transaction(async (transaction) => {

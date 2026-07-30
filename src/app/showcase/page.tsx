@@ -2,8 +2,15 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import { startShowcase } from "@/app/showcase/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
+import { Message } from "@/components/Message";
 
-export default function ShowcasePage() {
+export default async function ShowcasePage({
+  searchParams
+}: {
+  searchParams: Promise<{ error?: string; expired?: string }>;
+}) {
+  const query = await searchParams;
+
   return (
     <>
       <PublicTopbar />
@@ -19,6 +26,10 @@ export default function ShowcasePage() {
             class and an original reading activity. Simulated students will begin working while
             you explore live progress, responses, assignments, and analytics.
           </p>
+          <Message
+            error={query.error}
+            success={query.expired ? "That showcase expired. Start a fresh one to continue exploring." : undefined}
+          />
           <div className="actions">
             <form action={startShowcase}>
               <button className="button" type="submit">
