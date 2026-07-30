@@ -24,6 +24,8 @@ import {
   sendTeacherWelcomeEmail
 } from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
+import { excerptForQuestion } from "@/lib/text-context";
+import { startShowcaseMaterialSimulation } from "@/lib/showcase";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import {
   cleanPrivacyKey,
@@ -959,6 +961,13 @@ export async function saveMaterialDraft(formData: FormData) {
         .filter(Boolean);
       const choices = repeatedChoices.length ? repeatedChoices : textareaChoices;
       const useChoices = format === "MULTIPLE_CHOICE" || format === "CHECKBOXES";
+      const submittedExcerpt = formText(formData, `context-${question.id}`).slice(0, 900);
+      const selectedExcerpt = submittedExcerpt || (material.sourceText
+        ? excerptForQuestion(
+          material.sourceText,
+          [formText(formData, `prompt-${question.id}`), ...choices].join(" ")
+        ).excerpt
+        : "");
 
       return prisma.question.update({
         where: { id: question.id },
@@ -970,7 +979,7 @@ export async function saveMaterialDraft(formData: FormData) {
           rubric: formText(formData, `rubric-${question.id}`).slice(0, 900) || null,
           skillTag: formText(formData, `skill-${question.id}`).slice(0, 80) || null,
           standardCode: formText(formData, `standard-${question.id}`).slice(0, 80) || null,
-          contextExcerpt: formText(formData, `context-${question.id}`).slice(0, 900) || null,
+          contextExcerpt: selectedExcerpt || null,
           sourcePage: formText(formData, `sourcePage-${question.id}`).slice(0, 80) || null,
           timeLimitSeconds: Math.max(0, Number(formData.get(`timeLimit-${question.id}`) || 0)) || null,
           randomizeChoices: formData.get(`randomize-${question.id}`) === "on",
@@ -1109,6 +1118,28 @@ export async function publishMaterial(formData: FormData) {
   });
 
   redirect(`/teacher/classes/${classroomId}`);
+}
+
+export async function startShowcaseSimulation(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const materialId = formText(formData, "materialId");
+  const path = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
+  if (!teacher.isShowcase) errorRedirect(path, "Simulation is available only in showcase mode.");
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({
+      scope: "showcase-start-simulation",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      identifier: teacher.id
+    });
+  });
+  try {
+    await startShowcaseMaterialSimulation(teacher.id, classroomId, materialId);
+  } catch (error) {
+    errorRedirect(path, error instanceof Error ? error.message : "Simulation could not start.");
+  }
+  redirect(`${path}?tab=responses&simulation=running`);
 }
 
 export async function unpublishMaterial(formData: FormData) {

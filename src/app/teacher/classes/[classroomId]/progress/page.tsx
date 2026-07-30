@@ -57,12 +57,15 @@ function questionState(
 }
 
 export default async function ProgressPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ classroomId: string }>;
+  searchParams: Promise<{ materialId?: string }>;
 }) {
   const teacher = await requireTeacher();
   const { classroomId } = await params;
+  const query = await searchParams;
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId: teacher.id },
     include: {
@@ -71,7 +74,11 @@ export default async function ProgressPage({
         orderBy: { displayName: "asc" }
       },
       materials: {
-        where: { status: "PUBLISHED", activityKind: "IN_CLASS" },
+        where: {
+          status: "PUBLISHED",
+          activityKind: "IN_CLASS",
+          ...(query.materialId ? { id: query.materialId } : {})
+        },
         orderBy: { createdAt: "desc" },
         take: 1,
         include: {

@@ -71,6 +71,7 @@ model Teacher {
   isShowcase           Boolean          @default(false)
   showcaseExpiresAt    DateTime?
   showcaseNextTickAt   DateTime?
+  showcaseCleanupAt    DateTime?
   createdAt            DateTime         @default(now())
   classrooms           Classroom[]
   materials            Material[]
@@ -157,6 +158,8 @@ model Material {
   generationNotes  String?
   isAdaptiveHome   Boolean          @default(false)
   targetStudentId  String?
+  showcaseSimulationStartedAt   DateTime?
+  showcaseSimulationCompletedAt DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   teacher          Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
@@ -167,6 +170,7 @@ model Material {
 
   @@unique([targetStudentId, seriesKey])
   @@index([teacherId, updatedAt])
+  @@index([teacherId, showcaseSimulationStartedAt, showcaseSimulationCompletedAt])
   @@index([classroomId, createdAt])
   @@index([classroomId, activityKind, isAdaptiveHome, availableAt])
 }

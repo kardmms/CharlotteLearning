@@ -6178,6 +6178,165 @@ tr:last-child td {
   min-height: 110px;
 }
 
+.question-student-preview {
+  overflow: hidden;
+  border: 1px solid #bfdbfe;
+  border-radius: 18px;
+  background: #eff6ff;
+}
+
+.question-student-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #bfdbfe;
+  background: #dbeafe;
+}
+
+.question-student-preview-heading div { display: grid; gap: 2px; }
+.question-student-preview-heading span {
+  color: #2563eb;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.question-student-preview-heading strong { color: #172554; }
+.question-student-preview-heading em {
+  border-radius: 999px;
+  background: white;
+  color: #1d4ed8;
+  padding: 5px 9px;
+  font-size: .75rem;
+  font-style: normal;
+  font-weight: 850;
+}
+.question-student-preview-prompt {
+  padding: 15px 17px;
+  background: white;
+  color: var(--ink);
+  font-weight: 900;
+}
+.question-student-preview blockquote {
+  margin: 0;
+  padding: 17px;
+  color: #1e3a8a;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.question-excerpt-editor {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 12px 14px;
+}
+.question-excerpt-editor summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 850;
+}
+.question-excerpt-editor[open] summary { margin-bottom: 13px; }
+
+.showcase-guide,
+.showcase-simulation-status,
+.showcase-guide-reopen {
+  position: fixed;
+  z-index: 120;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, .22);
+}
+
+.showcase-guide {
+  left: 20px;
+  bottom: 20px;
+  width: min(390px, calc(100vw - 40px));
+  border: 1px solid #93c5fd;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .98);
+  padding: 17px;
+}
+.showcase-guide-heading,
+.showcase-guide-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.showcase-guide-heading span {
+  color: #2563eb;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.showcase-guide-heading button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+.showcase-guide > strong {
+  display: block;
+  margin-top: 9px;
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+.showcase-guide > p { margin: 7px 0 14px; color: #475569; line-height: 1.45; }
+.showcase-guide-actions a,
+.showcase-guide-actions button,
+.showcase-guide-reopen {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 850;
+  text-decoration: none;
+}
+.showcase-guide-actions a { background: #2563eb; color: white; padding: 9px 13px; }
+.showcase-guide-actions button { background: transparent; color: #64748b; padding: 8px; }
+.showcase-guide-reopen {
+  left: 18px;
+  bottom: 18px;
+  background: #2563eb;
+  color: white;
+  padding: 10px 14px;
+}
+
+.showcase-simulation-status {
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 270px;
+  border: 1px solid #93c5fd;
+  border-radius: 16px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 14px 16px;
+}
+.showcase-simulation-status.complete { border-color: #86efac; background: #f0fdf4; color: #15803d; }
+.showcase-simulation-status div { display: grid; gap: 3px; }
+.showcase-simulation-status span { color: #64748b; font-size: .8rem; }
+.showcase-spinner { animation: showcase-spin .9s linear infinite; }
+.showcase-simulation-button:not(:disabled) { animation: showcase-target-pulse 1.8s ease-in-out infinite; }
+
+@keyframes showcase-spin { to { transform: rotate(360deg); } }
+@keyframes showcase-target-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, .28); }
+  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
+}
+
+@media (max-width: 640px) {
+  .showcase-guide { left: 12px; bottom: 12px; width: calc(100vw - 24px); }
+  .showcase-simulation-status { right: 12px; bottom: 12px; min-width: 0; max-width: calc(100vw - 24px); }
+}
+
 .check-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

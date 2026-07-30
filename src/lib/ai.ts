@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { restrictedFetch } from "@/lib/outbound";
 import { standardsReferenceForGrade } from "@/lib/standards";
-import { sourceExcerptWindows } from "@/lib/text-context";
+import { excerptForQuestion, sourceExcerptWindows } from "@/lib/text-context";
 
 function textField(maxLength: number, minLength = 0) {
   return z.preprocess(
@@ -220,7 +220,6 @@ export async function generateQuestionsFromText(input: {
   activityFocus?: string;
   activityLabel?: string;
 }) {
-  const fallbackContexts = sourceExcerptWindows(input.text, 24);
   const apiKey = openAiApiKey();
   if (!apiKey) return demoQuestions(input);
 
@@ -251,12 +250,13 @@ export async function generateQuestionsFromText(input: {
           "Keep the support wording simple and student-friendly. Challenge may live in the target vocabulary word, inference, evidence, or idea—not in accidental extra words in the question or answer choices.",
           "If a hard word is not the target vocabulary word or the actual skill being assessed, replace it with a clear grade-level synonym.",
           "Avoid answer choices such as 'not just or equitable' unless the question is directly teaching those words. Prefer clearer support wording such as 'not fair.'",
-          "When a question asks about a specific part of the reading, include a 2-3 sentence contextExcerpt copied or lightly cleaned from the uploaded text so students do not have to hunt for the passage.",
+          "Every question must include a contextExcerpt containing only the one or two source sentences most directly needed to answer that exact question.",
+          "Copy those sentences from the uploaded text. Do not summarize, invent, or include unrelated surrounding paragraphs.",
           "Also include sourcePage. Prefer a visible book page number, chapter-page label, or printed page marker near the excerpt. If the PDF combines multiple book pages on one PDF page, choose the visible book page closest to the excerpt. If no book page is visible, use the nearest [[PAGE n]] marker as 'PDF page n'.",
           "Do not put the context excerpt inside the prompt. Put it only in contextExcerpt.",
           "Every question must be genuinely aligned to one California Common Core ELA/Literacy standard for the target grade.",
           "Use exactly this JSON shape:",
-          '{"notes":"short teacher note","questions":[{"type":"VOCAB|COMPREHENSION|PREDICTION|SHORT_RESPONSE","prompt":"...","contextExcerpt":"2-3 sentence excerpt students should read first","sourcePage":"book page 12 or PDF page 3","choices":["A","B","C","D"],"correctAnswer":"...","rubric":"...","skillTag":"...","standardCode":"RL.3.1","difficulty":1}]}',
+          '{"notes":"short teacher note","questions":[{"type":"VOCAB|COMPREHENSION|PREDICTION|SHORT_RESPONSE","prompt":"...","contextExcerpt":"the 1-2 source sentences needed for this question","sourcePage":"book page 12 or PDF page 3","choices":["A","B","C","D"],"correctAnswer":"...","rubric":"...","skillTag":"...","standardCode":"RL.3.1","difficulty":1}]}',
           "Create 8 questions: 3 VOCAB multiple-choice, 3 COMPREHENSION multiple-choice, 1 PREDICTION written response, and 1 SHORT_RESPONSE evidence question.",
           "For multiple-choice questions, include 4 choices and a correctAnswer exactly matching one choice.",
           "For written questions, include a concise teacher rubric instead of a correctAnswer.",
@@ -274,8 +274,11 @@ export async function generateQuestionsFromText(input: {
   const parsed = GeneratedMaterialSchema.parse(JSON.parse(raw));
   return {
     ...parsed,
-    questions: parsed.questions.map((question, index) =>
-      normalizeGeneratedQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+    questions: parsed.questions.map((question) =>
+      normalizeGeneratedQuestion(
+        question,
+        excerptForQuestion(input.text, [question.prompt, question.correctAnswer, ...(question.choices || [])].join(" "))
+      )
     )
   };
 }
@@ -289,7 +292,6 @@ export async function generateAtHomePractice(input: {
   excludePrompts?: string[];
   readingScope?: string;
 }) {
-  const fallbackContexts = sourceExcerptWindows(input.sourceText, 36);
   const fallback = fallbackAtHomePractice(input);
   const apiKey = openAiApiKey();
   if (!apiKey) return fallback;
@@ -327,7 +329,7 @@ export async function generateAtHomePractice(input: {
             "Avoid answer choices like 'not just or equitable' unless those exact words are being taught. Use child-friendly choices such as 'not fair' when fairness is only support language.",
             "Write questions that look like real reading practice: ask directly about characters, events, details, vocabulary, sequence, cause and effect, main idea, inference, or evidence.",
             "Never use phrases such as teacher material, supplied material, source text, today's practice, theme practice, or comprehension practice in a student-facing question or answer.",
-            "For each question, include a 2-3 sentence contextExcerpt from the reading so the student has enough context without going back to the full book.",
+            "For every question, include only the one or two source sentences most directly needed to answer it. Copy them from the reading; never summarize, invent, or add unrelated surrounding text.",
             "Also include sourcePage. Prefer the printed book page number or page label visible near the excerpt. If one PDF page contains multiple book pages, use the visible book page closest to the excerpt. If no book page is visible, use the nearest [[PAGE n]] marker as 'PDF page n'.",
             "Do not put the excerpt inside the prompt. The prompt should ask the question after the separate excerpt.",
             "Do not ask the same idea in slightly different words. Each question must test a distinct detail or skill.",
@@ -337,7 +339,7 @@ export async function generateAtHomePractice(input: {
               : "Do not repeat a question within this batch.",
             "Do not ask for personal information. Do not introduce facts that are absent from the reading.",
             "Use exactly this JSON shape:",
-            '{"notes":"short teacher-facing generation note","questions":[{"type":"VOCAB|COMPREHENSION","prompt":"...","contextExcerpt":"2-3 sentence excerpt students should read first","sourcePage":"book page 12 or PDF page 3","choices":["...","...","...","..."],"correctAnswer":"exact matching choice","explanation":"brief supportive teaching explanation","skillTag":"...","standardCode":"RL.3.1","difficulty":3}]}',
+            '{"notes":"short teacher-facing generation note","questions":[{"type":"VOCAB|COMPREHENSION","prompt":"...","contextExcerpt":"the 1-2 source sentences needed for this question","sourcePage":"book page 12 or PDF page 3","choices":["...","...","...","..."],"correctAnswer":"exact matching choice","explanation":"brief supportive teaching explanation","skillTag":"...","standardCode":"RL.3.1","difficulty":3}]}',
             "California standards reference:",
             standardsReferenceForGrade(input.gradeLevel),
             `Teacher material: ${input.sourceText.slice(0, 18000)}`
@@ -351,8 +353,14 @@ export async function generateAtHomePractice(input: {
     const parsed = HomePracticeSchema.parse(JSON.parse(raw));
     return {
       ...parsed,
-      questions: parsed.questions.map((question, index) =>
-        normalizeHomePracticeQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+      questions: parsed.questions.map((question) =>
+        normalizeHomePracticeQuestion(
+          question,
+          excerptForQuestion(
+            input.sourceText,
+            [question.prompt, question.correctAnswer, ...question.choices].join(" ")
+          )
+        )
       )
     };
   } catch {
@@ -449,8 +457,6 @@ function demoQuestions(input: {
         : Number(input.gradeLevel) >= 9
           ? "9-10"
           : input.gradeLevel;
-  const fallbackContexts = sourceExcerptWindows(input.text, 12);
-
   return {
     notes:
       `Demo draft created locally${input.activityLabel ? ` for ${input.activityLabel}` : ""} because OPENAI_API_KEY is not set. Add the key to .env for source-based drafting.`,
@@ -564,8 +570,11 @@ function demoQuestions(input: {
         standardCode: `W.${gradeCode}.9`,
         difficulty: 5
       }
-    ].map((question, index) =>
-      normalizeGeneratedQuestion(question, fallbackContexts[index % Math.max(1, fallbackContexts.length)])
+    ].map((question) =>
+      normalizeGeneratedQuestion(
+        question,
+        excerptForQuestion(input.text, [question.prompt, question.correctAnswer, ...(question.choices || [])].join(" "))
+      )
     )
   };
 }

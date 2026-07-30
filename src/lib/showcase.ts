@@ -114,13 +114,24 @@ export async function removeExpiredShowcaseWorkspaces(now = new Date()) {
   return prisma.teacher.deleteMany({
     where: {
       isShowcase: true,
-      showcaseExpiresAt: { lt: now }
+      OR: [
+        { showcaseExpiresAt: { lt: now } },
+        { showcaseCleanupAt: { lte: now } }
+      ]
     }
+  });
+}
+
+export async function scheduleShowcaseCleanup(teacherId: string) {
+  return prisma.teacher.updateMany({
+    where: { id: teacherId, isShowcase: true },
+    data: { showcaseCleanupAt: new Date(Date.now() + 2 * 60 * 1000) }
   });
 }
 
 export async function createShowcaseWorkspace(passwordHash: string) {
   const now = new Date();
+  const workspaceKey = crypto.randomUUID();
   await removeExpiredShowcaseWorkspaces(now).catch(() => undefined);
 
   return prisma.$transaction(async (transaction) => {
@@ -141,7 +152,20 @@ export async function createShowcaseWorkspace(passwordHash: string) {
         teacherId: teacher.id,
         identityMode: IdentityMode.STANDARD,
         students: {
-          create: studentNames.map((displayName) => ({ displayName }))
+          create: studentNames.map((displayName, index) => {
+            const email = `student-${index + 1}-${workspaceKey}@demo.charlottelearning.ai`;
+            return {
+              displayName,
+              email,
+              account: {
+                create: {
+                  displayName,
+                  email,
+                  passwordHash
+                }
+              }
+            };
+          })
         }
       }
     });
@@ -187,7 +211,7 @@ const ShowcaseResponseSchema = z.object({
   responses: z.array(z.object({
     studentId: z.string().min(1).max(80),
     answerText: z.string().trim().min(2).max(800)
-  })).max(6)
+  })).max(30)
 });
 
 type ShowcaseWrittenTask = {
@@ -289,7 +313,7 @@ async function generateWrittenResponses(
             properties: {
               responses: {
                 type: "array",
-                maxItems: 6,
+                maxItems: 30,
                 items: {
                   type: "object",
                   properties: {
@@ -380,6 +404,86 @@ async function scheduleNextShowcaseTick(teacherId: string, delayMs = 4_000) {
   });
 }
 
+export async function startShowcaseMaterialSimulation(
+  teacherId: string,
+  classroomId: string,
+  materialId: string
+) {
+  const material = await prisma.material.findFirst({
+    where: {
+      id: materialId,
+      classroomId,
+      teacherId,
+      isAdaptiveHome: false,
+      teacher: { isShowcase: true }
+    },
+    include: {
+      _count: { select: { questions: true } },
+      classroom: { select: { _count: { select: { students: { where: { active: true } } } } } }
+    }
+  });
+  if (!material) throw new Error("Showcase assignment not found.");
+  if (material._count.questions === 0) throw new Error("Add at least one question before starting the simulation.");
+  if (material.classroom._count.students === 0) throw new Error("Add students before starting the simulation.");
+
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.studentSession.deleteMany({ where: { materialId } }),
+    prisma.material.updateMany({
+      where: {
+        teacherId,
+        id: { not: materialId },
+        showcaseSimulationStartedAt: { not: null },
+        showcaseSimulationCompletedAt: null
+      },
+      data: { showcaseSimulationCompletedAt: now }
+    }),
+    prisma.material.update({
+      where: { id: materialId },
+      data: {
+        status: MaterialStatus.PUBLISHED,
+        showcaseSimulationStartedAt: now,
+        showcaseSimulationCompletedAt: null
+      }
+    }),
+    prisma.teacher.update({
+      where: { id: teacherId },
+      data: { showcaseNextTickAt: null, showcaseCleanupAt: null }
+    })
+  ]);
+}
+
+export async function getShowcaseSimulationStatus(teacherId: string) {
+  const material = await prisma.material.findFirst({
+    where: {
+      teacherId,
+      showcaseSimulationStartedAt: { not: null },
+      showcaseSimulationCompletedAt: null
+    },
+    orderBy: { showcaseSimulationStartedAt: "desc" },
+    select: {
+      id: true,
+      classroomId: true,
+      title: true,
+      classroom: { select: { _count: { select: { students: { where: { active: true } } } } } },
+      sessions: {
+        where: { status: "COMPLETED" },
+        select: { id: true }
+      }
+    }
+  });
+  if (!material) return { running: false as const, advanced: false };
+  return {
+    running: true as const,
+    advanced: false,
+    materialId: material.id,
+    classroomId: material.classroomId,
+    title: material.title,
+    totalStudents: material.classroom._count.students,
+    completedStudents: material.sessions.length
+  };
+}
+
 export async function runShowcaseTick(teacherId: string) {
   const now = new Date();
   const claimed = await prisma.teacher.updateMany({
@@ -394,10 +498,13 @@ export async function runShowcaseTick(teacherId: string) {
     },
     // Hold the claim longer than the OpenAI timeout so two open tabs cannot
     // generate or write the same student's next response concurrently.
-    data: { showcaseNextTickAt: new Date(now.getTime() + 45_000) }
+    data: {
+      showcaseNextTickAt: new Date(now.getTime() + 45_000),
+      showcaseCleanupAt: null
+    }
   });
   if (claimed.count !== 1) {
-    return { advanced: false, started: 0, answered: 0, completed: 0, usedOpenAI: false };
+    return getShowcaseSimulationStatus(teacherId);
   }
 
   const materials = await prisma.material.findMany({
@@ -406,6 +513,8 @@ export async function runShowcaseTick(teacherId: string) {
       status: MaterialStatus.PUBLISHED,
       activityKind: ActivityKind.IN_CLASS,
       isAdaptiveHome: false,
+      showcaseSimulationStartedAt: { not: null },
+      showcaseSimulationCompletedAt: null,
       classroom: {
         archivedAt: null,
         identityMode: IdentityMode.STANDARD
@@ -431,38 +540,34 @@ export async function runShowcaseTick(teacherId: string) {
     }
   });
 
-  const material = materials.find((candidate) => {
-    const completedIds = new Set(
-      candidate.sessions.filter((session) => session.status === "COMPLETED").map((session) => session.studentId)
-    );
-    return candidate.classroom.students.some((student) => !completedIds.has(student.id));
-  });
+  const material = materials[0];
   if (!material) {
     await scheduleNextShowcaseTick(teacherId);
-    return { advanced: false, started: 0, answered: 0, completed: 0, usedOpenAI: false };
+    return { running: false as const, advanced: false };
   }
 
-  const activeSessions = material.sessions
-    .filter((session) => session.status === "IN_PROGRESS")
-    .sort((a, b) => a.answers.length - b.answers.length || a.signInAt.getTime() - b.signInAt.getTime());
   const startedStudentIds = new Set(material.sessions.map((session) => session.studentId));
-  const startSlots = Math.max(0, 4 - activeSessions.length);
   const studentsToStart = material.classroom.students
-    .filter((student) => !startedStudentIds.has(student.id))
-    .slice(0, Math.min(2, startSlots));
+    .filter((student) => !startedStudentIds.has(student.id));
   if (studentsToStart.length > 0) {
-    await Promise.all(studentsToStart.map((student, index) => prisma.studentSession.create({
-      data: {
+    await prisma.studentSession.createMany({
+      data: studentsToStart.map((student, index) => ({
         studentId: student.id,
         materialId: material.id,
         signInAt: new Date(now.getTime() + index * 250),
         lastSeenAt: now,
         openedBook: true
-      }
-    })));
+      }))
+    });
   }
 
-  const candidates = activeSessions.slice(0, 3).map((session) => {
+  const currentSessions = await prisma.studentSession.findMany({
+    where: { materialId: material.id },
+    orderBy: { signInAt: "asc" },
+    include: { answers: true, student: true }
+  });
+  const activeSessions = currentSessions.filter((session) => session.status === "IN_PROGRESS");
+  const candidates = activeSessions.map((session) => {
     const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
     const question = material.questions.find((item) => !answeredIds.has(item.id));
     return question ? { session, question } : null;
@@ -484,7 +589,7 @@ export async function runShowcaseTick(teacherId: string) {
   const writtenQuestionIds = new Set(
     material.questions.filter((question) => parseChoices(question.choicesJson).length === 0).map((question) => question.id)
   );
-  const existingWrittenAnswers = material.sessions.flatMap((session) => session.answers)
+  const existingWrittenAnswers = currentSessions.flatMap((session) => session.answers)
     .filter((answer) => writtenQuestionIds.has(answer.questionId))
     .map((answer) => answer.answerText);
   const generated = await generateWrittenResponses(
@@ -493,7 +598,6 @@ export async function runShowcaseTick(teacherId: string) {
     existingWrittenAnswers
   );
 
-  let completed = 0;
   await prisma.$transaction(async (transaction) => {
     for (const { session, question } of candidates) {
       const choices = parseChoices(question.choicesJson);
@@ -548,19 +652,33 @@ export async function runShowcaseTick(teacherId: string) {
           } : {})
         }
       });
-      if (isComplete) completed += 1;
     }
   });
 
-  await scheduleNextShowcaseTick(teacherId);
+  const completedStudents = await prisma.studentSession.count({
+    where: { materialId: material.id, status: "COMPLETED" }
+  });
+  const totalStudents = material.classroom.students.length;
+  const simulationCompleted = totalStudents > 0 && completedStudents >= totalStudents;
+  if (simulationCompleted) {
+    await prisma.material.update({
+      where: { id: material.id },
+      data: { showcaseSimulationCompletedAt: new Date() }
+    });
+  }
+  await scheduleNextShowcaseTick(teacherId, simulationCompleted ? 5_000 : 1_200);
 
   return {
+    running: !simulationCompleted,
+    simulationCompleted,
     advanced: studentsToStart.length > 0 || candidates.length > 0,
+    title: material.title,
     materialId: material.id,
     classroomId: material.classroomId,
     started: studentsToStart.length,
     answered: candidates.length,
-    completed,
+    totalStudents,
+    completedStudents,
     usedOpenAI: generated.usedOpenAI
   };
 }

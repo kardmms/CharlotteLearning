@@ -23,8 +23,8 @@ export default async function ShowcasePage({
           <h1>Explore the real Charlotte teacher workspace.</h1>
           <p>
             Open the same teacher portal used in a classroom, preloaded with a fictional grade 5
-            class and an original reading activity. Simulated students will begin working while
-            you explore live progress, responses, assignments, and analytics.
+            class and an original reading activity. When you click Start Simulation, the fictional
+            students complete it while you watch live progress, responses, assignments, and analytics.
           </p>
           <Message
             error={query.error}

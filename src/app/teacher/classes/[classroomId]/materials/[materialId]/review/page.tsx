@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { CheckCircle2, Eye, Save, Settings2, Sheet } from "lucide-react";
-import { publishMaterial, saveMaterialDraft, unpublishMaterial } from "@/app/teacher/actions";
+import { CheckCircle2, Eye, Play, RotateCcw, Save, Settings2, Sheet } from "lucide-react";
+import { publishMaterial, saveMaterialDraft, startShowcaseSimulation, unpublishMaterial } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { DeleteMaterialButton } from "@/components/DeleteMaterialButton";
 import { IndividualResponsePicker } from "@/components/IndividualResponsePicker";
@@ -107,6 +107,25 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
               aria-label="Preview as a student"
             ><Eye size={19} /></Link>
             <DeleteMaterialButton classroomId={classroomId} materialId={materialId} />
+            {teacher.isShowcase && (
+              <form action={startShowcaseSimulation}>
+                <input type="hidden" name="classroomId" value={classroomId} />
+                <input type="hidden" name="materialId" value={materialId} />
+                <button
+                  className="button showcase-simulation-button"
+                  type="submit"
+                  data-showcase-target="start-simulation"
+                  disabled={Boolean(material.showcaseSimulationStartedAt && !material.showcaseSimulationCompletedAt)}
+                >
+                  {material.showcaseSimulationCompletedAt ? <RotateCcw size={18} /> : <Play size={18} />}
+                  {material.showcaseSimulationStartedAt && !material.showcaseSimulationCompletedAt
+                    ? "Simulation running"
+                    : material.showcaseSimulationCompletedAt
+                      ? "Run Simulation Again"
+                      : "Start Simulation"}
+                </button>
+              </form>
+            )}
             {material.status === "DRAFT" ? (
               <form action={publishMaterial}>
                 <input type="hidden" name="classroomId" value={classroomId} />

@@ -19,6 +19,9 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
   const [format, setFormat] = useState(initialChoices.length ? "MULTIPLE_CHOICE" : "PARAGRAPH");
   const [choices, setChoices] = useState([...initialChoices, "", "", ""].slice(0, Math.max(4, initialChoices.length)));
   const [correctAnswer, setCorrectAnswer] = useState(initialCorrect);
+  const [prompt, setPrompt] = useState(question.prompt);
+  const [contextExcerpt, setContextExcerpt] = useState(question.contextExcerpt || "");
+  const [sourcePage, setSourcePage] = useState(question.sourcePage || "");
   const isMultipleChoice = format === "MULTIPLE_CHOICE";
 
   return (
@@ -53,29 +56,43 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
 
       <label>
         Prompt
-        <textarea name={`prompt-${question.id}`} defaultValue={question.prompt} required />
+        <textarea name={`prompt-${question.id}`} value={prompt} onChange={(event) => setPrompt(event.target.value)} required />
       </label>
 
-      <div className="question-context-editor">
-        <label>
-          Student reading excerpt
-          <textarea
-            name={`context-${question.id}`}
-            defaultValue={question.contextExcerpt || ""}
-            placeholder="Optional: 2-3 sentences Charlotte should show above this question."
-          />
-          <span className="help-text">Students see this before the question so they have enough context without flipping back.</span>
-        </label>
-        <label>
-          Page shown to students
-          <input
-            name={`sourcePage-${question.id}`}
-            defaultValue={question.sourcePage || ""}
-            placeholder="Example: book page 12 or PDF page 3"
-          />
-          <span className="help-text">Use the book page if the PDF page number is misleading.</span>
-        </label>
+      <div className="question-student-preview">
+        <div className="question-student-preview-heading">
+          <div><span>Student preview</span><strong>Charlotte-selected reading excerpt</strong></div>
+          {sourcePage && <em>{sourcePage}</em>}
+        </div>
+        <div className="question-student-preview-prompt">{prompt}</div>
+        <blockquote>
+          {contextExcerpt || "Charlotte will select the one or two source sentences most relevant to this question."}
+        </blockquote>
       </div>
+
+      <details className="question-excerpt-editor">
+        <summary>Adjust the excerpt or page label</summary>
+        <div className="question-context-editor">
+          <label>
+            Excerpt shown to students
+            <textarea
+              name={`context-${question.id}`}
+              value={contextExcerpt}
+              onChange={(event) => setContextExcerpt(event.target.value)}
+              placeholder="Charlotte automatically selects one or two relevant source sentences."
+            />
+          </label>
+          <label>
+            Page shown to students
+            <input
+              name={`sourcePage-${question.id}`}
+              value={sourcePage}
+              onChange={(event) => setSourcePage(event.target.value)}
+              placeholder="Example: book page 12 or PDF page 3"
+            />
+          </label>
+        </div>
+      </details>
 
       {isMultipleChoice && (
         <div className="options-editor simple-options-editor">
