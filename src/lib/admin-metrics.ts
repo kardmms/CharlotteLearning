@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { buildMonthlyClassScores, recentMonthStarts } from "@/lib/monthly-performance";
+import { removeExpiredShowcaseWorkspaces } from "@/lib/showcase";
 
 const dayMs = 24 * 60 * 60 * 1000;
 const feedbackPasscodeHashKey = "feedback_passcode_hash";
@@ -62,6 +63,7 @@ export async function getFeedbackSettings() {
 
 export async function getAdminMetrics() {
   const now = new Date();
+  await removeExpiredShowcaseWorkspaces(now).catch(() => undefined);
   const since24h = new Date(now.getTime() - dayMs);
   const since7d = new Date(now.getTime() - 7 * dayMs);
   const since14d = new Date(now.getTime() - 14 * dayMs);
@@ -110,46 +112,111 @@ export async function getAdminMetrics() {
     settings,
     monthlyScoreMaterials
   ] = await Promise.all([
-    prisma.teacher.count(),
-    prisma.studentAccount.count(),
+    prisma.teacher.count({ where: { isShowcase: false } }),
+    prisma.studentAccount.count({
+      where: {
+        NOT: { email: { endsWith: "@demo.charlottelearning.ai" } },
+        OR: [
+          { enrollments: { none: {} } },
+          { enrollments: { some: { classroom: { teacher: { isShowcase: false } } } } }
+        ]
+      }
+    }),
     prisma.studentSession.findMany({
-      where: { lastSeenAt: { gte: since7d } },
+      where: {
+        lastSeenAt: { gte: since7d },
+        material: { teacher: { isShowcase: false } }
+      },
       select: { studentId: true, student: { select: { accountId: true } } }
     }),
-    prisma.classroom.count(),
-    prisma.classroom.count({ where: { archivedAt: { not: null } } }),
-    prisma.student.count({ where: { active: true } }),
-    prisma.material.count(),
-    prisma.material.count({ where: { status: "PUBLISHED" } }),
-    prisma.material.count({ where: { activityKind: "AT_HOME" } }),
-    prisma.studentSession.count(),
-    prisma.studentSession.count({ where: { status: "COMPLETED" } }),
-    prisma.studentAnswer.count(),
-    prisma.studentAnswer.count({ where: { isCorrect: true } }),
-    prisma.studentAnswer.count({ where: { firstTryCorrect: true } }),
-    prisma.studentSession.count({ where: { focusViolationCount: { gt: 0 } } }),
+    prisma.classroom.count({ where: { teacher: { isShowcase: false } } }),
+    prisma.classroom.count({
+      where: { archivedAt: { not: null }, teacher: { isShowcase: false } }
+    }),
+    prisma.student.count({
+      where: { active: true, classroom: { teacher: { isShowcase: false } } }
+    }),
+    prisma.material.count({ where: { teacher: { isShowcase: false } } }),
+    prisma.material.count({
+      where: { status: "PUBLISHED", teacher: { isShowcase: false } }
+    }),
+    prisma.material.count({
+      where: { activityKind: "AT_HOME", teacher: { isShowcase: false } }
+    }),
+    prisma.studentSession.count({ where: { material: { teacher: { isShowcase: false } } } }),
+    prisma.studentSession.count({
+      where: { status: "COMPLETED", material: { teacher: { isShowcase: false } } }
+    }),
+    prisma.studentAnswer.count({
+      where: { session: { material: { teacher: { isShowcase: false } } } }
+    }),
+    prisma.studentAnswer.count({
+      where: { isCorrect: true, session: { material: { teacher: { isShowcase: false } } } }
+    }),
+    prisma.studentAnswer.count({
+      where: { firstTryCorrect: true, session: { material: { teacher: { isShowcase: false } } } }
+    }),
+    prisma.studentSession.count({
+      where: {
+        focusViolationCount: { gt: 0 },
+        material: { teacher: { isShowcase: false } }
+      }
+    }),
     prisma.contactLead.count(),
     prisma.contactLead.findMany({
       take: 200,
       orderBy: { createdAt: "desc" }
     }),
     prisma.teacherFeedback.count(),
-    prisma.teacher.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.classroom.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.student.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.material.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.studentSession.findMany({ where: { signInAt: { gte: since14d } }, select: { signInAt: true } }),
+    prisma.teacher.findMany({
+      where: { createdAt: { gte: since14d }, isShowcase: false },
+      select: { createdAt: true }
+    }),
+    prisma.classroom.findMany({
+      where: { createdAt: { gte: since14d }, teacher: { isShowcase: false } },
+      select: { createdAt: true }
+    }),
+    prisma.student.findMany({
+      where: { createdAt: { gte: since14d }, classroom: { teacher: { isShowcase: false } } },
+      select: { createdAt: true }
+    }),
+    prisma.material.findMany({
+      where: { createdAt: { gte: since14d }, teacher: { isShowcase: false } },
+      select: { createdAt: true }
+    }),
+    prisma.studentSession.findMany({
+      where: { signInAt: { gte: since14d }, material: { teacher: { isShowcase: false } } },
+      select: { signInAt: true }
+    }),
     prisma.teacherFeedback.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
     prisma.contactLead.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.material.findMany({ where: { updatedAt: { gte: since30d } }, select: { teacherId: true } }),
-    prisma.classroom.findMany({ where: { createdAt: { gte: since30d } }, select: { teacherId: true } }),
-    prisma.teacher.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.classroom.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.student.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
-    prisma.studentSession.findMany({ where: { signInAt: { gte: since14d } }, select: { signInAt: true } }),
+    prisma.material.findMany({
+      where: { updatedAt: { gte: since30d }, teacher: { isShowcase: false } },
+      select: { teacherId: true }
+    }),
+    prisma.classroom.findMany({
+      where: { createdAt: { gte: since30d }, teacher: { isShowcase: false } },
+      select: { teacherId: true }
+    }),
+    prisma.teacher.findMany({
+      where: { createdAt: { gte: since14d }, isShowcase: false },
+      select: { createdAt: true }
+    }),
+    prisma.classroom.findMany({
+      where: { createdAt: { gte: since14d }, teacher: { isShowcase: false } },
+      select: { createdAt: true }
+    }),
+    prisma.student.findMany({
+      where: { createdAt: { gte: since14d }, classroom: { teacher: { isShowcase: false } } },
+      select: { createdAt: true }
+    }),
+    prisma.studentSession.findMany({
+      where: { signInAt: { gte: since14d }, material: { teacher: { isShowcase: false } } },
+      select: { signInAt: true }
+    }),
     prisma.classroom.groupBy({
       by: ["gradeLevel"],
-      where: { archivedAt: null },
+      where: { archivedAt: null, teacher: { isShowcase: false } },
       _count: { _all: true }
     }),
     prisma.adminInvite.findMany({
@@ -170,7 +237,7 @@ export async function getAdminMetrics() {
       orderBy: { createdAt: "desc" }
     }),
     prisma.classroom.findMany({
-      where: { archivedAt: null },
+      where: { archivedAt: null, teacher: { isShowcase: false } },
       take: 24,
       orderBy: { createdAt: "desc" },
       include: {
@@ -221,7 +288,8 @@ export async function getAdminMetrics() {
         status: "PUBLISHED",
         activityKind: "IN_CLASS",
         isAdaptiveHome: false,
-        createdAt: { gte: monthlyScoreStart }
+        createdAt: { gte: monthlyScoreStart },
+        teacher: { isShowcase: false }
       },
       select: {
         id: true,
@@ -248,8 +316,18 @@ export async function getAdminMetrics() {
   ]);
   const activeStudentIds = new Set(activeStudentRows.map((item) => item.student.accountId || item.studentId));
   const totalActiveUsers = activeTeacherIds.size + activeStudentIds.size;
-  const todaySessions = await prisma.studentSession.count({ where: { signInAt: { gte: since24h } } });
-  const todayAnswers = await prisma.studentAnswer.count({ where: { createdAt: { gte: since24h } } });
+  const todaySessions = await prisma.studentSession.count({
+    where: {
+      signInAt: { gte: since24h },
+      material: { teacher: { isShowcase: false } }
+    }
+  });
+  const todayAnswers = await prisma.studentAnswer.count({
+    where: {
+      createdAt: { gte: since24h },
+      session: { material: { teacher: { isShowcase: false } } }
+    }
+  });
 
   const activityTimeline = [
     ...recentTeachers.map((item) => ({ label: "Teacher joined", when: item.createdAt })),

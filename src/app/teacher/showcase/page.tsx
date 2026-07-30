@@ -13,6 +13,6 @@ export default async function ShowcaseTeacherEntryPage() {
     orderBy: { createdAt: "asc" },
     select: { id: true }
   });
-  if (!classroom) redirect("/showcase?expired=1");
+  if (!classroom) redirect("/teacher");
   redirect(`/teacher/classes/${classroom.id}`);
 }

@@ -35,7 +35,7 @@ function teacherIsEditing() {
     active instanceof HTMLButtonElement;
 }
 
-export function ShowcaseSimulationPulse() {
+export function ShowcaseSimulationPulse({ expiresAt }: { expiresAt?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
@@ -43,6 +43,18 @@ export function ShowcaseSimulationPulse() {
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
+    let expirationTimer: number | undefined;
+
+    const returnToShowcaseStart = () => {
+      window.location.replace("/api/showcase/expire");
+    };
+
+    if (expiresAt) {
+      expirationTimer = window.setTimeout(
+        returnToShowcaseStart,
+        Math.max(0, new Date(expiresAt).getTime() - Date.now())
+      );
+    }
 
     async function advance() {
       try {
@@ -52,7 +64,11 @@ export function ShowcaseSimulationPulse() {
           headers: { "Content-Type": "application/json" },
           body: "{}"
         });
-        if (cancelled || response.status === 401 || response.status === 403) return;
+        if (cancelled) return;
+        if (response.status === 401 || response.status === 403) {
+          returnToShowcaseStart();
+          return;
+        }
         if (response.ok) {
           const result = await response.json() as SimulationState;
           if (result.running || result.simulationCompleted) setSimulation(result);
@@ -84,9 +100,10 @@ export function ShowcaseSimulationPulse() {
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      if (expirationTimer) window.clearTimeout(expirationTimer);
       window.removeEventListener("pagehide", scheduleClose);
     };
-  }, [pathname, router]);
+  }, [expiresAt, pathname, router]);
 
   if (!simulation?.running && !simulation?.simulationCompleted) return null;
   return (

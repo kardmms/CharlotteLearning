@@ -1,5 +1,6 @@
 "use server";
 
+import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { ActivityKind, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
@@ -25,7 +26,11 @@ import {
 } from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
 import { excerptForQuestion } from "@/lib/text-context";
-import { startShowcaseMaterialSimulation } from "@/lib/showcase";
+import {
+  SHOWCASE_STUDENT_NAMES,
+  deleteShowcaseWorkspace,
+  startShowcaseMaterialSimulation
+} from "@/lib/showcase";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import {
   cleanPrivacyKey,
@@ -247,7 +252,7 @@ export async function logoutTeacher() {
     : null;
   const restoredTeacherSession = await clearTeacherSession();
   if (showcaseTeacher?.isShowcase) {
-    await prisma.teacher.delete({ where: { id: showcaseTeacher.id } }).catch(() => undefined);
+    await deleteShowcaseWorkspace(showcaseTeacher.id).catch(() => undefined);
   }
   redirect(restoredTeacherSession ? "/teacher/classes" : "/");
 }
@@ -267,18 +272,45 @@ export async function createClassroom(formData: FormData) {
   const recoveryKey = createClassPrivacyRecoveryKey();
   const privacySalt = createPrivacyKeySalt();
   const derivedPrivacyKey = deriveClassPrivacyKey(recoveryKey, privacySalt);
+  const showcaseRosterKey = teacher.isShowcase ? crypto.randomUUID() : null;
+  const showcasePasswordHash = teacher.isShowcase
+    ? await hashPassword(crypto.randomBytes(32).toString("base64url"))
+    : null;
 
   const classroom = await prisma.$transaction(async (transaction) => {
     const created = await transaction.classroom.create({
-      data: {
-        name,
-        gradeLevel,
-        teacherId: teacher.id,
-        identityMode: IdentityMode.SCHOOL_KEY,
-        privacyKeySalt: privacySalt,
-        privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
-        privacyKeyHint: null
-      }
+      data: teacher.isShowcase
+        ? {
+          name,
+          gradeLevel,
+          teacherId: teacher.id,
+          identityMode: IdentityMode.STANDARD,
+          students: {
+            create: SHOWCASE_STUDENT_NAMES.map((displayName, index) => {
+              const email = `student-${index + 1}-${showcaseRosterKey}@demo.charlottelearning.ai`;
+              return {
+                displayName,
+                email,
+                account: {
+                  create: {
+                    displayName,
+                    email,
+                    passwordHash: showcasePasswordHash as string
+                  }
+                }
+              };
+            })
+          }
+        }
+        : {
+          name,
+          gradeLevel,
+          teacherId: teacher.id,
+          identityMode: IdentityMode.SCHOOL_KEY,
+          privacyKeySalt: privacySalt,
+          privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
+          privacyKeyHint: null
+        }
     });
     await transaction.auditEvent.create({
       data: auditEventData({
@@ -287,13 +319,19 @@ export async function createClassroom(formData: FormData) {
         action: "classroom.created",
         targetType: "classroom",
         targetId: created.id,
-        metadata: { gradeLevel, identityMode: "SCHOOL_KEY" }
+        metadata: {
+          gradeLevel,
+          identityMode: teacher.isShowcase ? "STANDARD" : "SCHOOL_KEY",
+          showcaseRoster: teacher.isShowcase
+        }
       })
     });
     return created;
   });
 
-  await setClassRecoveryKeyFlash(classroom.id, classroom.name, recoveryKey);
+  if (!teacher.isShowcase) {
+    await setClassRecoveryKeyFlash(classroom.id, classroom.name, recoveryKey);
+  }
   redirect(`/teacher/classes/${classroom.id}/roster`);
 }
 

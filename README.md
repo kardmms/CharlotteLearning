@@ -38,14 +38,15 @@ Open `http://localhost:3000`.
 
 ## Showcase mode
 
-`/showcase` creates an isolated, two-hour workspace and opens the normal teacher portal routes.
+`/showcase` creates an isolated, one-hour workspace and opens the normal teacher portal routes.
 There is no separate showcase dashboard: the class overview, assignments, progress, responses,
 analytics, roster, appearance, and account screens are the same pages used by signed-in teachers.
 
-Each visitor receives a separate fictional teacher, class, assignment, and 12 linked student
-accounts. A showcase-only guide leads the visitor through the unchanged teacher pages. On any
-assignment review page, **Start Simulation** resets that assignment and has every active student
-complete it; the status popup then opens the real progress page automatically.
+Each visitor starts with a separate blank fictional teacher workspace and creates a classroom through
+the real teacher flow. Charlotte then attaches 12 linked fictional student accounts to that class. A
+showcase-only guide leads the visitor through classroom and assignment creation. On any assignment
+review page, **Start Simulation** resets that assignment and has every active student complete it;
+the status popup then opens the real progress page automatically.
 
 Multiple-choice behavior uses stable proficiency profiles. Free responses use the assignment grade
 level, question rubric, and source excerpt with `OPENAI_API_KEY` (or `OPEN_AI_KEY`) when configured.
@@ -53,6 +54,7 @@ Set `SHOWCASE_OPENAI_MODEL` to override the showcase-only model. A varied local 
 simulation working if the OpenAI API is unavailable. Showcase workspaces do not send student or
 weekly-summary email. Sign-out deletes them immediately; closing the tab schedules cleanup after a
 short reload grace period, and a protected five-minute cron removes closed or expired workspaces.
+The browser returns to the showcase start screen when the one-hour limit is reached.
 
 Question generation selects the one or two source sentences most relevant to each question. The
 teacher review screen presents those sentences in a student-preview card while keeping an optional

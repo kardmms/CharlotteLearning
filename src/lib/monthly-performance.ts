@@ -131,8 +131,8 @@ export function buildStudentMonthlyScores(
 
 export async function getClassroomMonthlyPerformance(classroomId: string, now = new Date()) {
   const firstMonth = recentMonthStarts(6, now)[0];
-  const classroom = await prisma.classroom.findUnique({
-    where: { id: classroomId },
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacher: { isShowcase: false } },
     select: {
       id: true,
       name: true,

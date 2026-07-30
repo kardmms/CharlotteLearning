@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getAuthSecret } from "@/lib/security";
+import { isShowcaseExpired, SHOWCASE_LIFETIME_MS } from "@/lib/showcase-policy";
 
 const teacherCookie = "charlotte_teacher_session";
 const teacherReturnCookie = "charlotte_teacher_return_session";
@@ -119,21 +120,23 @@ export async function setShowcaseTeacherSession(teacher: {
 
   const token = await signToken(
     { sub: teacher.id, role: "teacher", name: teacher.name, email: teacher.email, showcase: true },
-    "2h"
+    "1h"
   );
   cookieStore.set(teacherCookie, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 2
+    maxAge: SHOWCASE_LIFETIME_MS / 1000
   });
   cookieStore.set(showcaseMarkerCookie, "1", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 2
+    // Keep the non-auth marker briefly after the one-hour JWT expires so a
+    // dormant tab still returns to the showcase start instead of teacher login.
+    maxAge: SHOWCASE_LIFETIME_MS / 1000 + 10 * 60
   });
 }
 
@@ -195,8 +198,8 @@ export async function setStudentSession(account: {
 export async function clearTeacherSession() {
   const cookieStore = await cookies();
   const returnToken = cookieStore.get(teacherReturnCookie)?.value;
-  const leavingShowcase = cookieStore.get(showcaseMarkerCookie)?.value === "1";
-  if (leavingShowcase && returnToken) {
+  const leavingShowcase = cookieStore.get(showcaseMarkerCookie)?.value === "1" || Boolean(returnToken);
+  if (returnToken) {
     cookieStore.set(teacherCookie, returnToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -246,6 +249,11 @@ export async function getTeacherSession() {
   return jwt;
 }
 
+export async function hasShowcaseSessionMarker() {
+  const cookieStore = await cookies();
+  return cookieStore.get(showcaseMarkerCookie)?.value === "1" || Boolean(cookieStore.get(teacherReturnCookie)?.value);
+}
+
 export async function getStudentSession() {
   const cookieStore = await cookies();
   const jwt = await verifyToken<StudentJwt>(cookieStore.get(studentCookie)?.value);
@@ -262,7 +270,10 @@ export async function getAdminSession() {
 
 export async function requireTeacher() {
   const session = await getTeacherSession();
-  if (!session) redirect("/teacher/login");
+  if (!session) {
+    if (await hasShowcaseSessionMarker()) redirect("/api/showcase/expire");
+    redirect("/teacher/login");
+  }
 
   const teacher = await prisma.teacher.findUnique({
     where: { id: session.sub },
@@ -272,19 +283,17 @@ export async function requireTeacher() {
       email: true,
       weeklySummaryEnabled: true,
       isShowcase: true,
-      showcaseExpiresAt: true
+      showcaseExpiresAt: true,
+      createdAt: true
     }
   });
 
   if (!teacher && session.showcase) {
-    const restoredTeacherSession = await clearTeacherSession();
-    redirect(restoredTeacherSession ? "/teacher/classes" : "/showcase?expired=1");
+    redirect("/api/showcase/expire");
   }
   if (!teacher) redirect("/teacher/login");
-  if (teacher.isShowcase && (!teacher.showcaseExpiresAt || teacher.showcaseExpiresAt <= new Date())) {
-    await prisma.teacher.delete({ where: { id: teacher.id } }).catch(() => undefined);
-    const restoredTeacherSession = await clearTeacherSession();
-    redirect(restoredTeacherSession ? "/teacher/classes" : "/showcase?expired=1");
+  if (teacher.isShowcase && isShowcaseExpired(teacher.createdAt, teacher.showcaseExpiresAt)) {
+    redirect("/api/showcase/expire");
   }
   return teacher;
 }

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getTeacherSession, hashPassword, setShowcaseTeacherSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
-import { createShowcaseWorkspace } from "@/lib/showcase";
+import { createShowcaseWorkspace, deleteShowcaseWorkspace } from "@/lib/showcase";
 
 export async function startShowcase() {
   try {
@@ -25,7 +25,7 @@ export async function startShowcase() {
       select: { id: true, isShowcase: true }
     });
     if (currentTeacher?.isShowcase) {
-      await prisma.teacher.delete({ where: { id: currentTeacher.id } }).catch(() => undefined);
+      await deleteShowcaseWorkspace(currentTeacher.id).catch(() => undefined);
     }
   }
 
@@ -35,5 +35,5 @@ export async function startShowcase() {
   // Resolve the classroom from the session on the next request. If two tabs
   // start a showcase together, whichever session cookie wins also determines
   // the destination instead of leaving the other tab on a mismatched class ID.
-  redirect("/teacher/showcase");
+  redirect("/teacher");
 }

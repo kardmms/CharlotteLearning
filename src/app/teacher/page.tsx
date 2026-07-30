@@ -67,8 +67,9 @@ export default async function TeacherHomePage({
               </label>
               <GradeSlider defaultValue="3" />
               <p className="form-note">
-                Charlotte will generate a classroom recovery key after setup. Save it somewhere
-                safe; students will not need it.
+                {teacher.isShowcase
+                  ? "Charlotte will attach 12 fictional student accounts so you can experience a live classroom safely."
+                  : "Charlotte will generate a classroom recovery key after setup. Save it somewhere safe; students will not need it."}
               </p>
               <button className="button" type="submit">
                 Create class

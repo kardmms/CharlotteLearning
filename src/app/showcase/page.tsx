@@ -22,9 +22,9 @@ export default async function ShowcasePage({
           <div className="eyebrow">Showcase Mode</div>
           <h1>Explore the real Charlotte teacher workspace.</h1>
           <p>
-            Open the same teacher portal used in a classroom, preloaded with a fictional grade 5
-            class and an original reading activity. When you click Start Simulation, the fictional
-            students complete it while you watch live progress, responses, assignments, and analytics.
+            Start at the beginning of the same teacher portal used in a classroom. Create a class,
+            build an assignment, and then run 12 private fictional students through it while you
+            watch live progress, responses, and analytics.
           </p>
           <Message
             error={query.error}
