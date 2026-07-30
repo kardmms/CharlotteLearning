@@ -8,6 +8,8 @@ import { prisma } from "@/lib/db";
 import { getAuthSecret } from "@/lib/security";
 
 const teacherCookie = "charlotte_teacher_session";
+const teacherReturnCookie = "charlotte_teacher_return_session";
+const showcaseMarkerCookie = "charlotte_showcase_session";
 const studentCookie = "charlotte_student_session";
 const adminCookie = "charlotte_admin_session";
 const studentCompletionLockCookie = "charlotte_student_completion_lock";
@@ -17,6 +19,7 @@ type TeacherJwt = {
   role: "teacher";
   name: string;
   email: string;
+  showcase?: boolean;
 };
 
 type StudentJwt = {
@@ -85,12 +88,52 @@ export async function setTeacherSession(teacher: {
     "8h"
   );
   const cookieStore = await cookies();
+  cookieStore.delete(teacherReturnCookie);
+  cookieStore.delete(showcaseMarkerCookie);
   cookieStore.set(teacherCookie, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 8
+  });
+}
+
+export async function setShowcaseTeacherSession(teacher: {
+  id: string;
+  name: string;
+  email: string;
+}) {
+  const cookieStore = await cookies();
+  const currentTeacherToken = cookieStore.get(teacherCookie)?.value;
+  const alreadyInShowcase = cookieStore.get(showcaseMarkerCookie)?.value === "1";
+  if (currentTeacherToken && !alreadyInShowcase) {
+    cookieStore.set(teacherReturnCookie, currentTeacherToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 8
+    });
+  }
+
+  const token = await signToken(
+    { sub: teacher.id, role: "teacher", name: teacher.name, email: teacher.email, showcase: true },
+    "2h"
+  );
+  cookieStore.set(teacherCookie, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 2
+  });
+  cookieStore.set(showcaseMarkerCookie, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 2
   });
 }
 
@@ -151,7 +194,22 @@ export async function setStudentSession(account: {
 
 export async function clearTeacherSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(teacherCookie);
+  const returnToken = cookieStore.get(teacherReturnCookie)?.value;
+  const leavingShowcase = cookieStore.get(showcaseMarkerCookie)?.value === "1";
+  if (leavingShowcase && returnToken) {
+    cookieStore.set(teacherCookie, returnToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 8
+    });
+  } else {
+    cookieStore.delete(teacherCookie);
+  }
+  cookieStore.delete(teacherReturnCookie);
+  cookieStore.delete(showcaseMarkerCookie);
+  return leavingShowcase && Boolean(returnToken);
 }
 
 export async function clearStudentSession() {
@@ -208,7 +266,14 @@ export async function requireTeacher() {
 
   const teacher = await prisma.teacher.findUnique({
     where: { id: session.sub },
-    select: { id: true, name: true, email: true, weeklySummaryEnabled: true }
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      weeklySummaryEnabled: true,
+      isShowcase: true,
+      showcaseExpiresAt: true
+    }
   });
 
   if (!teacher) redirect("/teacher/login");

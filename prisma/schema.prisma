@@ -68,11 +68,16 @@ model Teacher {
   email                String           @unique
   passwordHash         String
   weeklySummaryEnabled Boolean          @default(true)
+  isShowcase           Boolean          @default(false)
+  showcaseExpiresAt    DateTime?
+  showcaseNextTickAt   DateTime?
   createdAt            DateTime         @default(now())
   classrooms           Classroom[]
   materials            Material[]
   homeResources        AtHomeResource[]
   emailDeliveries      EmailDelivery[]
+
+  @@index([isShowcase, showcaseExpiresAt])
 }
 
 model Classroom {

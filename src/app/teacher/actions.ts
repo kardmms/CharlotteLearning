@@ -8,6 +8,7 @@ import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
   clearTeacherSession,
+  getTeacherSession,
   hashPassword,
   requireTeacher,
   setTeacherSession,
@@ -238,8 +239,15 @@ export async function loginTeacher(formData: FormData) {
 }
 
 export async function logoutTeacher() {
-  await clearTeacherSession();
-  redirect("/");
+  const session = await getTeacherSession();
+  const showcaseTeacher = session
+    ? await prisma.teacher.findUnique({ where: { id: session.sub }, select: { id: true, isShowcase: true } })
+    : null;
+  const restoredTeacherSession = await clearTeacherSession();
+  if (showcaseTeacher?.isShowcase) {
+    await prisma.teacher.delete({ where: { id: showcaseTeacher.id } }).catch(() => undefined);
+  }
+  redirect(restoredTeacherSession ? "/teacher/classes" : "/");
 }
 
 export async function createClassroom(formData: FormData) {
