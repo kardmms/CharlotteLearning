@@ -6,10 +6,12 @@ import { clearClassRecoveryKeyFlash } from "@/app/teacher/actions";
 
 export function RecoveryKeyPopup({
   classroomName,
-  recoveryKey
+  recoveryKey,
+  isShowcase = false
 }: {
   classroomName: string;
   recoveryKey: string;
+  isShowcase?: boolean;
 }) {
   const [open, setOpen] = useState(Boolean(recoveryKey));
   const [copied, setCopied] = useState(false);
@@ -46,7 +48,9 @@ export function RecoveryKeyPopup({
           <h2 id="recovery-popup-title">Classroom recovery key</h2>
           <p>
             This is the recovery key for <strong>{classroomName}</strong>. Save it somewhere secure.
-            Charlotte will not show this key again after this popup.
+            {isShowcase
+              ? " You will not need it to approve the sample roster; use it only if you want to reveal the roster later."
+              : " Charlotte will not show this key again after this popup."}
           </p>
         </div>
         <code>{recoveryKey}</code>

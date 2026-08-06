@@ -85,25 +85,62 @@ function teacherReturnPath(formData: FormData, fallback: string) {
   return returnPath.startsWith("/teacher") ? returnPath : fallback;
 }
 
+const classRecoveryKeyFlashCookie = "charlotte_class_recovery_key_flash";
+const classRosterSetupKeyCookie = "charlotte_class_roster_setup_key";
+
+type ClassRecoveryKeyPayload = {
+  classroomId: string;
+  className: string;
+  recoveryKey: string;
+};
+
+function encodeClassRecoveryKeyPayload(payload: ClassRecoveryKeyPayload) {
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+function decodeClassRecoveryKeyPayload(value?: string) {
+  if (!value) return null;
+  try {
+    return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as ClassRecoveryKeyPayload;
+  } catch {
+    return null;
+  }
+}
+
 async function setClassRecoveryKeyFlash(classroomId: string, className: string, recoveryKey: string) {
   const cookieStore = await cookies();
-  cookieStore.set(
-    "charlotte_class_recovery_key_flash",
-    Buffer.from(JSON.stringify({ classroomId, className, recoveryKey })).toString("base64url"),
-    {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/teacher",
-      maxAge: 60 * 30
-    }
-  );
+  const value = encodeClassRecoveryKeyPayload({ classroomId, className, recoveryKey });
+  const options = {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/teacher"
+  };
+  cookieStore.set(classRecoveryKeyFlashCookie, value, { ...options, maxAge: 60 * 30 });
+  cookieStore.set(classRosterSetupKeyCookie, value, { ...options, maxAge: 60 * 60 });
+}
+
+async function readClassRosterSetupKey(classroomId: string) {
+  const cookieStore = await cookies();
+  const payload = decodeClassRecoveryKeyPayload(cookieStore.get(classRosterSetupKeyCookie)?.value);
+  return payload?.classroomId === classroomId ? payload.recoveryKey : "";
+}
+
+async function clearClassRosterSetupKey() {
+  const cookieStore = await cookies();
+  cookieStore.set(classRosterSetupKeyCookie, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/teacher",
+    maxAge: 0
+  });
 }
 
 export async function clearClassRecoveryKeyFlash() {
   await requireTeacher();
   const cookieStore = await cookies();
-  cookieStore.set("charlotte_class_recovery_key_flash", "", {
+  cookieStore.set(classRecoveryKeyFlashCookie, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -668,13 +705,16 @@ export async function addStudents(formData: FormData) {
       email: emails[index] || ""
   }));
 
+  const submittedPrivacyKey = formText(formData, "privacyKey");
+  const setupPrivacyKey = submittedPrivacyKey ? "" : await readClassRosterSetupKey(classroomId);
   const invitations = await createStudentsFromRows(
     teacher.id,
     classroomId,
     rows,
     path,
-    formText(formData, "privacyKey")
+    submittedPrivacyKey || setupPrivacyKey
   );
+  if (setupPrivacyKey) await clearClassRosterSetupKey();
   if (!teacher.isShowcase) {
     await sendEnrollmentEmails(invitations);
   }

@@ -65,7 +65,11 @@ export default async function RosterPage({
     <>
       <TeacherTopbar name={teacher.name} classroomId={classroomId} />
       {recoveryKeyToSave && (
-        <RecoveryKeyPopup classroomName={classroom.name} recoveryKey={recoveryKeyToSave} />
+        <RecoveryKeyPopup
+          classroomName={classroom.name}
+          recoveryKey={recoveryKeyToSave}
+          isShowcase={teacher.isShowcase}
+        />
       )}
       <main className="page">
         <section className="panel">
@@ -103,7 +107,7 @@ export default async function RosterPage({
           </div>
           <p>
             {teacher.isShowcase
-              ? "This temporary class uses a real classroom recovery key with fictional student data. Keep the key ready to approve the downloadable sample roster below."
+              ? "This temporary class uses a real classroom recovery key with fictional student data. You do not need the key to approve the sample roster; save it only if you want to reveal the roster later."
               : isPrivacyProtected
               ? "Student names and emails are stored as encrypted identity data. Students only use email and password. The classroom recovery key is for teachers and approved admin recovery."
               : "This class stores student names and emails normally. New classes use classroom recovery keys for database-anonymous student identities."}

@@ -1,11 +1,8 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { ActivityKind, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
-import OpenAI from "openai";
-import { z } from "zod";
+import { ActivityKind, MaterialStatus, QuestionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { restrictedFetch } from "@/lib/outbound";
 import { SHOWCASE_LIFETIME_MS } from "@/lib/showcase-policy";
 
 export const SHOWCASE_STUDENT_NAMES = [
@@ -122,13 +119,6 @@ export async function createShowcaseWorkspace(passwordHash: string) {
   return { teacher };
 }
 
-const ShowcaseResponseSchema = z.object({
-  responses: z.array(z.object({
-    studentId: z.string().min(1).max(80),
-    answerText: z.string().trim().min(2).max(800)
-  })).max(30)
-});
-
 type ShowcaseWrittenTask = {
   studentId: string;
   studentLabel: string;
@@ -139,25 +129,12 @@ type ShowcaseWrittenTask = {
   contextExcerpt: string;
 };
 
-function openAiApiKey() {
-  return process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY || "";
-}
-
 function stableNumber(value: string) {
   return Number.parseInt(crypto.createHash("sha256").update(value).digest("hex").slice(0, 8), 16);
 }
 
 function studentProfile(index: number): ShowcaseWrittenTask["profile"] {
   return (["on_level", "strong", "developing", "on_level", "needs_support", "strong"] as const)[index % 6];
-}
-
-function gradeWritingGuidance(gradeLevel: string) {
-  const grade = gradeLevel.toUpperCase() === "K" ? 0 : Number.parseInt(gradeLevel, 10);
-  if (!Number.isFinite(grade)) return "Use clear student language and a short classroom response.";
-  if (grade <= 2) return "Use 1 short sentence, familiar words, and early-elementary spelling and grammar.";
-  if (grade <= 5) return "Use 1-3 short sentences with elementary vocabulary and concrete text evidence.";
-  if (grade <= 8) return "Use 2-4 concise sentences with middle-school vocabulary and relevant evidence.";
-  return "Use 2-5 concise sentences with high-school vocabulary, interpretation, and relevant evidence.";
 }
 
 function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, index: number) {
@@ -201,100 +178,12 @@ function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, 
     : `The lesson is that a large problem becomes easier when people plan and cooperate. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
 }
 
-async function generateWrittenResponses(
-  tasks: ShowcaseWrittenTask[],
-  gradeLevel: string,
-  existingAnswerTexts: string[]
-) {
+function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel: string) {
   const fallback = new Map(tasks.map((task, index) => [
     `${task.studentId}:${task.questionId}`,
     fallbackWrittenResponse(task, gradeLevel, index)
   ]));
-  const apiKey = openAiApiKey();
-  if (!apiKey || tasks.length === 0) return { responses: fallback, usedOpenAI: false };
-
-  try {
-    const openai = new OpenAI({ apiKey, fetch: restrictedFetch, timeout: 15_000, maxRetries: 1 });
-    const model = process.env.SHOWCASE_OPENAI_MODEL || "gpt-5.6-terra";
-    const completion = await openai.chat.completions.create({
-      model,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "showcase_student_responses",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              responses: {
-                type: "array",
-                maxItems: 30,
-                items: {
-                  type: "object",
-                  properties: {
-                    studentId: { type: "string" },
-                    answerText: { type: "string" }
-                  },
-                  required: ["studentId", "answerText"],
-                  additionalProperties: false
-                }
-              }
-            },
-            required: ["responses"],
-            additionalProperties: false
-          }
-        }
-      },
-      messages: [
-        {
-          role: "system",
-          content: [
-            "Generate fictional student work for a classroom product showcase.",
-            "Return valid JSON only. Never include personal information or mention that the answer is simulated.",
-            "Make every response meaningfully different in wording, evidence, detail, and occasional age-realistic mistakes.",
-            "A strong response should be accurate and well supported. An on_level response should be correct and direct.",
-            "A developing response may be partly supported or imprecise. A needs_support response may be brief or show a plausible misconception.",
-            "Do not label proficiency in the response and do not make mistakes cartoonish."
-          ].join(" ")
-        },
-        {
-          role: "user",
-          content: [
-            `The class grade is ${gradeLevel}. ${gradeWritingGuidance(gradeLevel)}`,
-            "Create one answer for every task. Preserve each studentId exactly.",
-            'Return exactly: {"responses":[{"studentId":"...","answerText":"..."}]}.',
-            `Tasks: ${JSON.stringify(tasks.map((task) => ({
-              studentId: task.studentId,
-              studentLabel: task.studentLabel,
-              profile: task.profile,
-              question: task.prompt,
-              rubric: task.rubric,
-              readingContext: task.contextExcerpt
-            })))} `
-          ].join("\n")
-        }
-      ]
-    });
-    const raw = completion.choices[0]?.message.content;
-    if (!raw) return { responses: fallback, usedOpenAI: false };
-    const parsed = ShowcaseResponseSchema.parse(JSON.parse(raw));
-    const seen = new Set(existingAnswerTexts.map((answer) => answer.replace(/\s+/g, " ").trim().toLowerCase()));
-    let acceptedResponses = 0;
-    for (const item of parsed.responses) {
-      const task = tasks.find((candidate) => candidate.studentId === item.studentId);
-      if (!task) continue;
-      const normalized = item.answerText.replace(/\s+/g, " ").trim().slice(0, 800);
-      const duplicateKey = normalized.toLowerCase();
-      if (!normalized || seen.has(duplicateKey)) continue;
-      seen.add(duplicateKey);
-      fallback.set(`${task.studentId}:${task.questionId}`, normalized);
-      acceptedResponses += 1;
-    }
-    return { responses: fallback, usedOpenAI: acceptedResponses > 0 };
-  } catch (error) {
-    console.error("Showcase response generation fell back to local samples", error);
-    return { responses: fallback, usedOpenAI: false };
-  }
+  return { responses: fallback, usedOpenAI: false };
 }
 
 function parseChoices(choicesJson: string | null) {
@@ -432,8 +321,7 @@ export async function runShowcaseTick(teacherId: string) {
       showcaseSimulationStartedAt: { not: null },
       showcaseSimulationCompletedAt: null,
       classroom: {
-        archivedAt: null,
-        identityMode: IdentityMode.STANDARD
+        archivedAt: null
       },
       questions: { some: {} }
     },
@@ -483,11 +371,12 @@ export async function runShowcaseTick(teacherId: string) {
     include: { answers: true, student: true }
   });
   const activeSessions = currentSessions.filter((session) => session.status === "IN_PROGRESS");
-  const candidates = activeSessions.map((session) => {
+  const candidates = activeSessions.flatMap((session) => {
     const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
-    const question = material.questions.find((item) => !answeredIds.has(item.id));
-    return question ? { session, question } : null;
-  }).filter((item): item is NonNullable<typeof item> => Boolean(item));
+    return material.questions
+      .filter((question) => !answeredIds.has(question.id))
+      .map((question) => ({ session, question }));
+  });
 
   const writtenTasks = candidates.flatMap(({ session, question }) => {
     if (parseChoices(question.choicesJson).length > 0) return [];
@@ -502,51 +391,56 @@ export async function runShowcaseTick(teacherId: string) {
       contextExcerpt: question.contextExcerpt || material.sourcePreview || material.sourceText?.slice(0, 800) || ""
     } satisfies ShowcaseWrittenTask];
   });
-  const writtenQuestionIds = new Set(
-    material.questions.filter((question) => parseChoices(question.choicesJson).length === 0).map((question) => question.id)
-  );
-  const existingWrittenAnswers = currentSessions.flatMap((session) => session.answers)
-    .filter((answer) => writtenQuestionIds.has(answer.questionId))
-    .map((answer) => answer.answerText);
-  const generated = await generateWrittenResponses(
+  const generated = generateWrittenResponses(
     writtenTasks,
-    material.gradeLevel || material.classroom.gradeLevel,
-    existingWrittenAnswers
+    material.gradeLevel || material.classroom.gradeLevel
   );
+
+  const sessionAdvances = new Map<string, {
+    session: (typeof candidates)[number]["session"];
+    questions: Array<(typeof candidates)[number]["question"]>;
+    pointsEarned: number;
+  }>();
+  const answersToCreate = candidates.map(({ session, question }) => {
+    const choices = parseChoices(question.choicesJson);
+    const studentIndex = Math.max(0, material.classroom.students.findIndex((student) => student.id === session.studentId));
+    const profile = studentProfile(studentIndex);
+    const roll = stableNumber(`${session.studentId}:${question.id}`) % 100;
+    const correctChance = profile === "strong" ? 90 : profile === "on_level" ? 76 : profile === "developing" ? 58 : 38;
+    const isMultipleChoice = choices.length > 0 && Boolean(question.correctAnswer);
+    const isCorrect = isMultipleChoice ? roll < correctChance : null;
+    const wrongChoices = choices.filter((choice) => choice !== question.correctAnswer);
+    const answerText = isMultipleChoice
+      ? isCorrect
+        ? question.correctAnswer as string
+        : wrongChoices[stableNumber(`${question.id}:${session.studentId}:wrong`) % Math.max(1, wrongChoices.length)] || choices[0]
+      : generated.responses.get(`${session.studentId}:${question.id}`) || "I used a detail from the reading to explain my thinking.";
+    const attemptCount = isMultipleChoice && isCorrect === false && profile !== "needs_support" ? 2 : 1;
+    const pointsEarned = isCorrect === true && attemptCount === 1
+      ? questionPointValue(question.sortOrder, material.questions.length)
+      : 0;
+    const advance = sessionAdvances.get(session.id) || { session, questions: [], pointsEarned: 0 };
+    advance.questions.push(question);
+    advance.pointsEarned += pointsEarned;
+    sessionAdvances.set(session.id, advance);
+    return {
+      sessionId: session.id,
+      questionId: question.id,
+      answerText,
+      isCorrect,
+      attemptCount,
+      firstTryCorrect: isCorrect === true && attemptCount === 1,
+      pointsEarned,
+      revealedAnswer: isMultipleChoice && isCorrect === false && profile === "needs_support"
+    };
+  });
 
   await prisma.$transaction(async (transaction) => {
-    for (const { session, question } of candidates) {
-      const choices = parseChoices(question.choicesJson);
-      const studentIndex = Math.max(0, material.classroom.students.findIndex((student) => student.id === session.studentId));
-      const profile = studentProfile(studentIndex);
-      const roll = stableNumber(`${session.studentId}:${question.id}`) % 100;
-      const correctChance = profile === "strong" ? 90 : profile === "on_level" ? 76 : profile === "developing" ? 58 : 38;
-      const isMultipleChoice = choices.length > 0 && Boolean(question.correctAnswer);
-      const isCorrect = isMultipleChoice ? roll < correctChance : null;
-      const wrongChoices = choices.filter((choice) => choice !== question.correctAnswer);
-      const answerText = isMultipleChoice
-        ? isCorrect
-          ? question.correctAnswer as string
-          : wrongChoices[stableNumber(`${question.id}:${session.studentId}:wrong`) % Math.max(1, wrongChoices.length)] || choices[0]
-        : generated.responses.get(`${session.studentId}:${question.id}`) || "I used a detail from the reading to explain my thinking.";
-      const attemptCount = isMultipleChoice && isCorrect === false && profile !== "needs_support" ? 2 : 1;
-      const pointsEarned = isCorrect === true && attemptCount === 1
-        ? questionPointValue(question.sortOrder, material.questions.length)
-        : 0;
-      await transaction.studentAnswer.create({
-        data: {
-          sessionId: session.id,
-          questionId: question.id,
-          answerText,
-          isCorrect,
-          attemptCount,
-          firstTryCorrect: isCorrect === true && attemptCount === 1,
-          pointsEarned,
-          revealedAnswer: isMultipleChoice && isCorrect === false && profile === "needs_support"
-        }
-      });
-
-      const answerCount = session.answers.length + 1;
+    if (answersToCreate.length > 0) {
+      await transaction.studentAnswer.createMany({ data: answersToCreate });
+    }
+    for (const { session, questions, pointsEarned } of sessionAdvances.values()) {
+      const answerCount = session.answers.length + questions.length;
       const isComplete = answerCount >= material.questions.length;
       const addFocusAlert = session.focusViolationCount === 0 && answerCount >= 3 && stableNumber(session.studentId) % 9 === 0;
       await transaction.studentSession.update({
@@ -554,9 +448,9 @@ export async function runShowcaseTick(teacherId: string) {
         data: {
           lastSeenAt: now,
           foundChapter: true,
-          heardVocabulary: session.heardVocabulary || question.type === QuestionType.VOCAB || answerCount >= 2,
+          heardVocabulary: session.heardVocabulary || questions.some((question) => question.type === QuestionType.VOCAB) || answerCount >= 2,
           answeredPrompt: true,
-          madePrediction: session.madePrediction || question.type === QuestionType.PREDICTION,
+          madePrediction: session.madePrediction || questions.some((question) => question.type === QuestionType.PREDICTION),
           understoodStory: session.understoodStory || answerCount >= Math.ceil(material.questions.length / 2),
           pointsEarned: session.pointsEarned + pointsEarned,
           ...(addFocusAlert ? { focusViolationCount: 1, flaggedAt: now } : {}),

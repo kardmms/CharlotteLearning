@@ -30,11 +30,6 @@ export function StudentSpreadsheetImport({
         <div className="showcase-roster-walkthrough" data-showcase-target="showcase-roster-import">
           <div>
             <span>1</span>
-            <strong>Keep the recovery key ready</strong>
-            <small>You will use the key shown after classroom setup to approve this roster.</small>
-          </div>
-          <div>
-            <span>2</span>
             <strong>Download the sample</strong>
             <small>It contains 12 fictional students—no real student data.</small>
           </div>
@@ -47,14 +42,14 @@ export function StudentSpreadsheetImport({
             Download sample roster
           </a>
           <div>
-            <span>3</span>
+            <span>2</span>
             <strong>Upload it below</strong>
             <small>Charlotte will identify the name and email columns.</small>
           </div>
           <div>
-            <span>4</span>
+            <span>3</span>
             <strong>Approve the generated list</strong>
-            <small>Showcase students are verified, approved, and activated automatically.</small>
+            <small>No recovery key is needed. Students are verified and activated automatically.</small>
           </div>
         </div>
       )}
@@ -101,7 +96,7 @@ export function StudentSpreadsheetImport({
             <span className="status-pill status-blue"><Sparkles size={15} /> {state.fileName}</span>
           </div>
 
-          {privacyProtected && (
+          {privacyProtected && !isShowcase && (
             <PasswordField
               name="privacyKey"
               label="Classroom recovery key"

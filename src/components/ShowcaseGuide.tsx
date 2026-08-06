@@ -58,7 +58,6 @@ function guideStep(pathname: string, props: ShowcaseGuideProps): GuideStep {
       title: "Generate your demo class list",
       description: "Use the fictional sample sheet so you can try Charlotte's AI-assisted roster flow without using real student information.",
       tasks: [
-        "Copy and save the classroom recovery key",
         "Download the sample roster",
         "Choose that file in Student spreadsheet",
         "Click Have Charlotte generate the class list",
