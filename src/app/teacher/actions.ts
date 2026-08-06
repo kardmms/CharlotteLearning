@@ -1197,7 +1197,7 @@ export async function startShowcaseSimulation(formData: FormData) {
   const classroomId = formText(formData, "classroomId");
   const materialId = formText(formData, "materialId");
   const path = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
-  if (!teacher.isShowcase) errorRedirect(path, "Simulation is available only in showcase mode.");
+  if (!teacher.isShowcase) errorRedirect(path, "Simulation is available only in Showcase Mode.");
   await enforceOrRedirect(path, async () => {
     await enforceRateLimit({
       scope: "showcase-start-simulation",

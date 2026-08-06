@@ -36,7 +36,7 @@ It gives teachers a setup flow, secure teacher/student access, source-based 15-m
 
 Open `http://localhost:3000`.
 
-## Showcase mode
+## Showcase Mode
 
 `/showcase` creates an isolated, one-hour workspace and opens the normal teacher portal routes.
 There is no separate showcase dashboard: the class overview, assignments, progress, responses,

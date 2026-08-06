@@ -203,7 +203,7 @@ export default async function HomePage() {
             <Link href="/student/login">Student sign in</Link>
             <Link href="/privacy">Privacy</Link>
             <Link className="quiet-footer-link" href="/showcase">
-              showcase mode
+              Showcase Mode
             </Link>
             <Link className="quiet-footer-link" href="/feedback">Weekly feedback</Link>
             <Link className="quiet-footer-link" href="/admin">Admin</Link>
