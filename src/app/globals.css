@@ -4984,7 +4984,8 @@ tr:last-child td {
 
 .teacher-onboarding-shell:has(.tour-card) {
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-areas: "content tour";
   align-items: start;
   gap: 18px;
   width: min(1540px, calc(100% - 32px));
@@ -4993,19 +4994,22 @@ tr:last-child td {
 }
 
 .teacher-onboarding-shell:has(.tour-card) > .page {
+  grid-area: content;
   width: 100%;
   min-width: 0;
   padding-top: 0;
 }
 
 .tour-card {
+  grid-area: tour;
+  justify-self: end;
   position: sticky;
   top: 18px;
-  width: 100%;
+  width: min(100%, 360px);
   border: 1px solid var(--line);
   border-radius: 28px;
   background: white;
-  padding: 28px;
+  padding: 24px;
   box-shadow: var(--shadow-lg);
   animation: tour-in 260ms ease-out;
 }
@@ -5017,11 +5021,7 @@ tr:last-child td {
 }
 
 .showcase-layout-content .teacher-onboarding-shell:has(.tour-card) {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.showcase-layout-content .teacher-onboarding-shell:has(.tour-card) .tour-card {
-  position: static;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
 }
 
 .tour-icon {
@@ -5080,9 +5080,15 @@ tr:last-child td {
 @media (max-width: 1120px) {
   .teacher-onboarding-shell:has(.tour-card) {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "tour"
+      "content";
     padding-top: 16px;
   }
-  .tour-card { position: static; }
+  .tour-card {
+    position: static;
+    width: min(100%, 380px);
+  }
 }
 
 .station-shell {
