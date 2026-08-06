@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState } from "react";
 import { CheckCircle2, Copy, KeyRound } from "lucide-react";
 import { clearClassRecoveryKeyFlash } from "@/app/teacher/actions";
 
@@ -13,14 +13,6 @@ export function RecoveryKeyPopup({
 }) {
   const [open, setOpen] = useState(Boolean(recoveryKey));
   const [copied, setCopied] = useState(false);
-  const [, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (!recoveryKey) return;
-    startTransition(() => {
-      void clearClassRecoveryKeyFlash().catch(() => {});
-    });
-  }, [recoveryKey, startTransition]);
 
   if (!open) return null;
 
@@ -31,6 +23,11 @@ export function RecoveryKeyPopup({
     } catch {
       setCopied(false);
     }
+  }
+
+  function confirmSaved() {
+    setOpen(false);
+    void clearClassRecoveryKeyFlash().catch(() => {});
   }
 
   return (
@@ -58,7 +55,7 @@ export function RecoveryKeyPopup({
             {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />}
             {copied ? "Copied" : "Copy key"}
           </button>
-          <button className="button" type="button" onClick={() => setOpen(false)}>
+          <button className="button" type="button" onClick={confirmSaved}>
             I saved this key
           </button>
         </div>

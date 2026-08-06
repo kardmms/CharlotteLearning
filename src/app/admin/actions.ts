@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { AdminRole, LeadStatus } from "@prisma/client";
+import { AdminRole, IdentityMode, LeadStatus } from "@prisma/client";
 import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
@@ -16,6 +16,13 @@ import {
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { sendAdminInviteEmail } from "@/lib/email";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import {
+  cleanPrivacyKey,
+  decryptIdentityValue,
+  deriveClassPrivacyKey,
+  isUsablePrivacyKey,
+  verifyClassPrivacyKey
+} from "@/lib/school-privacy";
 import { hashText } from "@/lib/security";
 
 const inviteFlashCookie = "charlotte_admin_invite_flash";
@@ -40,6 +47,105 @@ function normalizeUsername(value: string) {
 
 function errorRedirect(path: string, message: string): never {
   redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+export type AdminRosterRevealState = {
+  rows: Array<{
+    id: string;
+    protectedLabel: string;
+    displayName: string;
+    email: string;
+  }>;
+  keyAccepted?: boolean;
+  error?: string;
+};
+
+export async function revealAdminRosterIdentities(
+  _previousState: AdminRosterRevealState,
+  formData: FormData
+): Promise<AdminRosterRevealState> {
+  const admin = await requireAdmin();
+  const classroomId = formText(formData, "classroomId");
+  const privacyKey = cleanPrivacyKey(formText(formData, "privacyKey"));
+
+  try {
+    await enforceRateLimit({
+      scope: "admin-reveal-roster",
+      limit: 30,
+      windowSeconds: 60 * 60,
+      identifier: `${admin.id}:${classroomId}`
+    });
+    await clearExpiredRateLimits();
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      return { rows: [], error: error.message };
+    }
+    throw error;
+  }
+
+  if (!classroomId) return { rows: [], error: "Classroom not found." };
+  if (!isUsablePrivacyKey(privacyKey)) {
+    return { rows: [], error: "Enter the full classroom recovery key." };
+  }
+
+  const classroom = await prisma.classroom.findUnique({
+    where: { id: classroomId },
+    select: {
+      identityMode: true,
+      privacyKeySalt: true,
+      privacyKeyVerifier: true,
+      students: {
+        where: { active: true },
+        orderBy: { displayName: "asc" },
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+          displayNameEncrypted: true,
+          emailEncrypted: true
+        }
+      }
+    }
+  });
+
+  if (!classroom) return { rows: [], error: "Classroom not found." };
+  if (classroom.identityMode !== IdentityMode.SCHOOL_KEY) {
+    return { rows: [], error: "This classroom does not use a classroom recovery key." };
+  }
+  if (!verifyClassPrivacyKey(privacyKey, classroom.privacyKeySalt, classroom.privacyKeyVerifier)) {
+    return { rows: [], error: "That recovery key does not match this classroom." };
+  }
+
+  const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);
+  let rows: AdminRosterRevealState["rows"];
+  try {
+    rows = classroom.students.map((student) => ({
+      id: student.id,
+      protectedLabel: student.displayName,
+      displayName: student.displayNameEncrypted
+        ? decryptIdentityValue(student.displayNameEncrypted, derivedKey)
+        : student.displayName,
+      email: student.emailEncrypted
+        ? decryptIdentityValue(student.emailEncrypted, derivedKey)
+        : student.email || ""
+    }));
+
+  } catch {
+    return { rows: [], error: "Charlotte could not decrypt this roster with that key." };
+  }
+
+  await prisma.auditEvent.create({
+    data: auditEventData({
+      actorType: "admin",
+      actorId: admin.id,
+      action: "classroom.roster_revealed",
+      targetType: "classroom",
+      targetId: classroomId,
+      metadata: { studentCount: rows.length, identityMode: "SCHOOL_KEY" }
+    })
+  });
+
+  return { keyAccepted: true, rows };
 }
 
 async function enforceOrRedirect(path: string, callback: () => Promise<void>) {

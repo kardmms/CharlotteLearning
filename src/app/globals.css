@@ -1451,6 +1451,33 @@ select {
 .admin-class-trend-panel,
 .admin-class-students-panel { margin-top: 18px; }
 
+.admin-roster-reveal {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.admin-roster-reveal-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.admin-roster-reveal-form .password-field { min-width: 0; }
+
+.admin-roster-reveal-message {
+  border: 1px solid rgba(239, 68, 68, .28);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, .1);
+  color: #fecaca;
+  font-weight: 800;
+}
+
+.admin-roster-reveal-table {
+  max-height: 360px;
+  overflow: auto;
+}
+
 .admin-class-month-grid {
   align-items: end;
   gap: 10px;
@@ -7695,6 +7722,7 @@ tr:last-child td {
 
 @media (max-width: 760px) {
   .admin-class-page { padding: 16px; }
+  .admin-roster-reveal-form { grid-template-columns: 1fr; }
   .admin-class-detail-nav,
   .admin-class-hero,
   .admin-month-score-summary {

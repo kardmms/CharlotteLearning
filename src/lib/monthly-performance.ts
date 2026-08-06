@@ -138,6 +138,7 @@ export async function getClassroomMonthlyPerformance(classroomId: string, now = 
       name: true,
       gradeLevel: true,
       identityMode: true,
+      privacyKeyHint: true,
       teacher: { select: { name: true } },
       students: {
         where: { active: true },
@@ -187,6 +188,7 @@ export async function getClassroomMonthlyPerformance(classroomId: string, now = 
     gradeLevel: classroom.gradeLevel,
     teacherName: classroom.teacher.name,
     isPrivacyProtected: classroom.identityMode === "SCHOOL_KEY",
+    privacyKeyHint: classroom.privacyKeyHint,
     months,
     students: classroom.students.map((student, index) => ({
       id: student.id,

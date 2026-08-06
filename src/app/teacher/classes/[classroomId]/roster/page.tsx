@@ -93,7 +93,7 @@ export default async function RosterPage({
               <div className="eyebrow">{teacher.isShowcase ? "Safe demonstration" : "Student privacy"}</div>
               <h2>
                 {teacher.isShowcase
-                  ? "Fictional students only"
+                  ? "Recovery-key demo roster"
                   : isPrivacyProtected
                     ? "Recovery-key protected roster"
                     : "Standard roster"}
@@ -103,7 +103,7 @@ export default async function RosterPage({
           </div>
           <p>
             {teacher.isShowcase
-              ? "Use the downloadable sample roster below. It contains fictional names and addresses created only for this temporary showcase."
+              ? "This temporary class uses a real classroom recovery key with fictional student data. Keep the key ready to approve the downloadable sample roster below."
               : isPrivacyProtected
               ? "Student names and emails are stored as encrypted identity data. Students only use email and password. The classroom recovery key is for teachers and approved admin recovery."
               : "This class stores student names and emails normally. New classes use classroom recovery keys for database-anonymous student identities."}

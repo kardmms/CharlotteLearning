@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { gradeLabel } from "@/lib/grade";
 import { getClassroomMonthlyPerformance, type MonthlyScore } from "@/lib/monthly-performance";
+import { AdminRosterIdentityReveal } from "@/components/AdminRosterIdentityReveal";
 
 export const dynamic = "force-dynamic";
 
@@ -107,11 +108,22 @@ export default async function AdminClassroomPage({
           </div>
         </section>
 
+        {classroom.isPrivacyProtected && (
+          <AdminRosterIdentityReveal
+            classroomId={classroom.id}
+            privacyKeyHint={classroom.privacyKeyHint}
+          />
+        )}
+
         <section className="admin-glass-panel admin-class-students-panel">
           <div className="admin-card-head">
             <div>
               <h2>Student monthly averages</h2>
-              <p>Only protected roster labels are shown here. Encrypted student names remain sealed.</p>
+              <p>
+                {classroom.isPrivacyProtected
+                  ? "Protected roster labels remain visible until a valid classroom recovery key is entered above."
+                  : "Student identities are anonymized in this administrative performance view."}
+              </p>
             </div>
             <ShieldCheck size={20} />
           </div>

@@ -69,7 +69,7 @@ export default async function TeacherHomePage({
               <GradeSlider defaultValue="3" />
               <p className="form-note">
                 {teacher.isShowcase
-                  ? "After setup, use Charlotte's downloadable sample roster to generate 12 fictional student accounts safely."
+                  ? "After setup, save the classroom recovery key, then use the downloadable sample roster to generate 12 fictional student accounts safely."
                   : "Charlotte will generate a classroom recovery key after setup. Save it somewhere safe; students will not need it."}
               </p>
               <button

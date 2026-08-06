@@ -273,22 +273,15 @@ export async function createClassroom(formData: FormData) {
   const derivedPrivacyKey = deriveClassPrivacyKey(recoveryKey, privacySalt);
   const classroom = await prisma.$transaction(async (transaction) => {
     const created = await transaction.classroom.create({
-      data: teacher.isShowcase
-        ? {
-          name,
-          gradeLevel,
-          teacherId: teacher.id,
-          identityMode: IdentityMode.STANDARD
-        }
-        : {
-          name,
-          gradeLevel,
-          teacherId: teacher.id,
-          identityMode: IdentityMode.SCHOOL_KEY,
-          privacyKeySalt: privacySalt,
-          privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
-          privacyKeyHint: null
-        }
+      data: {
+        name,
+        gradeLevel,
+        teacherId: teacher.id,
+        identityMode: IdentityMode.SCHOOL_KEY,
+        privacyKeySalt: privacySalt,
+        privacyKeyVerifier: privacyKeyVerifierFromDerivedKey(derivedPrivacyKey),
+        privacyKeyHint: null
+      }
     });
     await transaction.auditEvent.create({
       data: auditEventData({
@@ -299,7 +292,7 @@ export async function createClassroom(formData: FormData) {
         targetId: created.id,
         metadata: {
           gradeLevel,
-          identityMode: teacher.isShowcase ? "STANDARD" : "SCHOOL_KEY",
+          identityMode: "SCHOOL_KEY",
           showcaseRoster: teacher.isShowcase
         }
       })
@@ -307,9 +300,7 @@ export async function createClassroom(formData: FormData) {
     return created;
   });
 
-  if (!teacher.isShowcase) {
-    await setClassRecoveryKeyFlash(classroom.id, classroom.name, recoveryKey);
-  }
+  await setClassRecoveryKeyFlash(classroom.id, classroom.name, recoveryKey);
   redirect(`/teacher/classes/${classroom.id}/roster`);
 }
 
@@ -435,12 +426,26 @@ async function createStudentsFromRows(
     }
   }
 
+  const privacyKey = cleanPrivacyKey(rawPrivacyKey);
+
   if (classroom.teacher.isShowcase) {
+    if (!verifyClassPrivacyKey(privacyKey, classroom.privacyKeySalt, classroom.privacyKeyVerifier)) {
+      errorRedirect(errorPath, "Enter the classroom recovery key shown when you created this showcase class.");
+    }
+    const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);
+    const rowsWithHashes = cleaned.map((row) => ({
+      ...row,
+      emailKeyHash: studentEmailLookupHash(row.email)
+    }));
+    const uniqueHashes = new Set(rowsWithHashes.map((row) => row.emailKeyHash));
+    if (uniqueHashes.size !== rowsWithHashes.length) {
+      errorRedirect(errorPath, "Each student email can only appear once in the import.");
+    }
     const passwordHash = await hashPassword(crypto.randomBytes(32).toString("base64url"));
     try {
       const enrolled = await prisma.$transaction(async (transaction) => {
         const created: Array<{ studentId: string }> = [];
-        for (const [index, row] of cleaned.entries()) {
+        for (const [index, row] of rowsWithHashes.entries()) {
           const account = await transaction.studentAccount.create({
             data: {
               displayName: row.displayName,
@@ -454,6 +459,9 @@ async function createStudentsFromRows(
               accountId: account.id,
               displayName: row.displayName,
               email: row.email,
+              displayNameEncrypted: encryptIdentityValue(row.displayName, derivedKey),
+              emailEncrypted: encryptIdentityValue(row.email, derivedKey),
+              emailKeyHash: row.emailKeyHash,
               active: true
             },
             select: { id: true }
@@ -469,7 +477,7 @@ async function createStudentsFromRows(
             targetId: classroomId,
             metadata: {
               count: created.length,
-              identityMode: "STANDARD",
+              identityMode: "SCHOOL_KEY",
               showcaseAutoApproved: true
             }
           })
@@ -491,7 +499,6 @@ async function createStudentsFromRows(
     }
   }
 
-  const privacyKey = cleanPrivacyKey(rawPrivacyKey);
   const usesPrivacyKey = classroom.identityMode === IdentityMode.SCHOOL_KEY || Boolean(privacyKey);
 
   if (usesPrivacyKey) {
