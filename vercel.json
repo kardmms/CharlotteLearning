@@ -12,7 +12,7 @@
     },
     {
       "path": "/api/maintenance/showcase-cleanup",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
