@@ -4982,49 +4982,46 @@ tr:last-child td {
   box-shadow: var(--shadow-sm);
 }
 
-.tour-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  background: transparent;
-  padding: 22px;
-  pointer-events: none;
+.teacher-onboarding-shell:has(.tour-card) {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  width: min(1540px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 20px 0 70px;
 }
 
-.tour-spotlight {
-  position: fixed;
-  z-index: 81;
-  border: 3px solid var(--blue);
-  border-radius: 26px;
-  box-shadow:
-    0 0 0 9999px rgba(15, 23, 42, 0.5),
-    0 0 0 8px rgba(37, 99, 235, 0.14),
-    0 18px 60px rgba(37, 99, 235, 0.34);
-  pointer-events: none;
-  transition:
-    top 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    left 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  animation: spotlight-pulse 1.6s ease-in-out infinite;
+.teacher-onboarding-shell:has(.tour-card) > .page {
+  width: 100%;
+  min-width: 0;
+  padding-top: 0;
 }
 
 .tour-card {
-  position: fixed;
-  z-index: 82;
-  top: 24px;
-  left: 24px;
-  width: min(460px, 100%);
+  position: sticky;
+  top: 18px;
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 28px;
   background: white;
   padding: 28px;
   box-shadow: var(--shadow-lg);
   animation: tour-in 260ms ease-out;
-  pointer-events: auto;
-  transition:
-    top 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    left 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tour-target-highlight {
+  outline: 3px solid var(--blue);
+  outline-offset: 5px;
+  box-shadow: 0 0 0 9px rgba(37, 99, 235, .12);
+}
+
+.showcase-layout-content .teacher-onboarding-shell:has(.tour-card) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.showcase-layout-content .teacher-onboarding-shell:has(.tour-card) .tour-card {
+  position: static;
 }
 
 .tour-icon {
@@ -5080,14 +5077,12 @@ tr:last-child td {
   }
 }
 
-@keyframes spotlight-pulse {
-  0%,
-  100% {
-    outline: 0 solid rgba(37, 99, 235, 0);
+@media (max-width: 1120px) {
+  .teacher-onboarding-shell:has(.tour-card) {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 16px;
   }
-  50% {
-    outline: 10px solid rgba(37, 99, 235, 0.16);
-  }
+  .tour-card { position: static; }
 }
 
 .station-shell {
@@ -6282,16 +6277,30 @@ tr:last-child td {
 .showcase-guide,
 .showcase-simulation-status,
 .showcase-guide-reopen {
-  position: fixed;
   z-index: 120;
   box-shadow: 0 20px 55px rgba(15, 23, 42, .22);
 }
 
+.showcase-layout-shell {
+  display: grid;
+  grid-template-columns: clamp(320px, 27vw, 410px) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.showcase-guide-rail {
+  min-width: 0;
+  border-right: 1px solid #bfdbfe;
+  background: rgba(239, 246, 255, .72);
+  padding: 18px;
+}
+
+.showcase-layout-content { min-width: 0; }
+
 .showcase-guide {
-  left: 20px;
-  bottom: 20px;
-  width: min(420px, calc(100vw - 40px));
-  max-height: calc(100vh - 40px);
+  position: sticky;
+  top: 18px;
+  width: 100%;
+  max-height: calc(100vh - 36px);
   overflow-y: auto;
   border: 1px solid #93c5fd;
   border-radius: 18px;
@@ -6365,14 +6374,15 @@ tr:last-child td {
 .showcase-guide-actions a { background: #2563eb; color: white; padding: 9px 13px; }
 .showcase-guide-actions button { background: transparent; color: #64748b; padding: 8px; }
 .showcase-guide-reopen {
-  left: 18px;
-  bottom: 18px;
+  position: sticky;
+  top: 18px;
   background: #2563eb;
   color: white;
   padding: 10px 14px;
 }
 
 .showcase-simulation-status {
+  position: fixed;
   right: 20px;
   bottom: 20px;
   display: flex;
@@ -6423,8 +6433,23 @@ tr:last-child td {
   50% { outline-color: #60a5fa; box-shadow: 0 0 0 9px rgba(37, 99, 235, 0); }
 }
 
+@media (max-width: 1120px) {
+  .showcase-layout-shell { grid-template-columns: minmax(0, 1fr); }
+  .showcase-guide-rail {
+    border-right: 0;
+    border-bottom: 1px solid #bfdbfe;
+    padding: 12px 16px;
+  }
+  .showcase-guide,
+  .showcase-guide-reopen {
+    position: static;
+    width: 100%;
+    max-height: none;
+  }
+  .showcase-guide-reopen { justify-content: center; }
+}
+
 @media (max-width: 640px) {
-  .showcase-guide { left: 12px; bottom: 12px; width: calc(100vw - 24px); }
   .showcase-simulation-status { right: 12px; bottom: 12px; min-width: 0; max-width: calc(100vw - 24px); }
 }
 

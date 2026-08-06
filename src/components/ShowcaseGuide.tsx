@@ -127,7 +127,9 @@ export function ShowcaseGuide(props: ShowcaseGuideProps) {
   const step = guideStep(pathname, props);
 
   useEffect(() => {
-    setDismissed(window.sessionStorage.getItem("charlotte_showcase_guide_hidden") === "1");
+    const manuallyHidden = window.sessionStorage.getItem("charlotte_showcase_guide_hidden") === "1";
+    const compactScreen = window.matchMedia("(max-width: 1120px)").matches;
+    setDismissed(manuallyHidden || compactScreen);
   }, []);
 
   useEffect(() => {

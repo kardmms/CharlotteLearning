@@ -37,8 +37,9 @@ export default async function TeacherHomePage({
   return (
     <>
       <TeacherTopbar name={teacher.name} />
-      <TeacherTutorial />
-      <main className="page">
+      <div className="teacher-onboarding-shell">
+        <TeacherTutorial />
+        <main className="page">
         <section className="panel" data-tour="teacher-workspace">
           <div className="panel-header">
             <div>
@@ -127,7 +128,8 @@ export default async function TeacherHomePage({
             )}
           </div>
         </section>
-      </main>
+        </main>
+      </div>
     </>
   );
 }

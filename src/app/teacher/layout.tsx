@@ -36,10 +36,19 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
     })
     : null;
   const showcaseWorkspace = showcaseTeacher?.classrooms[0];
-  return (
-    <>
-      {session?.showcase ? (
-        <>
+  if (session?.showcase) {
+    return (
+      <>
+        <ShowcaseSimulationPulse
+          expiresAt={showcaseTeacher
+            ? effectiveShowcaseExpiry(
+              showcaseTeacher.createdAt,
+              showcaseTeacher.showcaseExpiresAt
+            ).toISOString()
+            : undefined}
+        />
+        <div className="showcase-layout-shell">
+          <div className="showcase-guide-rail">
           <ShowcaseGuide
             classroomId={showcaseWorkspace?.id}
             materialId={showcaseWorkspace?.materials[0]?.id}
@@ -47,17 +56,12 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
             simulationStarted={Boolean(showcaseWorkspace?.materials[0]?.showcaseSimulationStartedAt)}
             simulationCompleted={Boolean(showcaseWorkspace?.materials[0]?.showcaseSimulationCompletedAt)}
           />
-          <ShowcaseSimulationPulse
-            expiresAt={showcaseTeacher
-              ? effectiveShowcaseExpiry(
-                showcaseTeacher.createdAt,
-                showcaseTeacher.showcaseExpiresAt
-              ).toISOString()
-              : undefined}
-          />
-        </>
-      ) : null}
-      {children}
-    </>
-  );
+          </div>
+          <div className="showcase-layout-content">{children}</div>
+        </div>
+      </>
+    );
+  }
+
+  return children;
 }

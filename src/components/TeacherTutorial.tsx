@@ -32,17 +32,9 @@ const steps = [
 
 const tourStorageKey = "charlotte-teacher-spotlight-tour-complete";
 
-type SpotlightRect = {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-};
-
 export function TeacherTutorial() {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
-  const [rect, setRect] = useState<SpotlightRect | null>(null);
 
   useEffect(() => {
     if (window.localStorage.getItem(tourStorageKey) !== "1") {
@@ -55,33 +47,12 @@ export function TeacherTutorial() {
     if (!open) return;
 
     const target = document.querySelector<HTMLElement>(`[data-tour="${steps[index].target}"]`);
-    if (!target) {
-      setRect(null);
-      return;
-    }
-    const targetElement = target;
-
-    targetElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-
-    function updateRect() {
-      const box = targetElement.getBoundingClientRect();
-      setRect({
-        top: Math.max(14, box.top - 10),
-        left: Math.max(14, box.left - 10),
-        width: Math.min(window.innerWidth - 28, box.width + 20),
-        height: Math.min(window.innerHeight - 28, box.height + 20)
-      });
-    }
-
-    const timers = [window.setTimeout(updateRect, 80), window.setTimeout(updateRect, 520)];
-    window.addEventListener("resize", updateRect);
-    window.addEventListener("scroll", updateRect, { passive: true });
-    updateRect();
+    if (!target) return;
+    target.classList.add("tour-target-highlight");
+    target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
 
     return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-      window.removeEventListener("resize", updateRect);
-      window.removeEventListener("scroll", updateRect);
+      target.classList.remove("tour-target-highlight");
     };
   }, [index, open]);
 
@@ -94,34 +65,9 @@ export function TeacherTutorial() {
 
   const step = steps[index];
   const Icon = step.icon;
-  const maxCardLeft = typeof window === "undefined" ? 18 : Math.max(18, window.innerWidth - 486);
-  const maxCardTop = typeof window === "undefined" ? 18 : Math.max(18, window.innerHeight - 330);
-  const cardStyle = rect
-    ? {
-        top: Math.min(
-          maxCardTop,
-          Math.max(18, rect.top + rect.height + 18 > maxCardTop ? rect.top - 304 : rect.top + rect.height + 18)
-        ),
-        left: Math.min(maxCardLeft, Math.max(18, rect.left))
-      }
-    : undefined;
 
   return (
-    <div className="tour-backdrop" role="dialog" aria-modal="true" aria-label="Teacher setup tour">
-      <div
-        className="tour-spotlight"
-        style={
-          rect
-            ? {
-                top: rect.top,
-                left: rect.left,
-                width: rect.width,
-                height: rect.height
-              }
-            : undefined
-        }
-      />
-      <div className="tour-card" style={cardStyle}>
+    <aside className="tour-card" aria-label="Teacher setup tour">
         <button className="tour-close" type="button" onClick={close} aria-label="Close tutorial">
           <X size={18} />
         </button>
@@ -154,7 +100,6 @@ export function TeacherTutorial() {
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </aside>
   );
 }
