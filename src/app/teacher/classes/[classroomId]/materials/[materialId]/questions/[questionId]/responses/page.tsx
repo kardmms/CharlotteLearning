@@ -41,7 +41,7 @@ export default async function QuestionResponsesPage({
   searchParams
 }: {
   params: Promise<{ classroomId: string; materialId: string; questionId: string }>;
-  searchParams: Promise<{ error?: string; graded?: string }>;
+  searchParams: Promise<{ error?: string; graded?: string; answer?: string }>;
 }) {
   const teacher = await requireTeacher();
   const { classroomId, materialId, questionId } = await params;
@@ -82,7 +82,8 @@ export default async function QuestionResponsesPage({
     a.session.student.displayName.localeCompare(b.session.student.displayName)
   );
   const pendingAnswers = sortedAnswers.filter((answer) => answer.isCorrect === null);
-  const activePendingAnswer = pendingAnswers[0];
+  const selectedAnswer = sortedAnswers.find((answer) => answer.id === query.answer);
+  const activeAnswer = selectedAnswer || pendingAnswers[0];
   const gradedAnswers = sortedAnswers.filter((answer) => answer.isCorrect !== null);
   const correctAnswers = gradedAnswers.filter((answer) => answer.isCorrect).length;
   const percentCorrect = gradedAnswers.length ? Math.round((correctAnswers / gradedAnswers.length) * 100) : 0;
@@ -174,20 +175,34 @@ export default async function QuestionResponsesPage({
             <aside className="panel grading-panel">
               <div className="eyebrow">Manual grading</div>
               <h2>{pendingAnswers.length} pending</h2>
-              {activePendingAnswer ? (
+              {activeAnswer ? (
                 <form className="grading-form" action={gradeStudentAnswer}>
                   <input type="hidden" name="classroomId" value={classroomId} />
                   <input type="hidden" name="materialId" value={materialId} />
                   <input type="hidden" name="questionId" value={question.id} />
-                  <input type="hidden" name="answerId" value={activePendingAnswer.id} />
+                  <input type="hidden" name="answerId" value={activeAnswer.id} />
                   <div className="active-response-card">
                     <span className="muted">Student</span>
-                    <strong>{activePendingAnswer.session.student.displayName}</strong>
-                    <p>{activePendingAnswer.answerText}</p>
+                    <strong>{activeAnswer.session.student.displayName}</strong>
+                    <p>{activeAnswer.answerText}</p>
                   </div>
-                  <PointsSlider maxPoints={maxPoints} />
+                  <PointsSlider
+                    key={activeAnswer.id}
+                    maxPoints={maxPoints}
+                    initialPoints={activeAnswer.isCorrect === null ? maxPoints : activeAnswer.pointsEarned}
+                  />
+                  <label className="grading-feedback-field">
+                    <span>Teacher feedback <small>(optional)</small></span>
+                    <textarea
+                      name="teacherFeedback"
+                      maxLength={2000}
+                      rows={4}
+                      defaultValue={activeAnswer.teacherFeedback || ""}
+                      placeholder="Add a note about what the student did well or should improve."
+                    />
+                  </label>
                   <button className="button" type="submit">
-                    Save and show next
+                    {activeAnswer.isCorrect === null ? "Save grade and show next" : "Update grade"}
                     <ArrowRight size={17} />
                   </button>
                 </form>
@@ -226,10 +241,21 @@ export default async function QuestionResponsesPage({
                     <span className="muted">{formatDateTime(answer.updatedAt)}</span>
                   </div>
                   <p>{answer.answerText}</p>
-                  <span className={`status-pill ${status.className}`}>
-                    <StatusIcon size={16} />
-                    {status.label}
-                  </span>
+                  <div className="response-row-actions">
+                    {answer.isCorrect !== null && <strong>{answer.pointsEarned} / {maxPoints} points</strong>}
+                    <span className={`status-pill ${status.className}`}>
+                      <StatusIcon size={16} />
+                      {status.label}
+                    </span>
+                    {isFreeResponse && (
+                      <Link
+                        className="text-link"
+                        href={`/teacher/classes/${classroomId}/materials/${materialId}/questions/${question.id}/responses?answer=${answer.id}`}
+                      >
+                        {answer.isCorrect === null ? "Grade response" : "Edit grade"}
+                      </Link>
+                    )}
+                  </div>
                 </article>
               );
             })}

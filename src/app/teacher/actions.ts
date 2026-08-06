@@ -1289,6 +1289,7 @@ export async function gradeStudentAnswer(formData: FormData) {
   const questionId = formText(formData, "questionId");
   const answerId = formText(formData, "answerId");
   const requestedPoints = Number(formData.get("points"));
+  const teacherFeedback = boundedText(formData, "teacherFeedback", 2000);
   const path = `/teacher/classes/${classroomId}/materials/${materialId}/questions/${questionId}/responses`;
   await enforceOrRedirect(path, async () => {
     await enforceRateLimit({ scope: "teacher-grade-answer", limit: 240, windowSeconds: 60 * 60, identifier: teacher.id });
@@ -1322,7 +1323,13 @@ export async function gradeStudentAnswer(formData: FormData) {
 
   await prisma.studentAnswer.update({
     where: { id: answer.id },
-    data: { isCorrect, firstTryCorrect: isCorrect && answer.attemptCount <= 1, pointsEarned }
+    data: {
+      isCorrect,
+      firstTryCorrect: isCorrect && answer.attemptCount <= 1,
+      pointsEarned,
+      teacherFeedback: teacherFeedback || null,
+      gradedAt: new Date()
+    }
   });
 
   const total = await prisma.studentAnswer.aggregate({

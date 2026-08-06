@@ -163,7 +163,21 @@ export default async function IndividualResponsePage({
                         Grade response
                       </Link>
                     )}
+                    {!pending && answer && !question.correctAnswer && (
+                      <Link
+                        className="ghost-button"
+                        href={`/teacher/classes/${classroomId}/materials/${materialId}/questions/${question.id}/responses?answer=${answer.id}`}
+                      >
+                        Edit grade
+                      </Link>
+                    )}
                   </div>
+                  {answer?.teacherFeedback && (
+                    <div className="teacher-feedback-note">
+                      <strong>Teacher feedback</strong>
+                      <p>{answer.teacherFeedback}</p>
+                    </div>
+                  )}
                 </article>
               );
             })}

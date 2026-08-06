@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-export function PointsSlider({ maxPoints }: { maxPoints: number }) {
-  const [points, setPoints] = useState(maxPoints);
+export function PointsSlider({ maxPoints, initialPoints = maxPoints }: { maxPoints: number; initialPoints?: number }) {
+  const [points, setPoints] = useState(Math.min(maxPoints, Math.max(0, initialPoints)));
   return (
     <div className="points-slider">
       <div><strong>Points</strong><output>{points} / {maxPoints}</output></div>

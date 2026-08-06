@@ -4849,6 +4849,24 @@ tr:last-child td {
   gap: 12px;
 }
 
+.grading-feedback-field {
+  display: grid;
+  gap: 7px;
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.grading-feedback-field small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.grading-feedback-field textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 104px;
+}
+
 .active-response-card {
   display: grid;
   gap: 7px;
@@ -4929,6 +4947,41 @@ tr:last-child td {
 .response-row > div {
   display: grid;
   gap: 4px;
+}
+
+.response-row .response-row-actions {
+  justify-items: end;
+  gap: 7px;
+  text-align: right;
+}
+
+.response-row-actions > strong {
+  color: var(--navy);
+  font-size: 0.9rem;
+}
+
+.response-row-actions .text-link {
+  color: var(--blue);
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.response-row-actions .text-link:hover {
+  text-decoration: underline;
+}
+
+.teacher-feedback-note {
+  display: grid;
+  gap: 5px;
+  border-left: 4px solid var(--blue);
+  border-radius: 12px;
+  background: var(--blue-soft);
+  padding: 12px 14px;
+}
+
+.teacher-feedback-note p {
+  margin: 0;
 }
 
 .response-row p {
@@ -7193,6 +7246,11 @@ tr:last-child td {
   .student-mode-grid,
   .result-score-grid {
     grid-template-columns: 1fr;
+  }
+
+  .response-row .response-row-actions {
+    justify-items: start;
+    text-align: left;
   }
 
   .summary-action {

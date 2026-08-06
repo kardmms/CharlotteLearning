@@ -179,10 +179,40 @@ function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, 
 }
 
 function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel: string) {
-  const fallback = new Map(tasks.map((task, index) => [
-    `${task.studentId}:${task.questionId}`,
-    fallbackWrittenResponse(task, gradeLevel, index)
-  ]));
+  const usedResponses = new Set<string>();
+  const reflectionMoves = [
+    "I focused on", "I connected my answer to", "I used", "I went back to",
+    "I checked", "I explained", "I compared", "I highlighted"
+  ];
+  const reflectionDetails = [
+    "the first important clue", "the change in the characters' plan", "the strongest piece of evidence",
+    "what happened just before the problem was solved", "the way the group worked together",
+    "the result of the characters' decision", "a detail that supports my prediction", "the main lesson",
+    "the problem and its solution", "the characters' actions", "the order of events", "the final outcome"
+  ];
+  const fallback = new Map<string, string>();
+
+  tasks.forEach((task, index) => {
+    const baseResponse = fallbackWrittenResponse(task, gradeLevel, index);
+    let response = baseResponse;
+    let attempt = 0;
+
+    while (usedResponses.has(response.trim().toLowerCase()) && attempt < reflectionMoves.length * reflectionDetails.length) {
+      const seed = stableNumber(`${task.studentId}:${task.questionId}:distinct:${attempt}`);
+      const move = reflectionMoves[(seed + index + attempt) % reflectionMoves.length];
+      const detail = reflectionDetails[(Math.floor(seed / reflectionMoves.length) + index + attempt) % reflectionDetails.length];
+      response = `${baseResponse} ${move} ${detail}.`;
+      attempt += 1;
+    }
+
+    // This final fallback keeps uniqueness guaranteed even for unusually large demo rosters.
+    if (usedResponses.has(response.trim().toLowerCase())) {
+      response = `${baseResponse} I marked this as explanation ${index + 1} in my notes.`;
+    }
+
+    usedResponses.add(response.trim().toLowerCase());
+    fallback.set(`${task.studentId}:${task.questionId}`, response);
+  });
   return { responses: fallback, usedOpenAI: false };
 }
 
