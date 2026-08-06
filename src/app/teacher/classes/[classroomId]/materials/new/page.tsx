@@ -41,7 +41,7 @@ export default async function NewMaterialPage({
             you review and publish it.
           </p>
           <Message error={query.error} />
-          <AssignmentCreationForm classroomId={classroom.id} />
+          <AssignmentCreationForm classroomId={classroom.id} isShowcase={teacher.isShowcase} />
           <div className="actions">
             <Link className="ghost-button" href={`/teacher/classes/${classroom.id}`}>
               Back to class dashboard

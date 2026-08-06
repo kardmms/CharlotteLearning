@@ -68,10 +68,14 @@ export default async function TeacherHomePage({
               <GradeSlider defaultValue="3" />
               <p className="form-note">
                 {teacher.isShowcase
-                  ? "Charlotte will attach 12 fictional student accounts so you can experience a live classroom safely."
+                  ? "After setup, use Charlotte's downloadable sample roster to generate 12 fictional student accounts safely."
                   : "Charlotte will generate a classroom recovery key after setup. Save it somewhere safe; students will not need it."}
               </p>
-              <button className="button" type="submit">
+              <button
+                className="button"
+                type="submit"
+                data-showcase-target={teacher.isShowcase ? "create-class" : undefined}
+              >
                 Create class
               </button>
             </form>

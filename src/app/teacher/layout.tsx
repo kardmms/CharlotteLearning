@@ -19,11 +19,16 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
           take: 1,
           select: {
             id: true,
+            _count: { select: { students: { where: { active: true } } } },
             materials: {
               where: { isAdaptiveHome: false, activityKind: "IN_CLASS" },
               orderBy: { createdAt: "desc" },
               take: 1,
-              select: { id: true }
+              select: {
+                id: true,
+                showcaseSimulationStartedAt: true,
+                showcaseSimulationCompletedAt: true
+              }
             }
           }
         }
@@ -38,6 +43,9 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
           <ShowcaseGuide
             classroomId={showcaseWorkspace?.id}
             materialId={showcaseWorkspace?.materials[0]?.id}
+            studentCount={showcaseWorkspace?._count.students ?? 0}
+            simulationStarted={Boolean(showcaseWorkspace?.materials[0]?.showcaseSimulationStartedAt)}
+            simulationCompleted={Boolean(showcaseWorkspace?.materials[0]?.showcaseSimulationCompletedAt)}
           />
           <ShowcaseSimulationPulse
             expiresAt={showcaseTeacher

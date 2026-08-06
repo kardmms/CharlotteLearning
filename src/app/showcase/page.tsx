@@ -23,8 +23,8 @@ export default async function ShowcasePage({
           <h1>Explore the real Charlotte teacher workspace.</h1>
           <p>
             Start at the beginning of the same teacher portal used in a classroom. Create a class,
-            build an assignment, and then run 12 private fictional students through it while you
-            watch live progress, responses, and analytics.
+            use the downloadable sample roster to generate 12 approved fictional students, build
+            an assignment, and watch live progress, responses, and analytics.
           </p>
           <Message
             error={query.error}

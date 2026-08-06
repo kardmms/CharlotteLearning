@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2, Download, FileUp, Sparkles } from "lucide-react";
 import {
   addStudents,
   prepareStudentImport,
@@ -14,19 +14,48 @@ const initialState: RosterImportState = { rows: [], fileName: "" };
 export function StudentSpreadsheetImport({
   classroomId,
   privacyProtected,
-  privacyKeyHint
+  privacyKeyHint,
+  isShowcase = false
 }: {
   classroomId: string;
   privacyProtected?: boolean;
   privacyKeyHint?: string | null;
+  isShowcase?: boolean;
 }) {
   const [state, prepareAction, pending] = useActionState(prepareStudentImport, initialState);
 
   return (
     <div className="spreadsheet-import-flow">
+      {isShowcase && (
+        <div className="showcase-roster-walkthrough" data-showcase-target="showcase-roster-import">
+          <div>
+            <span>1</span>
+            <strong>Download the sample</strong>
+            <small>It contains 12 fictional students—no real student data.</small>
+          </div>
+          <a
+            className="ghost-button showcase-next-action"
+            href="/samples/charlotte-showcase-roster.csv"
+            download="charlotte-showcase-roster.csv"
+          >
+            <Download size={17} />
+            Download sample roster
+          </a>
+          <div>
+            <span>2</span>
+            <strong>Upload it below</strong>
+            <small>Charlotte will identify the name and email columns.</small>
+          </div>
+          <div>
+            <span>3</span>
+            <strong>Approve the generated list</strong>
+            <small>Showcase students are verified, approved, and activated automatically.</small>
+          </div>
+        </div>
+      )}
       <form className="form-grid" action={prepareAction}>
         <input type="hidden" name="classroomId" value={classroomId} />
-        <label>
+        <label className={isShowcase && state.rows.length === 0 ? "showcase-click-box" : undefined}>
           Student spreadsheet
           <input
             name="studentFile"
@@ -35,9 +64,17 @@ export function StudentSpreadsheetImport({
             required
           />
         </label>
-        <button className="button" disabled={pending} type="submit">
-          <Sparkles size={18} />
-          {pending ? "Charlotte is reading the spreadsheet..." : "Review spreadsheet with Charlotte"}
+        <button
+          className={`button ${isShowcase && state.rows.length === 0 ? "showcase-next-action" : ""}`}
+          disabled={pending}
+          type="submit"
+        >
+          {pending ? <Sparkles size={18} /> : <FileUp size={18} />}
+          {pending
+            ? "Charlotte is generating the class list..."
+            : isShowcase
+              ? "Have Charlotte generate the class list"
+              : "Review spreadsheet with Charlotte"}
         </button>
       </form>
 
@@ -48,9 +85,13 @@ export function StudentSpreadsheetImport({
           <input type="hidden" name="classroomId" value={classroomId} />
           <div className="spreadsheet-review-heading">
             <div>
-              <div className="eyebrow">Review before adding</div>
+              <div className="eyebrow">{isShowcase ? "AI-generated class list" : "Review before adding"}</div>
               <h3>Charlotte found {state.rows.length} {state.rows.length === 1 ? "student" : "students"}</h3>
-              <p>Double-check every field below. Nothing is official until you confirm.</p>
+              <p>
+                {isShowcase
+                  ? "Check the fictional roster, then approve it. Every student account will be activated automatically."
+                  : "Double-check every field below. Nothing is official until you confirm."}
+              </p>
             </div>
             <span className="status-pill status-blue"><Sparkles size={15} /> {state.fileName}</span>
           </div>
@@ -89,9 +130,9 @@ export function StudentSpreadsheetImport({
             ))}
           </div>
 
-          <button className="button" type="submit">
+          <button className={`button ${isShowcase ? "showcase-next-action" : ""}`} type="submit">
             <CheckCircle2 size={18} />
-            Confirm and add {state.rows.length} {state.rows.length === 1 ? "student" : "students"}
+            {isShowcase ? "Approve and add" : "Confirm and add"} {state.rows.length} {state.rows.length === 1 ? "student" : "students"}
           </button>
         </form>
       )}

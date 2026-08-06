@@ -27,7 +27,6 @@ import {
 import { normalizeGrade } from "@/lib/grade";
 import { excerptForQuestion } from "@/lib/text-context";
 import {
-  SHOWCASE_STUDENT_NAMES,
   deleteShowcaseWorkspace,
   startShowcaseMaterialSimulation
 } from "@/lib/showcase";
@@ -272,11 +271,6 @@ export async function createClassroom(formData: FormData) {
   const recoveryKey = createClassPrivacyRecoveryKey();
   const privacySalt = createPrivacyKeySalt();
   const derivedPrivacyKey = deriveClassPrivacyKey(recoveryKey, privacySalt);
-  const showcaseRosterKey = teacher.isShowcase ? crypto.randomUUID() : null;
-  const showcasePasswordHash = teacher.isShowcase
-    ? await hashPassword(crypto.randomBytes(32).toString("base64url"))
-    : null;
-
   const classroom = await prisma.$transaction(async (transaction) => {
     const created = await transaction.classroom.create({
       data: teacher.isShowcase
@@ -284,23 +278,7 @@ export async function createClassroom(formData: FormData) {
           name,
           gradeLevel,
           teacherId: teacher.id,
-          identityMode: IdentityMode.STANDARD,
-          students: {
-            create: SHOWCASE_STUDENT_NAMES.map((displayName, index) => {
-              const email = `student-${index + 1}-${showcaseRosterKey}@demo.charlottelearning.ai`;
-              return {
-                displayName,
-                email,
-                account: {
-                  create: {
-                    displayName,
-                    email,
-                    passwordHash: showcasePasswordHash as string
-                  }
-                }
-              };
-            })
-          }
+          identityMode: IdentityMode.STANDARD
         }
         : {
           name,
@@ -444,7 +422,7 @@ async function createStudentsFromRows(
 ) {
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId },
-    include: { teacher: { select: { name: true } } }
+    include: { teacher: { select: { name: true, isShowcase: true } } }
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
 
@@ -454,6 +432,62 @@ async function createStudentsFromRows(
   for (const row of cleaned) {
     if (row.displayName.length < 2 || !isValidStudentEmail(row.email)) {
       errorRedirect(errorPath, "Each student needs a name and a valid email address.");
+    }
+  }
+
+  if (classroom.teacher.isShowcase) {
+    const passwordHash = await hashPassword(crypto.randomBytes(32).toString("base64url"));
+    try {
+      const enrolled = await prisma.$transaction(async (transaction) => {
+        const created: Array<{ studentId: string }> = [];
+        for (const [index, row] of cleaned.entries()) {
+          const account = await transaction.studentAccount.create({
+            data: {
+              displayName: row.displayName,
+              email: `showcase-${classroomId}-${index + 1}-${crypto.randomUUID()}@demo.charlottelearning.ai`,
+              passwordHash
+            }
+          });
+          const student = await transaction.student.create({
+            data: {
+              classroomId,
+              accountId: account.id,
+              displayName: row.displayName,
+              email: row.email,
+              active: true
+            },
+            select: { id: true }
+          });
+          created.push({ studentId: student.id });
+        }
+        await transaction.auditEvent.create({
+          data: auditEventData({
+            actorType: "teacher",
+            actorId: teacherId,
+            action: "students.enrolled",
+            targetType: "classroom",
+            targetId: classroomId,
+            metadata: {
+              count: created.length,
+              identityMode: "STANDARD",
+              showcaseAutoApproved: true
+            }
+          })
+        });
+        return created;
+      });
+      return cleaned.map((row, index) => ({
+        studentId: enrolled[index].studentId,
+        studentName: row.displayName,
+        studentEmail: row.email,
+        classroomId,
+        classroomName: classroom.name,
+        teacherId,
+        teacherName: classroom.teacher.name,
+        hasAccount: true
+      }));
+    } catch {
+      errorRedirect(errorPath, "Student names and emails must be unique inside the class.");
     }
   }
 

@@ -14,9 +14,11 @@ const generationSteps = [
 ];
 
 export function AssignmentCreationForm({
-  classroomId
+  classroomId,
+  isShowcase = false
 }: {
   classroomId: string;
+  isShowcase?: boolean;
 }) {
   const [creationMode, setCreationMode] = useState<"ai" | "manual">("ai");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -111,7 +113,11 @@ export function AssignmentCreationForm({
         </label>
       )}
 
-      <button className="button" type="submit">
+      <button
+        className="button"
+        type="submit"
+        data-showcase-target={isShowcase ? "create-assignment" : undefined}
+      >
         {creationMode === "ai" ? <FileUp size={18} /> : <FilePenLine size={18} />}
         {creationMode === "ai" ? "Create draft with Charlotte" : "Create blank assignment"}
       </button>

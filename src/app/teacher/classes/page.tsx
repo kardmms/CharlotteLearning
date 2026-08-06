@@ -28,7 +28,11 @@ export default async function TeacherClassesPage() {
             <h1>Classrooms</h1>
             <p>Open a class dashboard, check enrollment, or jump to the latest assignment.</p>
           </div>
-          <Link className="button" href="/teacher/classes/new">
+          <Link
+            className="button"
+            href="/teacher/classes/new"
+            data-showcase-target={teacher.isShowcase ? "new-class" : undefined}
+          >
             <Plus size={18} />
             New class
           </Link>

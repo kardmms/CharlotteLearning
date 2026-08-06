@@ -77,7 +77,9 @@ export default async function RosterPage({
             error={query.error}
             success={
               query.saved
-                ? "Students added."
+                ? teacher.isShowcase
+                  ? "Class list added. All showcase students are verified, approved, and ready."
+                  : "Students added."
                 : query.imported
                   ? "Spreadsheet imported."
                   : undefined
@@ -88,13 +90,21 @@ export default async function RosterPage({
         <section className="panel privacy-roster-panel" style={{ marginTop: 18 }}>
           <div className="panel-header">
             <div>
-              <div className="eyebrow">Student privacy</div>
-              <h2>{isPrivacyProtected ? "Recovery-key protected roster" : "Standard roster"}</h2>
+              <div className="eyebrow">{teacher.isShowcase ? "Safe demonstration" : "Student privacy"}</div>
+              <h2>
+                {teacher.isShowcase
+                  ? "Fictional students only"
+                  : isPrivacyProtected
+                    ? "Recovery-key protected roster"
+                    : "Standard roster"}
+              </h2>
             </div>
             <ShieldCheck color={isPrivacyProtected ? "#15803d" : "#376c8f"} />
           </div>
           <p>
-            {isPrivacyProtected
+            {teacher.isShowcase
+              ? "Use the downloadable sample roster below. It contains fictional names and addresses created only for this temporary showcase."
+              : isPrivacyProtected
               ? "Student names and emails are stored as encrypted identity data. Students only use email and password. The classroom recovery key is for teachers and approved admin recovery."
               : "This class stores student names and emails normally. New classes use classroom recovery keys for database-anonymous student identities."}
           </p>
@@ -110,7 +120,10 @@ export default async function RosterPage({
         </section>
 
         <section className="grid roster-entry-grid" style={{ marginTop: 18 }}>
-          <div className="panel spreadsheet-import-panel">
+          <div
+            className="panel spreadsheet-import-panel"
+            data-showcase-target={teacher.isShowcase && classroom.students.length === 0 ? "showcase-roster-import" : undefined}
+          >
             <div className="panel-header">
               <div>
                 <div className="eyebrow">AI-assisted spreadsheet import</div>
@@ -119,17 +132,19 @@ export default async function RosterPage({
               <FileSpreadsheet color="#2f7d4a" />
             </div>
             <p>
-              Charlotte copies student rows into a review table. Students create their own password
-              after you enroll their email.
+              {teacher.isShowcase
+                ? "Charlotte turns the sample sheet into a reviewable class list, then activates every fictional student when you approve it."
+                : "Charlotte copies student rows into a review table. Students create their own password after you enroll their email."}
             </p>
             <StudentSpreadsheetImport
               classroomId={classroom.id}
               privacyProtected={isPrivacyProtected}
               privacyKeyHint={classroom.privacyKeyHint}
+              isShowcase={teacher.isShowcase}
             />
           </div>
 
-          <div className="panel manual-student-panel">
+          {!teacher.isShowcase && <div className="panel manual-student-panel">
             <div className="panel-header">
               <div>
                 <div className="eyebrow">Manual entry</div>
@@ -175,7 +190,7 @@ export default async function RosterPage({
                 Add students
               </button>
             </form>
-          </div>
+          </div>}
 
         </section>
 
@@ -207,10 +222,20 @@ export default async function RosterPage({
                     <td>{student._count.sessions}</td>
                     <td>
                       <span className={`status-pill ${student.account ? "status-green" : "status-yellow"}`}>
-                        {student.account ? "Account active" : "Invitation ready"}
+                        {teacher.isShowcase && student.account
+                          ? "Verified & approved"
+                          : student.account
+                            ? "Account active"
+                            : "Invitation ready"}
                       </span>
                     </td>
-                    <td>{student.account ? "Student-created password" : "Waiting for student signup"}</td>
+                    <td>
+                      {teacher.isShowcase && student.account
+                        ? "Showcase access active"
+                        : student.account
+                          ? "Student-created password"
+                          : "Waiting for student signup"}
+                    </td>
                   </tr>
                 ))}
                 {classroom.students.length === 0 && (
