@@ -175,121 +175,77 @@ function stablePick<T>(values: T[], seed: number, offset = 0) {
   return values[(seed + offset) % values.length];
 }
 
-function claimForPrompt(prompt: string, grade: number) {
-  const normalized = prompt.toLowerCase();
-  const earlyPrefix = grade <= 2 ? "the answer is" : "the answer is supported by the text";
-  if (/\b(predict|next|happen)\b/.test(normalized)) {
-    return grade <= 2
-      ? "what happens next will match the clues"
-      : "the next event should follow from the clues already in the text";
-  }
-  if (/\b(theme|lesson|message|moral)\b/.test(normalized)) {
-    return grade <= 2
-      ? "the lesson comes from what the characters do"
-      : "the theme comes from the choices and consequences in the passage";
-  }
-  if (/\b(main idea|central idea|mostly about)\b/.test(normalized)) {
-    return grade <= 2
-      ? "the text is mostly about one important idea"
-      : "the main idea is built from the repeated details in the passage";
-  }
-  if (/\b(character|speaker|narrator)\b/.test(normalized)) {
-    return grade <= 2
-      ? "the character shows feelings by what they do"
-      : "the character's actions reveal what they are thinking and feeling";
-  }
-  if (/\b(compare|contrast|same|different)\b/.test(normalized)) {
-    return grade <= 2
-      ? "the two parts are alike and different in important ways"
-      : "the comparison depends on looking at the details side by side";
-  }
-  if (/\b(why|reason|cause)\b/.test(normalized)) {
-    return grade <= 2
-      ? "there is a reason in the text"
-      : "the reason is shown through the evidence in the passage";
-  }
-  if (/\b(how|explain|describe)\b/.test(normalized)) {
-    return grade <= 2
-      ? "the text shows how it happens"
-      : "the explanation comes from the sequence of details in the text";
-  }
-  return earlyPrefix;
+function stripFinalPunctuation(value: string) {
+  return compactText(value).replace(/[.!?]+$/, "");
 }
 
-function reasoningForPrompt(prompt: string) {
-  const normalized = prompt.toLowerCase();
-  if (/\b(predict|next|happen)\b/.test(normalized)) return "it points to what will probably happen next";
-  if (/\b(theme|lesson|message|moral)\b/.test(normalized)) return "it connects the event to a larger lesson";
-  if (/\b(main idea|central idea|mostly about)\b/.test(normalized)) return "it repeats the central idea instead of a small side detail";
-  if (/\b(character|speaker|narrator)\b/.test(normalized)) return "it shows the character through an action or choice";
-  if (/\b(compare|contrast|same|different)\b/.test(normalized)) return "it gives a detail that can be compared with another part";
-  if (/\b(why|reason|cause)\b/.test(normalized)) return "it explains why the event or idea happens";
-  if (/\b(how|explain|describe)\b/.test(normalized)) return "it explains the process in order";
-  return "it directly supports the answer";
+function finishSentence(value: string) {
+  const cleaned = compactText(value);
+  if (!cleaned) return "The source gives a detail that answers the question.";
+  return /[.!?]$/.test(cleaned) ? cleaned : `${cleaned}.`;
+}
+
+function clauseForEmbedding(value: string) {
+  return stripFinalPunctuation(value)
+    .replace(/^It\b/, "it")
+    .replace(/^This\b/, "this")
+    .replace(/^They\b/, "they")
+    .replace(/^The\b/, "the")
+    .replace(/^A\b/, "a")
+    .replace(/^An\b/, "an");
+}
+
+function answerFromEvidence(value: string, maxLength: number) {
+  let answer = stripFinalPunctuation(value)
+    .replace(/^because\s+/i, "")
+    .replace(/^since\s+/i, "");
+
+  const directPatterns: Array<[RegExp, string]> = [
+    [/^this will improve (.+?) by (.+)$/i, "It will improve $1 by $2"],
+    [/^this will help (.+?) by (.+)$/i, "It will help $1 by $2"],
+    [/^this makes (.+?) easier by (.+)$/i, "It makes $1 easier by $2"],
+    [/^this means (.+)$/i, "It means $1"]
+  ];
+  for (const [pattern, replacement] of directPatterns) {
+    if (pattern.test(answer)) {
+      answer = answer.replace(pattern, replacement);
+      break;
+    }
+  }
+
+  return finishSentence(truncateAtWord(answer, maxLength));
 }
 
 function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, index: number) {
   const seed = stableNumber(`${task.studentId}:${task.questionId}:writing`);
   const grade = gradeNumber(gradeLevel);
-  const early = grade <= 2;
-  const openers = early ? [
-    "I think", "My answer is", "I noticed", "One clue shows", "The text shows", "I predict"
-  ] : [
-    "I think", "My answer is", "The passage suggests", "The strongest answer is",
-    "I would explain that", "The text makes me think", "A careful answer is", "My evidence shows"
-  ];
-  const evidenceOpeners = [
-    "One detail is", "For example", "A useful clue is", "The clearest evidence is",
-    "This is supported when", "The text explains", "I used the part where", "A moment that shows this is"
-  ];
-  const developingClosers = [
-    "That clue helped me answer.", "This made my answer make sense.", "I might need one more detail too.",
-    "That is why I chose that answer.", "I checked that part again.", "This is the part I understood best."
-  ];
-  const onLevelClosers = [
-    "That detail connects back to the question.", "It supports my answer directly.",
-    "It helped me explain my thinking.", "That part gives evidence instead of just a guess.",
-    "It shows the answer in the text.", "That clue makes the answer stronger."
-  ];
-  const strongClosers = [
-    "This makes the answer stronger because", "That evidence matters because",
-    "I would use that detail because", "This connects to the question because",
-    "The detail is important because", "It supports the answer because"
-  ];
+  const maxLength = grade <= 2 ? 90 : 130;
   const pieces = evidencePieces(task.contextExcerpt);
-  const evidence = truncateAtWord(
-    stablePick(pieces, seed, index),
-    early ? 90 : 145
-  );
-  const secondEvidence = truncateAtWord(
-    stablePick(pieces, Math.floor(seed / Math.max(1, pieces.length)), index + 3),
-    early ? 80 : 125
-  );
-  const opener = stablePick(openers, seed, index);
-  const evidenceOpener = stablePick(evidenceOpeners, Math.floor(seed / openers.length), index);
-  const claim = claimForPrompt(task.prompt, grade);
-  const reasoning = reasoningForPrompt(`${task.prompt} ${task.rubric}`);
-
-  if (early) {
-    if (task.profile === "needs_support") {
-      return `${opener} ${claim}. ${evidenceOpener} ${evidence}.`;
-    }
-    if (task.profile === "developing") {
-      return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(developingClosers, seed, index)}`;
-    }
-    return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(onLevelClosers, seed, index)}`;
-  }
+  const answer = answerFromEvidence(stablePick(pieces, seed, index), maxLength);
+  const clause = clauseForEmbedding(answer);
 
   if (task.profile === "needs_support") {
-    return `${opener} ${claim}. ${evidenceOpener} ${evidence}.`;
+    return `I think ${clause}.`;
   }
   if (task.profile === "developing") {
-    return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(developingClosers, seed, index)}`;
+    return stablePick([
+      `The text says ${clause}.`,
+      `My answer is that ${clause}.`,
+      `I found that ${clause}.`
+    ], seed, index);
   }
   if (task.profile === "strong") {
-    return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(strongClosers, seed, index)} ${reasoning}.`;
+    return stablePick([
+      `${answer} That detail supports my answer.`,
+      `${answer} This is the clearest evidence.`,
+      `${answer} I would use that as proof.`
+    ], seed, index);
   }
-  return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(onLevelClosers, seed, index)} ${secondEvidence !== evidence ? `I also noticed ${secondEvidence}.` : ""}`.trim();
+  return stablePick([
+    answer,
+    `The answer is that ${clause}.`,
+    `A detail that answers this is that ${clause}.`
+  ], seed, index);
 }
 
 function generateWrittenResponses(
@@ -299,18 +255,16 @@ function generateWrittenResponses(
 ) {
   const usedResponses = new Set(existingAnswerTexts.map(normalizeResponseKey));
   const distinctTails = [
-    "That clue stood out to me most.",
-    "I would underline that part first.",
-    "This helped me check my answer.",
-    "I used that detail before adding anything else.",
-    "That part made my thinking clearer.",
-    "I would go back to that sentence when explaining.",
-    "This was the evidence I trusted most.",
-    "That clue helped me avoid guessing.",
-    "I noticed that detail before the ending.",
-    "This part connects best to the prompt.",
-    "I would use this as my first evidence note.",
-    "That is the detail I would share with a partner."
+    "That is my evidence.",
+    "I found that in the source.",
+    "That detail answers it.",
+    "This part helped me.",
+    "I would use that detail.",
+    "That is the clue I chose.",
+    "This supports my answer.",
+    "I checked that part.",
+    "That sentence stood out.",
+    "This is the best detail."
   ];
   const fallback = new Map<string, string>();
 
