@@ -21,6 +21,8 @@ export const SHOWCASE_STUDENT_NAMES = [
 ];
 
 const showcaseStudentEmailDomain = "@demo.charlottelearning.ai";
+const SHOWCASE_TICK_CLAIM_MS = 8_000;
+const SHOWCASE_RETRY_AFTER_ERROR_MS = 1_200;
 
 async function deleteOrphanedShowcaseStudentAccounts() {
   return prisma.studentAccount.deleteMany({
@@ -137,58 +139,178 @@ function studentProfile(index: number): ShowcaseWrittenTask["profile"] {
   return (["on_level", "strong", "developing", "on_level", "needs_support", "strong"] as const)[index % 6];
 }
 
-function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, index: number) {
-  const seed = stableNumber(`${task.studentId}:${task.questionId}:writing`);
-  const elementaryOpeners = [
-    "I think", "My answer is", "One clue is", "The story shows", "I noticed", "This means",
-    "A detail is", "Mara learns", "The group learns", "It seems", "I predict", "The lesson is"
-  ];
-  const evidenceOpeners = [
-    "For example", "One detail is", "The clearest evidence is", "This is supported when",
-    "The text explains that", "A moment that shows this is", "We can see this when", "The story says"
-  ];
-  const elementaryOpener = elementaryOpeners[seed % elementaryOpeners.length];
-  const evidenceOpener = evidenceOpeners[Math.floor(seed / elementaryOpeners.length) % evidenceOpeners.length];
-  const evidence = task.contextExcerpt
-    .replace(/\s+/g, " ")
-    .split(/[.!?]/)
-    .map((part) => part.trim())
-    .find(Boolean)
-    ?.slice(0, 140);
-  const grade = gradeLevel.toUpperCase() === "K" ? 0 : Number.parseInt(gradeLevel, 10);
-  const shortEvidence = evidence || "the characters solve one part at a time";
-  if (Number.isFinite(grade) && grade <= 2) {
-    return index % 2 === 0
-      ? `${elementaryOpener} they will get ready and help each other.`
-      : `${elementaryOpener} the big job got easier when friends helped.`;
-  }
-  if (task.profile === "needs_support") {
-    return index % 2 === 0
-      ? `${elementaryOpener} they will be ready because they made a plan for next time.`
-      : `${elementaryOpener} people can help with a big problem. They each did a small part.`;
-  }
-  if (task.profile === "developing") {
-    return `The group will probably work together again. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
-  }
-  if (task.profile === "strong") {
-    return `Mara learns that planning and teamwork can make a difficult problem manageable. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
-  }
-  return index % 2 === 0
-    ? `They will probably follow their storm plan and divide the work. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`
-    : `The lesson is that a large problem becomes easier when people plan and cooperate. ${evidenceOpener} ${shortEvidence.toLowerCase()}.`;
+function gradeNumber(gradeLevel: string) {
+  const normalized = gradeLevel.trim().toUpperCase();
+  if (normalized === "K" || normalized === "TK") return 0;
+  const match = normalized.match(/\d+/);
+  return match ? Number.parseInt(match[0], 10) : 5;
 }
 
-function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel: string) {
-  const usedResponses = new Set<string>();
-  const reflectionMoves = [
-    "I focused on", "I connected my answer to", "I used", "I went back to",
-    "I checked", "I explained", "I compared", "I highlighted"
+function compactText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeResponseKey(value: string) {
+  return compactText(value).toLowerCase();
+}
+
+function truncateAtWord(value: string, maxLength: number) {
+  const cleaned = compactText(value);
+  if (cleaned.length <= maxLength) return cleaned;
+  const truncated = cleaned.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
+  return truncated || cleaned.slice(0, maxLength).trim();
+}
+
+function evidencePieces(contextExcerpt: string) {
+  const cleaned = compactText(contextExcerpt);
+  if (!cleaned) return ["the reading gives a clue that supports the answer"];
+  const pieces = cleaned
+    .split(/[.!?]+/)
+    .map((part) => truncateAtWord(part, 180))
+    .filter((part) => part.length >= 18 && /[a-z]/i.test(part));
+  return pieces.length ? pieces.slice(0, 10) : [truncateAtWord(cleaned, 180)];
+}
+
+function stablePick<T>(values: T[], seed: number, offset = 0) {
+  return values[(seed + offset) % values.length];
+}
+
+function claimForPrompt(prompt: string, grade: number) {
+  const normalized = prompt.toLowerCase();
+  const earlyPrefix = grade <= 2 ? "the answer is" : "the answer is supported by the text";
+  if (/\b(predict|next|happen)\b/.test(normalized)) {
+    return grade <= 2
+      ? "what happens next will match the clues"
+      : "the next event should follow from the clues already in the text";
+  }
+  if (/\b(theme|lesson|message|moral)\b/.test(normalized)) {
+    return grade <= 2
+      ? "the lesson comes from what the characters do"
+      : "the theme comes from the choices and consequences in the passage";
+  }
+  if (/\b(main idea|central idea|mostly about)\b/.test(normalized)) {
+    return grade <= 2
+      ? "the text is mostly about one important idea"
+      : "the main idea is built from the repeated details in the passage";
+  }
+  if (/\b(character|speaker|narrator)\b/.test(normalized)) {
+    return grade <= 2
+      ? "the character shows feelings by what they do"
+      : "the character's actions reveal what they are thinking and feeling";
+  }
+  if (/\b(compare|contrast|same|different)\b/.test(normalized)) {
+    return grade <= 2
+      ? "the two parts are alike and different in important ways"
+      : "the comparison depends on looking at the details side by side";
+  }
+  if (/\b(why|reason|cause)\b/.test(normalized)) {
+    return grade <= 2
+      ? "there is a reason in the text"
+      : "the reason is shown through the evidence in the passage";
+  }
+  if (/\b(how|explain|describe)\b/.test(normalized)) {
+    return grade <= 2
+      ? "the text shows how it happens"
+      : "the explanation comes from the sequence of details in the text";
+  }
+  return earlyPrefix;
+}
+
+function reasoningForPrompt(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  if (/\b(predict|next|happen)\b/.test(normalized)) return "it points to what will probably happen next";
+  if (/\b(theme|lesson|message|moral)\b/.test(normalized)) return "it connects the event to a larger lesson";
+  if (/\b(main idea|central idea|mostly about)\b/.test(normalized)) return "it repeats the central idea instead of a small side detail";
+  if (/\b(character|speaker|narrator)\b/.test(normalized)) return "it shows the character through an action or choice";
+  if (/\b(compare|contrast|same|different)\b/.test(normalized)) return "it gives a detail that can be compared with another part";
+  if (/\b(why|reason|cause)\b/.test(normalized)) return "it explains why the event or idea happens";
+  if (/\b(how|explain|describe)\b/.test(normalized)) return "it explains the process in order";
+  return "it directly supports the answer";
+}
+
+function fallbackWrittenResponse(task: ShowcaseWrittenTask, gradeLevel: string, index: number) {
+  const seed = stableNumber(`${task.studentId}:${task.questionId}:writing`);
+  const grade = gradeNumber(gradeLevel);
+  const early = grade <= 2;
+  const openers = early ? [
+    "I think", "My answer is", "I noticed", "One clue shows", "The text shows", "I predict"
+  ] : [
+    "I think", "My answer is", "The passage suggests", "The strongest answer is",
+    "I would explain that", "The text makes me think", "A careful answer is", "My evidence shows"
   ];
-  const reflectionDetails = [
-    "the first important clue", "the change in the characters' plan", "the strongest piece of evidence",
-    "what happened just before the problem was solved", "the way the group worked together",
-    "the result of the characters' decision", "a detail that supports my prediction", "the main lesson",
-    "the problem and its solution", "the characters' actions", "the order of events", "the final outcome"
+  const evidenceOpeners = [
+    "One detail is", "For example", "A useful clue is", "The clearest evidence is",
+    "This is supported when", "The text explains", "I used the part where", "A moment that shows this is"
+  ];
+  const developingClosers = [
+    "That clue helped me answer.", "This made my answer make sense.", "I might need one more detail too.",
+    "That is why I chose that answer.", "I checked that part again.", "This is the part I understood best."
+  ];
+  const onLevelClosers = [
+    "That detail connects back to the question.", "It supports my answer directly.",
+    "It helped me explain my thinking.", "That part gives evidence instead of just a guess.",
+    "It shows the answer in the text.", "That clue makes the answer stronger."
+  ];
+  const strongClosers = [
+    "This makes the answer stronger because", "That evidence matters because",
+    "I would use that detail because", "This connects to the question because",
+    "The detail is important because", "It supports the answer because"
+  ];
+  const pieces = evidencePieces(task.contextExcerpt);
+  const evidence = truncateAtWord(
+    stablePick(pieces, seed, index),
+    early ? 90 : 145
+  );
+  const secondEvidence = truncateAtWord(
+    stablePick(pieces, Math.floor(seed / Math.max(1, pieces.length)), index + 3),
+    early ? 80 : 125
+  );
+  const opener = stablePick(openers, seed, index);
+  const evidenceOpener = stablePick(evidenceOpeners, Math.floor(seed / openers.length), index);
+  const claim = claimForPrompt(task.prompt, grade);
+  const reasoning = reasoningForPrompt(`${task.prompt} ${task.rubric}`);
+
+  if (early) {
+    if (task.profile === "needs_support") {
+      return `${opener} ${claim}. ${evidenceOpener} ${evidence}.`;
+    }
+    if (task.profile === "developing") {
+      return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(developingClosers, seed, index)}`;
+    }
+    return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(onLevelClosers, seed, index)}`;
+  }
+
+  if (task.profile === "needs_support") {
+    return `${opener} ${claim}. ${evidenceOpener} ${evidence}.`;
+  }
+  if (task.profile === "developing") {
+    return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(developingClosers, seed, index)}`;
+  }
+  if (task.profile === "strong") {
+    return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(strongClosers, seed, index)} ${reasoning}.`;
+  }
+  return `${opener} ${claim}. ${evidenceOpener} ${evidence}. ${stablePick(onLevelClosers, seed, index)} ${secondEvidence !== evidence ? `I also noticed ${secondEvidence}.` : ""}`.trim();
+}
+
+function generateWrittenResponses(
+  tasks: ShowcaseWrittenTask[],
+  gradeLevel: string,
+  existingAnswerTexts: string[] = []
+) {
+  const usedResponses = new Set(existingAnswerTexts.map(normalizeResponseKey));
+  const distinctTails = [
+    "That clue stood out to me most.",
+    "I would underline that part first.",
+    "This helped me check my answer.",
+    "I used that detail before adding anything else.",
+    "That part made my thinking clearer.",
+    "I would go back to that sentence when explaining.",
+    "This was the evidence I trusted most.",
+    "That clue helped me avoid guessing.",
+    "I noticed that detail before the ending.",
+    "This part connects best to the prompt.",
+    "I would use this as my first evidence note.",
+    "That is the detail I would share with a partner."
   ];
   const fallback = new Map<string, string>();
 
@@ -197,21 +319,20 @@ function generateWrittenResponses(tasks: ShowcaseWrittenTask[], gradeLevel: stri
     let response = baseResponse;
     let attempt = 0;
 
-    while (usedResponses.has(response.trim().toLowerCase()) && attempt < reflectionMoves.length * reflectionDetails.length) {
+    while (usedResponses.has(normalizeResponseKey(response)) && attempt < distinctTails.length) {
       const seed = stableNumber(`${task.studentId}:${task.questionId}:distinct:${attempt}`);
-      const move = reflectionMoves[(seed + index + attempt) % reflectionMoves.length];
-      const detail = reflectionDetails[(Math.floor(seed / reflectionMoves.length) + index + attempt) % reflectionDetails.length];
-      response = `${baseResponse} ${move} ${detail}.`;
+      response = `${baseResponse} ${stablePick(distinctTails, seed, index + attempt)}`;
       attempt += 1;
     }
 
     // This final fallback keeps uniqueness guaranteed even for unusually large demo rosters.
-    if (usedResponses.has(response.trim().toLowerCase())) {
-      response = `${baseResponse} I marked this as explanation ${index + 1} in my notes.`;
+    if (usedResponses.has(normalizeResponseKey(response))) {
+      response = `${baseResponse} My extra note is that clue ${index + 1} helped me decide.`;
     }
 
-    usedResponses.add(response.trim().toLowerCase());
-    fallback.set(`${task.studentId}:${task.questionId}`, response);
+    const finalResponse = truncateAtWord(response, 800);
+    usedResponses.add(normalizeResponseKey(finalResponse));
+    fallback.set(`${task.studentId}:${task.questionId}`, finalResponse);
   });
   return { responses: fallback, usedOpenAI: false };
 }
@@ -331,10 +452,10 @@ export async function runShowcaseTick(teacherId: string) {
         { showcaseNextTickAt: { lte: now } }
       ]
     },
-    // Hold the claim longer than the OpenAI timeout so two open tabs cannot
-    // generate or write the same student's next response concurrently.
+    // Keep one tab at a time advancing the demo, but recover quickly if a
+    // local tick is interrupted.
     data: {
-      showcaseNextTickAt: new Date(now.getTime() + 45_000),
+      showcaseNextTickAt: new Date(now.getTime() + SHOWCASE_TICK_CLAIM_MS),
       showcaseCleanupAt: null
     }
   });
@@ -342,6 +463,7 @@ export async function runShowcaseTick(teacherId: string) {
     return getShowcaseSimulationStatus(teacherId);
   }
 
+  try {
   const materials = await prisma.material.findMany({
     where: {
       teacherId,
@@ -421,9 +543,19 @@ export async function runShowcaseTick(teacherId: string) {
       contextExcerpt: question.contextExcerpt || material.sourcePreview || material.sourceText?.slice(0, 800) || ""
     } satisfies ShowcaseWrittenTask];
   });
+  const writtenQuestionIds = new Set(
+    material.questions
+      .filter((question) => parseChoices(question.choicesJson).length === 0)
+      .map((question) => question.id)
+  );
+  const existingWrittenAnswers = currentSessions
+    .flatMap((session) => session.answers)
+    .filter((answer) => writtenQuestionIds.has(answer.questionId))
+    .map((answer) => answer.answerText);
   const generated = generateWrittenResponses(
     writtenTasks,
-    material.gradeLevel || material.classroom.gradeLevel
+    material.gradeLevel || material.classroom.gradeLevel,
+    existingWrittenAnswers
   );
 
   const sessionAdvances = new Map<string, {
@@ -521,4 +653,8 @@ export async function runShowcaseTick(teacherId: string) {
     completedStudents,
     usedOpenAI: generated.usedOpenAI
   };
+  } catch (error) {
+    await scheduleNextShowcaseTick(teacherId, SHOWCASE_RETRY_AFTER_ERROR_MS).catch(() => undefined);
+    throw error;
+  }
 }

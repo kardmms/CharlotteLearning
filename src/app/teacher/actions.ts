@@ -28,6 +28,7 @@ import { normalizeGrade } from "@/lib/grade";
 import { excerptForQuestion } from "@/lib/text-context";
 import {
   deleteShowcaseWorkspace,
+  runShowcaseTick,
   startShowcaseMaterialSimulation
 } from "@/lib/showcase";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
@@ -1257,6 +1258,19 @@ export async function startShowcaseSimulation(formData: FormData) {
     await startShowcaseMaterialSimulation(teacher.id, classroomId, materialId);
   } catch (error) {
     errorRedirect(path, error instanceof Error ? error.message : "Simulation could not start.");
+  }
+  const firstTick = await runShowcaseTick(teacher.id).catch((error) => {
+    console.error("Initial showcase simulation tick failed", error);
+    return null;
+  });
+  if (
+    firstTick &&
+    "simulationCompleted" in firstTick &&
+    firstTick.simulationCompleted &&
+    firstTick.classroomId &&
+    firstTick.materialId
+  ) {
+    redirect(`/teacher/classes/${firstTick.classroomId}/progress?materialId=${firstTick.materialId}`);
   }
   redirect(`${path}?tab=responses&simulation=running`);
 }
