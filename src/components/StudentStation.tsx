@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, BookOpenText, CheckCircle2, Clock3, Eye, PencilLine, Send, Sparkles, Star } from "lucide-react";
+import { currentResourceMode, noteNetworkResult } from "@/lib/resource-mode";
 import { shortResponseFeedback } from "@/lib/student-feedback";
 
 type Question = {
@@ -162,10 +163,28 @@ export function StudentStation({
 
   useEffect(() => {
     if (preview) return;
-    const heartbeat = window.setInterval(() => {
-      fetch(`/api/student/sessions/${session.id}/heartbeat`, { method: "POST" }).catch(() => null);
-    }, 30000);
-    return () => window.clearInterval(heartbeat);
+    let timer: number | undefined;
+
+    async function heartbeat() {
+      const mode = currentResourceMode();
+      if (mode !== "offline") {
+        const startedAt = performance.now();
+        try {
+          const response = await fetch(`/api/student/sessions/${session.id}/heartbeat`, { method: "POST" });
+          noteNetworkResult(performance.now() - startedAt, response.ok);
+        } catch {
+          noteNetworkResult(performance.now() - startedAt, false);
+        }
+      }
+      const nextMode = currentResourceMode();
+      const delay = nextMode === "offline" ? 120_000 : nextMode === "constrained" ? 90_000 : 30_000;
+      timer = window.setTimeout(heartbeat, delay);
+    }
+
+    timer = window.setTimeout(heartbeat, currentResourceMode() === "constrained" ? 90_000 : 30_000);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
   }, [preview, session.id]);
 
   useEffect(() => {

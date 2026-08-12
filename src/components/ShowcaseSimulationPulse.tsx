@@ -3,8 +3,16 @@
 import { usePathname, useRouter } from "next/navigation";
 import { CheckCircle2, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  currentResourceMode,
+  noteNetworkResult,
+  onResourceModeChange,
+  type ResourceMode
+} from "@/lib/resource-mode";
 
 const tickDelayMs = 1_600;
+const constrainedTickDelayMs = 5_000;
+const offlineTickDelayMs = 12_000;
 
 type SimulationState = {
   running?: boolean;
@@ -39,6 +47,12 @@ export function ShowcaseSimulationPulse({ expiresAt }: { expiresAt?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
+  const [resourceMode, setResourceMode] = useState<ResourceMode>("standard");
+
+  useEffect(() => {
+    setResourceMode(currentResourceMode());
+    return onResourceModeChange(setResourceMode);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +71,12 @@ export function ShowcaseSimulationPulse({ expiresAt }: { expiresAt?: string }) {
     }
 
     async function advance() {
+      const mode = currentResourceMode();
+      if (mode === "offline") {
+        if (!cancelled) timer = window.setTimeout(advance, offlineTickDelayMs);
+        return;
+      }
+      const startedAt = performance.now();
       try {
         const response = await fetch("/api/showcase/tick", {
           method: "POST",
@@ -64,6 +84,7 @@ export function ShowcaseSimulationPulse({ expiresAt }: { expiresAt?: string }) {
           headers: { "Content-Type": "application/json" },
           body: "{}"
         });
+        noteNetworkResult(performance.now() - startedAt, response.ok);
         if (cancelled) return;
         if (response.status === 401 || response.status === 403) {
           returnToShowcaseStart();
@@ -79,17 +100,31 @@ export function ShowcaseSimulationPulse({ expiresAt }: { expiresAt?: string }) {
             router.push(`/teacher/classes/${result.classroomId}/progress?materialId=${result.materialId}`);
             return;
           }
-          if (result.advanced && shouldRefreshPage(pathname, responseTab) && !teacherIsEditing()) {
+          if (
+            currentResourceMode() === "standard" &&
+            result.advanced &&
+            shouldRefreshPage(pathname, responseTab) &&
+            !teacherIsEditing()
+          ) {
             router.refresh();
           }
         }
       } catch {
+        noteNetworkResult(performance.now() - startedAt, false);
         // A later pulse retries. The real teacher workspace remains usable if simulation pauses.
       }
-      if (!cancelled) timer = window.setTimeout(advance, tickDelayMs);
+      if (!cancelled) {
+        timer = window.setTimeout(
+          advance,
+          currentResourceMode() === "constrained" ? constrainedTickDelayMs : tickDelayMs
+        );
+      }
     }
 
-    timer = window.setTimeout(advance, 1_200);
+    timer = window.setTimeout(
+      advance,
+      resourceMode === "offline" ? offlineTickDelayMs : resourceMode === "constrained" ? constrainedTickDelayMs : 1_200
+    );
     const scheduleClose = () => {
       navigator.sendBeacon(
         "/api/showcase/close",
@@ -103,7 +138,7 @@ export function ShowcaseSimulationPulse({ expiresAt }: { expiresAt?: string }) {
       if (expirationTimer) window.clearTimeout(expirationTimer);
       window.removeEventListener("pagehide", scheduleClose);
     };
-  }, [expiresAt, pathname, router]);
+  }, [expiresAt, pathname, resourceMode, router]);
 
   if (!simulation?.running && !simulation?.simulationCompleted) return null;
   return (
