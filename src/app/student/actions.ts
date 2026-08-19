@@ -105,7 +105,7 @@ export async function registerStudent(formData: FormData) {
     const account = await prisma.$transaction(async (transaction) => {
       const created = await transaction.studentAccount.create({
         data: {
-          displayName: firstEnrollment.displayName,
+          displayName,
           email: privacyAccountEmail(emailKeyHash),
           emailKeyHash,
           displayNameEncrypted: firstEnrollment.displayNameEncrypted,
@@ -115,7 +115,7 @@ export async function registerStudent(formData: FormData) {
       });
       await transaction.student.updateMany({
         where: { emailKeyHash, accountId: null },
-        data: { accountId: created.id }
+        data: { accountId: created.id, displayName, email }
       });
       await transaction.auditEvent.create({
         data: auditEventData({

@@ -827,7 +827,6 @@ async function createStudentsFromRows(
       errorRedirect(errorPath, "Enter this classroom recovery key before adding students.");
     }
 
-    const existingStudentCount = await prisma.student.count({ where: { classroomId, schoolId: classroom.schoolId } });
     const salt = classroom.privacyKeySalt || createPrivacyKeySalt();
     const derivedKey = deriveClassPrivacyKey(privacyKey, salt);
     const verifier = privacyKeyVerifierFromDerivedKey(derivedKey);
@@ -863,12 +862,12 @@ async function createStudentsFromRows(
         account.id
       ])
     );
-    const data = rowsWithHashes.map((row, index) => ({
+    const data = rowsWithHashes.map((row) => ({
       schoolId: classroom.schoolId,
       classroomId,
       accountId: accountByEmailHash.get(row.emailKeyHash) || null,
-      displayName: `Student ${existingStudentCount + index + 1}`,
-      email: null,
+      displayName: row.displayName,
+      email: row.email,
       displayNameEncrypted: encryptIdentityValue(row.displayName, derivedKey),
       emailEncrypted: encryptIdentityValue(row.email, derivedKey),
       emailKeyHash: row.emailKeyHash
@@ -1080,17 +1079,26 @@ export async function revealRosterIdentities(
 
   const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);
   try {
+    const rows = classroom.students.map((student) => ({
+      id: student.id,
+      displayName: student.displayNameEncrypted
+        ? decryptIdentityValue(student.displayNameEncrypted, derivedKey)
+        : student.displayName,
+      email: student.emailEncrypted
+        ? decryptIdentityValue(student.emailEncrypted, derivedKey)
+        : student.email || ""
+    }));
+    await prisma.$transaction(
+      rows.map((row) =>
+        prisma.student.update({
+          where: { id: row.id },
+          data: { displayName: row.displayName, email: row.email || null }
+        })
+      )
+    );
     return {
       keyAccepted: true,
-      rows: classroom.students.map((student) => ({
-        id: student.id,
-        displayName: student.displayNameEncrypted
-          ? decryptIdentityValue(student.displayNameEncrypted, derivedKey)
-          : student.displayName,
-        email: student.emailEncrypted
-          ? decryptIdentityValue(student.emailEncrypted, derivedKey)
-          : student.email || ""
-      }))
+      rows
     };
   } catch {
     return { rows: [], error: "Charlotte could not decrypt this roster with that key." };

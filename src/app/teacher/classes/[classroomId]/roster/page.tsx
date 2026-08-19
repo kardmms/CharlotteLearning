@@ -108,7 +108,7 @@ export default async function RosterPage({
             {teacher.isShowcase
               ? "This temporary class uses a real classroom recovery key with fictional student data. You do not need the key to approve the sample roster; save it only if you want to reveal the roster later."
               : isPrivacyProtected
-              ? "Add students without the classroom recovery key. The key is only for revealing protected roster identities later."
+              ? "Teachers can see roster names without entering the classroom recovery key. The key is only for protected recovery and identity reveal."
               : "This class stores student names and emails normally. Student adds do not require a classroom recovery key."}
           </p>
           {isPrivacyProtected && classroom.privacyKeyHint && (
