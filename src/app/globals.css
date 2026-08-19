@@ -831,6 +831,20 @@ select {
   box-shadow: var(--shadow-md);
 }
 
+.contact-cta-card {
+  border-color: #334155;
+  background: var(--navy);
+  color: white;
+}
+
+.contact-cta-card h2 {
+  color: white;
+}
+
+.contact-cta-card p {
+  color: #cbd5e1;
+}
+
 .footer {
   border-top: 1px solid var(--line);
   background: white;
@@ -7250,6 +7264,92 @@ tr:last-child td {
 :root[data-theme="dark"] .response-row p,
 :root[data-theme="dark"] .active-response-card p {
   color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .marketing-page {
+  color-scheme: light;
+  --navy: #0f172a;
+  --navy-2: #1e293b;
+  --paper: #f8fafc;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --line: #e2e8f0;
+  --muted: #64748b;
+  --muted-2: #94a3b8;
+  --blue-soft: #dbeafe;
+  --teal-soft: #ccfbf1;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+:root[data-theme="dark"] .marketing-page .tile,
+:root[data-theme="dark"] .marketing-page .testimonial-card,
+:root[data-theme="dark"] .marketing-page .pricing-panel {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .marketing-page .section-intro h2,
+:root[data-theme="dark"] .marketing-page .tile h3,
+:root[data-theme="dark"] .marketing-page .testimonial-card h3,
+:root[data-theme="dark"] .marketing-page .pricing-panel > div:first-child h2 {
+  color: #0f172a;
+}
+
+:root[data-theme="dark"] .marketing-page .section-intro .lead,
+:root[data-theme="dark"] .marketing-page .tile p,
+:root[data-theme="dark"] .marketing-page .testimonial-card p,
+:root[data-theme="dark"] .marketing-page .pricing-panel > div:first-child p {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .marketing-page .feature-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+:root[data-theme="dark"] .marketing-page > .marketing-section .hero-badge {
+  border-color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.78);
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .marketing-page .benefit-band,
+:root[data-theme="dark"] .marketing-page .contact-cta-card {
+  background: #0f172a;
+  border-color: #334155;
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .marketing-page .benefit-band h2,
+:root[data-theme="dark"] .marketing-page .contact-cta-card h2 {
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .marketing-page .benefit-band p,
+:root[data-theme="dark"] .marketing-page .contact-cta-card p {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .footer {
+  --navy: #0f172a;
+  --line: #e2e8f0;
+  --muted: #64748b;
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+:root[data-theme="dark"] .footer .brand {
+  color: #0f172a;
+}
+
+:root[data-theme="dark"] .footer .nav-links a {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .footer .nav-links a:hover {
+  color: #2563eb;
 }
 
 @media (prefers-reduced-motion: reduce) {
