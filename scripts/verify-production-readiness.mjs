@@ -32,6 +32,15 @@ if (process.env.DATABASE_BACKUPS_CONFIRMED !== "true") {
 if (process.env.EMAIL_DELIVERY_ENABLED !== "true") {
   missing.push("EMAIL_DELIVERY_ENABLED=true");
 }
+if (process.env.TURNSTILE_REQUIRED !== "true") {
+  missing.push("TURNSTILE_REQUIRED=true");
+}
+if (!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()) {
+  missing.push("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
+}
+if (!process.env.TURNSTILE_SECRET_KEY?.trim()) {
+  missing.push("TURNSTILE_SECRET_KEY");
+}
 if (!process.env.OPENAI_API_KEY?.trim() && !process.env.OPEN_AI_KEY?.trim()) {
   missing.push("OPENAI_API_KEY or OPEN_AI_KEY");
 }
@@ -40,6 +49,15 @@ if ((process.env.AUTH_SECRET || "").length < 32) {
 }
 if ((process.env.CRON_SECRET || "").length < 16) {
   missing.push("CRON_SECRET (at least 16 characters)");
+}
+if ((process.env.NEXT_PUBLIC_SITE_URL || "").includes("example.com")) {
+  missing.push("NEXT_PUBLIC_SITE_URL must be the real production URL");
+}
+if (
+  process.env.OPENAI_STUDENT_PII_TO_AI_ENABLED === "true" &&
+  process.env.OPENAI_ZERO_DATA_RETENTION_CONFIRMED !== "true"
+) {
+  missing.push("OPENAI_ZERO_DATA_RETENTION_CONFIRMED=true when OPENAI_STUDENT_PII_TO_AI_ENABLED=true");
 }
 
 const configuredHosts = (process.env.ALLOWED_OUTBOUND_HOSTS || "")

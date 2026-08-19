@@ -10,6 +10,8 @@ This project is a classroom application, so privacy and simple access matter tog
 - Uploaded files are processed in memory. The app stores extracted reading text needed for question generation and practice, not the original upload binary.
 - Contact leads are removed by the scheduled privacy-retention job after `CONTACT_LEAD_RETENTION_DAYS`, defaulting to 180 days.
 - For recovery-key protected classes, roster identity data is stored as pseudonyms, encrypted name/email values, and one-way lookup hashes. Standard classes still store student names and emails normally.
+- Roster spreadsheet AI parsing is local by default. Do not enable student roster PII to OpenAI unless zero-data-retention controls are confirmed for the project.
+- Written student responses can create local safety-flag category and timestamp records for teacher review. These are education records and must not be treated as clinical or disciplinary conclusions without school process.
 
 ## Encryption And Hosting
 
@@ -42,9 +44,11 @@ This project is a classroom application, so privacy and simple access matter tog
 - `DATABASE_ENVIRONMENT`: `production` only for the production database; previews must use a separately provisioned database labeled `preview`.
 - `DATABASE_BACKUPS_CONFIRMED="true"`: set only after confirming snapshot retention and testing a restore into a non-production database.
 - `OPENAI_API_KEY` or `OPEN_AI_KEY`: server-only OpenAI key.
+- `OPENAI_STUDENT_PII_TO_AI_ENABLED="false"`: keep false unless the school use case and OpenAI data controls have been reviewed.
+- `OPENAI_ZERO_DATA_RETENTION_CONFIRMED="false"`: set true only after zero-data-retention controls are approved and enabled for this project.
 - `CRON_SECRET`: at least 16 random characters so Vercel can authenticate scheduled maintenance jobs.
 - `NEXT_PUBLIC_SITE_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_DELIVERY_ENABLED="true"`: required for teacher, student, admin-invitation, and weekly email delivery.
-- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"`: required when bot protection is ready to enforce in production.
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"`: required for production bot protection.
 
 ## Controls That Need Platform Settings
 
@@ -53,7 +57,7 @@ This project is a classroom application, so privacy and simple access matter tog
 - Enable secret scanning and push protection in GitHub.
 - Keep Vercel and database access limited to named admins with MFA.
 - Keep production database credentials out of Preview and Development. The deployment and runtime guards reject a production-labeled database outside Production.
-- Review the `AuditEvent` and `EmailDelivery` tables during incident response. Delivery records store a recipient hash rather than the email address.
+- Review the `AuditEvent`, `StudentAnswer` safety fields, and `EmailDelivery` tables during incident response. Delivery records store a recipient hash rather than the email address.
 - Confirm Prisma Postgres snapshots in the provider console and periodically restore a snapshot into an isolated database. A backup that has not been restore-tested is not sufficient.
 - Use Vercel Secure Compute or another private networking option if enterprise customers require stricter outbound networking or dedicated egress IPs.
 

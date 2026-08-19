@@ -252,6 +252,8 @@ model StudentAnswer {
   firstTryCorrect Boolean?
   pointsEarned    Int            @default(0)
   teacherFeedback String?
+  safetyFlagCategories String?
+  safetyFlaggedAt DateTime?
   gradedAt        DateTime?
   revealedAnswer  Boolean        @default(false)
   createdAt       DateTime       @default(now())
@@ -261,6 +263,7 @@ model StudentAnswer {
 
   @@unique([sessionId, questionId])
   @@index([questionId])
+  @@index([safetyFlaggedAt])
 }
 
 model ContactLead {

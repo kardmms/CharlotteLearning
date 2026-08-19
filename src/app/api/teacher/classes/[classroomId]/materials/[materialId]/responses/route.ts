@@ -47,7 +47,9 @@ export async function GET(_request: Request, { params }: {
     if (!latestByStudent.has(session.studentId)) latestByStudent.set(session.studentId, session);
   }
   const headers: unknown[] = ["Student", "Email", "Status", "Points", "Signed in", "Completed"];
-  material.questions.forEach((_, index) => headers.push(`Question ${index + 1}`, `Question ${index + 1} result`));
+  material.questions.forEach((_, index) =>
+    headers.push(`Question ${index + 1}`, `Question ${index + 1} result`, `Question ${index + 1} safety flag`)
+  );
   const rows: unknown[][] = [headers];
   for (const session of [...latestByStudent.values()].sort((a, b) => a.student.displayName.localeCompare(b.student.displayName))) {
     const row: unknown[] = [
@@ -65,10 +67,11 @@ export async function GET(_request: Request, { params }: {
         !answer || answer.answerText === "No response"
           ? "Incorrect"
           : answer.isCorrect === null
-            ? "Pending"
-            : answer.isCorrect
-              ? "Correct"
-              : "Incorrect"
+          ? "Pending"
+          : answer.isCorrect
+            ? "Correct"
+            : "Incorrect",
+        answer?.safetyFlaggedAt ? answer.safetyFlagCategories || "Flagged" : ""
       );
     }
     rows.push(row);

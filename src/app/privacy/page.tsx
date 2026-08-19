@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Bot,
   Clock3,
   Database,
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 import { PublicTopbar } from "@/components/AppTopbar";
 
-const effectiveDate = "July 27, 2026";
+const effectiveDate = "August 18, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -48,6 +49,7 @@ export default function PrivacyPage() {
           <strong>On this page</strong>
           <div>
             <a href="#student-ai">Students and AI</a>
+            <a href="#student-safety">Student safety</a>
             <a href="#information-we-store">Information we store</a>
             <a href="#information-we-avoid">Information we avoid</a>
             <a href="#access-and-sharing">Access and sharing</a>
@@ -77,6 +79,11 @@ export default function PrivacyPage() {
             <UsersRound size={24} />
             <h2>School-directed use</h2>
             <p>Teachers choose the materials, assignments, classes, and instructional uses of the service.</p>
+          </article>
+          <article className="panel privacy-summary-card">
+            <AlertTriangle size={24} />
+            <h2>Local safety flags</h2>
+            <p>Written responses can be locally flagged for teacher review when they suggest urgent safety concerns.</p>
           </article>
         </section>
 
@@ -136,18 +143,20 @@ export default function PrivacyPage() {
             are added after the AI narrative is generated.
           </p>
           <p>
-            Two teacher-initiated tools can send identifying information to the AI provider: the optional
-            roster-import assistant can receive spreadsheet cells that contain student names and emails,
-            and an on-demand class summary can receive class and assignment titles, student display names,
-            recent activity timestamps, completion information, and answer counts. Teachers should use only
-            school-approved files and should never place medical, special-education, disciplinary, family,
-            or other highly sensitive information in an upload, class title, assignment title, or roster file.
+            Roster imports are parsed locally by default and the on-demand class summary uses anonymous
+            student labels and generic assignment labels. Charlotte does not send student names, student
+            emails, classroom names, assignment titles, or raw student answer text to the on-demand class
+            summary prompt. The roster-import AI assistant remains disabled unless Charlotte has reviewed
+            the school use case and confirmed the required OpenAI zero-data-retention controls for the
+            project. Teachers should use only school-approved files and should never place medical,
+            special-education, disciplinary, family, or other highly sensitive information in an upload,
+            class title, assignment title, or roster file.
           </p>
           <p>
             Charlotte currently uses the OpenAI API for these features. OpenAI states that API inputs and
             outputs are not used to train its models by default. API content may still be retained in abuse-
             monitoring logs for a limited period under OpenAI&apos;s applicable data controls. See OpenAI&apos;s{` `}
-            <a href="https://platform.openai.com/docs/models/default-usage-policies-by-endpoint" target="_blank" rel="noreferrer">
+            <a href="https://platform.openai.com/docs/guides/your-data" target="_blank" rel="noreferrer">
               API data-control documentation
             </a>.
           </p>
@@ -156,6 +165,35 @@ export default function PrivacyPage() {
             biased, or unsuitable. Teachers can review and edit generated material before publication.
             Multiple-choice responses are scored against the answer key in the assignment; open-ended
             responses remain available for teacher review and grading.
+          </div>
+        </section>
+
+        <section className="panel privacy-section" id="student-safety">
+          <div className="privacy-section-heading">
+            <AlertTriangle size={25} />
+            <div>
+              <div className="eyebrow">Student safety</div>
+              <h2>Local safety flags for urgent review</h2>
+            </div>
+          </div>
+          <p>
+            Charlotte includes limited local checks for written student responses that appear to mention
+            self-harm, violence, abuse, or exploitation. When a response is flagged, Charlotte stores the
+            flag category and timestamp with that answer, records an audit event, shows the student a
+            short message encouraging immediate help from a trusted adult, and makes the flag visible to
+            the teacher in response views, progress tables, and exports.
+          </p>
+          <p>
+            These checks run in the application and are not sent to an AI provider. They are not a mental
+            health service, emergency service, law-enforcement service, or clinical assessment. The checks
+            can miss serious situations and can also flag text that is not an emergency. Teachers and
+            schools remain responsible for monitoring students and following their own safety,
+            mandated-reporting, family-notification, and emergency-response procedures.
+          </p>
+          <div className="privacy-callout warning">
+            <strong>Charlotte is not a crisis line.</strong> If a student is in immediate danger, the
+            student or supervising adult should contact local emergency services or the school&apos;s safety
+            contact. In the United States, anyone thinking about self-harm can call or text 988.
           </div>
         </section>
 
@@ -205,6 +243,7 @@ export default function PrivacyPage() {
                 <li>Assignment status such as in progress, partial, or completed.</li>
                 <li>Learning-progress checklist events, including whether the student opened the book, found the chapter, answered a prompt, made a prediction, or completed the activity.</li>
                 <li>Focus-loss counts and related timestamps used when an activity is configured to track leaving the activity window.</li>
+                <li>Safety flag category and timestamp when a written response appears to mention self-harm, violence, abuse, or exploitation.</li>
                 <li>Class, skill, question-type, participation, completion, and accuracy analytics derived from the records above.</li>
               </ul>
             </article>
@@ -313,10 +352,10 @@ export default function PrivacyPage() {
               <h3>Teachers and schools</h3>
               <p>
                 A teacher can access the classrooms, assignments, roster records, student responses,
-                activity history, and reports tied to that teacher&apos;s account. Protected names and emails
-                additionally require the class recovery key. Schools may designate authorized personnel
-                and may request support, access, correction, export, or deletion consistent with their
-                agreement and applicable law.
+                safety flags, activity history, and reports tied to that teacher&apos;s account. Protected
+                names and emails additionally require the class recovery key. Schools may designate
+                authorized personnel and may request support, access, correction, export, or deletion
+                consistent with their agreement and applicable law.
               </p>
             </article>
             <article>
@@ -437,7 +476,7 @@ export default function PrivacyPage() {
             </div>
             <div className="privacy-retention-row" role="row">
               <strong role="cell">Classrooms and learning records</strong>
-              <span role="cell">Remain available while needed by the teacher or school. Archiving hides a class from active views but does not delete it. Deleting a class removes its roster rows, assignments, questions, sessions, and answers through related-record deletion.</span>
+              <span role="cell">Remain available while needed by the teacher or school. Archiving hides a class from active views but does not delete it. Deleting a class removes its roster rows, assignments, questions, sessions, answers, and answer-level safety flags through related-record deletion.</span>
             </div>
             <div className="privacy-retention-row" role="row">
               <strong role="cell">Student accounts</strong>
@@ -534,6 +573,7 @@ export default function PrivacyPage() {
             <li>Review roster spreadsheets before using AI-assisted import and remove columns Charlotte does not need.</li>
             <li>Use non-identifying classroom and assignment titles where practical.</li>
             <li>Review AI-generated questions, answers, explanations, rubrics, and summaries before relying on them.</li>
+            <li>Review student safety flags promptly and follow school escalation, mandated-reporting, and emergency procedures.</li>
             <li>Store each classroom recovery key in a school-approved password manager or similarly secure location.</li>
             <li>Do not email, post publicly, or place a classroom recovery key in an assignment or student message.</li>
             <li>Delete obsolete classes and materials rather than leaving them archived indefinitely.</li>

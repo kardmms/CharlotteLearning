@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, Eye, Play, RotateCcw, Save, Settings2, Sheet } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, Play, RotateCcw, Save, Settings2, Sheet } from "lucide-react";
 import { publishMaterial, saveMaterialDraft, startShowcaseSimulation, unpublishMaterial } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { DeleteMaterialButton } from "@/components/DeleteMaterialButton";
@@ -70,6 +70,10 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
       }
     }
   }
+  const safetyFlagCount = finalizedSessions.reduce(
+    (sum, session) => sum + session.answers.filter((answer) => answer.safetyFlaggedAt).length,
+    0
+  );
   const classAverage = gradedResponseCount
     ? Math.round((correctResponseCount / gradedResponseCount) * 100)
     : 0;
@@ -168,6 +172,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
                 <div><span>Completion</span><strong>{completion}%</strong><small>{completed} students finished</small></div>
                 <div><span>Class average</span><strong>{classAverage}%</strong><small>Completed submissions only</small></div>
                 <div><span>Needs grading</span><strong>{pending}</strong><small>Free responses pending</small></div>
+                <div><span>Safety flags</span><strong>{safetyFlagCount}</strong><small>Teacher review needed</small></div>
               </section>
               <section className="form-response-card response-questions-section">
                 <div className="panel-header">
@@ -186,6 +191,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
                 <div className="response-question-list">
                   {material.questions.map((question, index) => {
                     const choices = parseChoices(question.choicesJson);
+                    const questionSafetyFlagCount = question.answers.filter((answer) => answer.safetyFlaggedAt).length;
                     const noResponseCount = finalizedSessions.filter((session) => {
                       const answer = session.answers.find((item) => item.questionId === question.id);
                       return !answer || answer.answerText === "No response";
@@ -201,6 +207,11 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
                     const responseUrl = `/teacher/classes/${classroomId}/materials/${materialId}/questions/${question.id}/responses`;
                     return <article className="response-question-card" key={question.id}>
                       <div className="response-question-heading"><span>Question {index + 1}</span><h3>{question.prompt}</h3></div>
+                      {questionSafetyFlagCount > 0 && (
+                        <span className="status-pill status-red">
+                          <AlertTriangle size={16} /> {questionSafetyFlagCount} safety {questionSafetyFlagCount === 1 ? "flag" : "flags"}
+                        </span>
+                      )}
                       {choices.length ? (
                         <QuestionResponseChart choices={chartChoices} counts={chartCounts} />
                       ) : (

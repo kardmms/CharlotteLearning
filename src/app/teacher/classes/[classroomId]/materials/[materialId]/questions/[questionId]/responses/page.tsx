@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleDashed, Clock3, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, CircleDashed, Clock3, XCircle } from "lucide-react";
 import { gradeStudentAnswer } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
@@ -87,6 +87,7 @@ export default async function QuestionResponsesPage({
   const gradedAnswers = sortedAnswers.filter((answer) => answer.isCorrect !== null);
   const correctAnswers = gradedAnswers.filter((answer) => answer.isCorrect).length;
   const percentCorrect = gradedAnswers.length ? Math.round((correctAnswers / gradedAnswers.length) * 100) : 0;
+  const safetyFlagCount = sortedAnswers.filter((answer) => answer.safetyFlaggedAt).length;
   const maxPoints = questionPointValue(question.sortOrder, question.material.questions.length);
 
   return (
@@ -131,6 +132,11 @@ export default async function QuestionResponsesPage({
             <Message error={query.error} success={query.graded ? "Grade saved. Next pending response is ready." : undefined} />
             <div className="question-prompt-block">
               <span className="status-pill status-blue">Difficulty {question.difficulty}/5</span>
+              {safetyFlagCount > 0 && (
+                <span className="status-pill status-red">
+                  <AlertTriangle size={16} /> {safetyFlagCount} safety {safetyFlagCount === 1 ? "flag" : "flags"}
+                </span>
+              )}
               <h2>{question.prompt}</h2>
               {question.rubric && <p>{question.rubric}</p>}
             </div>
@@ -184,6 +190,11 @@ export default async function QuestionResponsesPage({
                   <div className="active-response-card">
                     <span className="muted">Student</span>
                     <strong>{activeAnswer.session.student.displayName}</strong>
+                    {activeAnswer.safetyFlaggedAt && (
+                      <span className="status-pill status-red">
+                        <AlertTriangle size={16} /> Safety flag
+                      </span>
+                    )}
                     <p>{activeAnswer.answerText}</p>
                   </div>
                   <PointsSlider
@@ -243,6 +254,11 @@ export default async function QuestionResponsesPage({
                   <p>{answer.answerText}</p>
                   <div className="response-row-actions">
                     {answer.isCorrect !== null && <strong>{answer.pointsEarned} / {maxPoints} points</strong>}
+                    {answer.safetyFlaggedAt && (
+                      <span className="status-pill status-red">
+                        <AlertTriangle size={16} /> Safety flag
+                      </span>
+                    )}
                     <span className={`status-pill ${status.className}`}>
                       <StatusIcon size={16} />
                       {status.label}

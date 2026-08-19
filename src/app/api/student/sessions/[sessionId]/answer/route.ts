@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getStudentSession } from "@/lib/auth";
+import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/security";
+import { evaluateStudentSafety } from "@/lib/student-safety";
 
 export const runtime = "nodejs";
 
@@ -33,7 +35,7 @@ export async function POST(
       answerText?: string;
       timedOut?: boolean;
     };
-    const answerText = String(body.answerText ?? "").trim();
+    const answerText = String(body.answerText ?? "").trim().slice(0, 4000);
     if (!body.questionId || (!answerText && !body.timedOut)) {
       return NextResponse.json({ error: "Missing answer" }, { status: 400 });
     }
@@ -89,8 +91,11 @@ export async function POST(
       ? pointsPossible
       : 0;
     const storedAnswer = body.timedOut ? "Time expired before an answer was submitted." : answerText;
+    const safetySignal = body.timedOut ? evaluateStudentSafety("") : evaluateStudentSafety(storedAnswer);
+    const safetyFlagCategories = safetySignal.flagged ? safetySignal.categories.join(",") : null;
+    const safetyFlaggedAt = safetySignal.flagged ? new Date() : null;
 
-    await prisma.studentAnswer.upsert({
+    const answer = await prisma.studentAnswer.upsert({
       where: { sessionId_questionId: { sessionId, questionId: question.id } },
       create: {
         sessionId,
@@ -100,7 +105,9 @@ export async function POST(
         attemptCount,
         firstTryCorrect: isCorrect === true && attemptCount === 1,
         pointsEarned,
-        revealedAnswer
+        revealedAnswer,
+        safetyFlagCategories,
+        safetyFlaggedAt
       },
       update: {
         answerText: storedAnswer,
@@ -108,7 +115,9 @@ export async function POST(
         attemptCount,
         firstTryCorrect: isCorrect === true ? attemptCount === 1 : existing?.firstTryCorrect,
         pointsEarned,
-        revealedAnswer
+        revealedAnswer,
+        safetyFlagCategories: safetySignal.flagged ? safetyFlagCategories : existing?.safetyFlagCategories ?? null,
+        safetyFlaggedAt: safetySignal.flagged ? safetyFlaggedAt : existing?.safetyFlaggedAt ?? null
       }
     });
 
@@ -123,9 +132,28 @@ export async function POST(
         lastSeenAt: new Date(),
         answeredPrompt: true,
         madePrediction: session.madePrediction || question.type === "PREDICTION",
-        pointsEarned: totalPoints
+        pointsEarned: totalPoints,
+        ...(safetySignal.flagged && !session.flaggedAt ? { flaggedAt: safetyFlaggedAt } : {})
       }
     });
+
+    if (safetySignal.flagged) {
+      await prisma.auditEvent.create({
+        data: auditEventData({
+          actorType: "student",
+          actorId: student.studentId,
+          action: "student_answer.safety_flagged",
+          targetType: "studentAnswer",
+          targetId: answer.id,
+          metadata: {
+            sessionId,
+            questionId: question.id,
+            categories: safetySignal.categories.join(","),
+            severity: safetySignal.severity
+          }
+        })
+      });
+    }
 
     return NextResponse.json({
       isCorrect,
@@ -135,7 +163,9 @@ export async function POST(
       correctAnswer: revealedAnswer ? question.correctAnswer : null,
       explanation: isCorrect === true || revealedAnswer || !isMultipleChoice ? question.explanation : null,
       locked: isCorrect === true || revealedAnswer || !isMultipleChoice,
-      totalPoints
+      totalPoints,
+      safetyFlagged: safetySignal.flagged,
+      safetyNotice: safetySignal.studentNotice
     });
   } catch (error) {
     if (error instanceof RateLimitError) {

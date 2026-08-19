@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Clock3, UserRound, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, UserRound, XCircle } from "lucide-react";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { IndividualResponsePicker } from "@/components/IndividualResponsePicker";
 import { requireTeacher } from "@/lib/auth";
@@ -145,6 +145,11 @@ export default async function IndividualResponsePage({
                   </div>
 
                   <div className="individual-answer-footer">
+                    {answer?.safetyFlaggedAt && (
+                      <span className="status-pill status-red">
+                        <AlertTriangle size={16} /> Safety flag
+                      </span>
+                    )}
                     {pending ? (
                       <span className="status-pill status-pending"><Clock3 size={16} /> Needs grading</span>
                     ) : correct ? (

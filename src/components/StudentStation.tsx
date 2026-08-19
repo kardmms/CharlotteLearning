@@ -32,6 +32,8 @@ type QuestionResult = {
   correctAnswer?: string | null;
   explanation?: string | null;
   locked: boolean;
+  safetyFlagged?: boolean;
+  safetyNotice?: string | null;
 };
 
 function formatTime(seconds: number) {
@@ -415,6 +417,12 @@ export function StudentStation({
     const result = (await response.json()) as QuestionResult & { totalPoints: number };
     setResults((previous) => ({ ...previous, [question.id]: result }));
     setPoints(result.totalPoints);
+    if (result.safetyNotice) {
+      setStatus(result.safetyNotice);
+      setNeedsContinue(question.id);
+      setSubmitting(false);
+      return;
+    }
 
     if (result.isCorrect === true) {
       setStatus(result.attemptCount === 1 ? "Correct on the first try!" : "Correct. Nice recovery!");
@@ -619,6 +627,7 @@ export function StudentStation({
               <textarea
                 value={currentAnswer}
                 disabled={submitting || currentResult?.locked}
+                maxLength={4000}
                 onChange={(event) => setAnswers((previous) => ({
                   ...previous,
                   [question.id]: event.target.value
@@ -649,6 +658,13 @@ export function StudentStation({
               <ul>
                 {shortResponseFeedback.bullets.map((item) => <li key={item}>{item}</li>)}
               </ul>
+            </div>
+          )}
+
+          {currentResult?.safetyNotice && (
+            <div className="answer-feedback answer-feedback-safety" role="alert">
+              <strong>Tell an adult now</strong>
+              <p>{currentResult.safetyNotice}</p>
             </div>
           )}
 

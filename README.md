@@ -8,7 +8,7 @@ It gives teachers a setup flow, secure teacher/student access, source-based 15-m
 1. Copy `.env.example` to `.env`.
 2. Fill in `AUTH_SECRET` with at least 32 random characters.
 3. Add `OPENAI_API_KEY` when you are ready to generate real AI questions. The deployed app also accepts `OPEN_AI_KEY` for compatibility with the current Vercel environment.
-4. Optional but recommended for production: create a Cloudflare Turnstile widget and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"` in Vercel.
+4. Required for production: create a Cloudflare Turnstile widget and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"` in Vercel.
 5. Set `CRON_SECRET` in Vercel before deploying scheduled privacy-retention and weekly-summary jobs.
 6. Install dependencies:
 
@@ -66,6 +66,9 @@ manual adjustment control.
 - Students create a global email/password account after a teacher enrolls their email in a class. No class code is required for normal classroom access.
 - New classes receive a teacher-held classroom recovery key. Protected rosters store student pseudonyms, encrypted identity data, and one-way lookup hashes instead of readable student names and emails. Students do not need the recovery key.
 - OpenAI calls happen only on the server.
+- On-demand class summaries use anonymous student labels and generic assignment labels before calling OpenAI.
+- Roster spreadsheet AI parsing is disabled by default; enable it only when `OPENAI_STUDENT_PII_TO_AI_ENABLED=true` and OpenAI zero-data-retention controls are confirmed with `OPENAI_ZERO_DATA_RETENTION_CONFIRMED=true`.
+- Written student responses are locally checked for self-harm, violence, abuse, and exploitation terms; flagged answers are visible to teachers and included in exports for school review.
 - Teacher and student sessions are stored in HTTP-only cookies.
 - Teachers can only access their own classes, materials, students, and exports.
 - Students can only access published material for their own class.
@@ -96,11 +99,13 @@ The app is configured for Vercel with managed Postgres.
 3. Set `DATABASE_ENVIRONMENT=production` only for Production. Set it to `preview` for Preview and `development` locally.
 4. In the Prisma Console, confirm automatic snapshots are available and test a restore into a non-production database. Then set `DATABASE_BACKUPS_CONFIRMED=true` in Production.
 5. Add `AUTH_SECRET` (at least 32 random characters), `OPENAI_API_KEY` or `OPEN_AI_KEY`, `CRON_SECRET`, and optionally `OPENAI_MODEL`.
-6. Verify a sending domain in Resend, then add `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_DELIVERY_ENABLED=true`, and the canonical `NEXT_PUBLIC_SITE_URL`. The same settings deliver teacher, student, and admin invitation emails; no separate admin sender variable is needed.
-7. If `ALLOWED_OUTBOUND_HOSTS` is explicitly set, include `api.openai.com` and `api.resend.com`.
-8. Deploy with `pnpm vercel-build`. The production-readiness check runs first, then applies checked-in migrations and builds Next.js.
-9. Verify `/api/health` returns `{ "ok": true }`, create a teacher account, and confirm the welcome message, a test student invitation, and a test admin invitation arrive.
-10. Confirm the weekly cron is scheduled for Mondays at 15:00 UTC and test it against non-production data before onboarding classrooms.
+6. Add Cloudflare Turnstile production keys and set `TURNSTILE_REQUIRED=true`. Production builds intentionally fail without enforced bot protection.
+7. Leave `OPENAI_STUDENT_PII_TO_AI_ENABLED=false` unless Charlotte has reviewed the school use case and `OPENAI_ZERO_DATA_RETENTION_CONFIRMED=true` is approved for the project.
+8. Verify a sending domain in Resend, then add `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_DELIVERY_ENABLED=true`, and the canonical `NEXT_PUBLIC_SITE_URL`. The same settings deliver teacher, student, and admin invitation emails; no separate admin sender variable is needed.
+9. If `ALLOWED_OUTBOUND_HOSTS` is explicitly set, include `api.openai.com` and `api.resend.com`.
+10. Deploy with `pnpm vercel-build`. The production-readiness check runs first, then applies checked-in migrations and builds Next.js.
+11. Verify `/api/health` returns `{ "ok": true }`, create a teacher account, and confirm the welcome message, a test student invitation, and a test admin invitation arrive.
+12. Confirm the weekly cron is scheduled for Mondays at 15:00 UTC and test it against non-production data before onboarding classrooms.
 
 The removed presentation-reset utility must not be restored or executed against production. Use a separately provisioned development database for disposable demos and tests.
 

@@ -25,6 +25,7 @@ export function PublicTopbar() {
         <Link href="/#benefits">Benefits</Link>
         <Link href="/#contact">Contact</Link>
         <Link href="/privacy">Privacy</Link>
+        <Link href="/terms">Terms</Link>
       </nav>
       <nav className="nav-links">
         <Link className="ghost-button" href="/teacher/login">

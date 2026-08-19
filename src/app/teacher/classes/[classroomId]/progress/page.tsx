@@ -198,7 +198,7 @@ export default async function ProgressPage({
                   <th>Score</th>
                   <th>Signed in</th>
                   <th>Last seen / out</th>
-                  <th>Focus</th>
+                  <th>Alerts</th>
                   <th>Details</th>
                 </tr>
               </thead>
@@ -207,6 +207,7 @@ export default async function ProgressPage({
                   const latest = latestSessionByStudent.get(student.id);
                   const latestFinalized = latestFinalizedSessionByStudent.get(student.id);
                   const monthly = monthlyScoreByStudent.get(student.id);
+                  const safetyFlagCount = latest?.answers.filter((answer) => answer.safetyFlaggedAt).length ?? 0;
                   return (
                     <tr key={student.id}>
                       <td>
@@ -255,10 +256,19 @@ export default async function ProgressPage({
                       <td>{formatDate(latest?.signInAt)}</td>
                       <td>{formatDate(latest?.signedOutAt ?? latest?.lastSeenAt)}</td>
                       <td>
-                        {latest?.focusViolationCount ? (
-                          <span className="status-pill status-red">
-                            {latest.endedByFocusLoss ? "Ended" : "Flagged"} ({latest.focusViolationCount})
-                          </span>
+                        {latest?.focusViolationCount || safetyFlagCount ? (
+                          <div className="progress-alert-list">
+                            {safetyFlagCount > 0 && (
+                              <span className="status-pill status-red">
+                                Safety ({safetyFlagCount})
+                              </span>
+                            )}
+                            {latest?.focusViolationCount ? (
+                              <span className="status-pill status-red">
+                                {latest.endedByFocusLoss ? "Ended" : "Focus"} ({latest.focusViolationCount})
+                              </span>
+                            ) : null}
+                          </div>
                         ) : (
                           <span className="muted">Clear</span>
                         )}

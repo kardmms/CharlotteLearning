@@ -13,6 +13,7 @@ type AssignmentAnswer = {
   isCorrect: boolean | null;
   firstTryCorrect: boolean | null;
   attemptCount: number;
+  safetyFlaggedAt?: Date | null;
 };
 
 type AssignmentSession = {
@@ -191,6 +192,10 @@ export default async function ClassOverviewPage({
     };
   });
   const focusAlertCount = studentRows.filter((row) => (row.session?.focusViolationCount ?? 0) > 0).length;
+  const safetyAlertCount = studentRows.filter((row) =>
+    row.session?.answers.some((answer) => answer.safetyFlaggedAt)
+  ).length;
+  const alertCount = focusAlertCount + safetyAlertCount;
   const studentIds = classroom.students.map((student) => student.id);
   const thisAssignmentStats = buildAssignmentStats(latestActivity, studentIds);
   const lastAssignmentStats = buildAssignmentStats(olderActivity, studentIds);
@@ -307,12 +312,12 @@ export default async function ClassOverviewPage({
                   ) : <span />}
                 </div>
                 <Link
-                  className={`page-exit-button ${focusAlertCount ? "has-alerts" : ""}`}
+                  className={`page-exit-button ${alertCount ? "has-alerts" : ""}`}
                   href={`/teacher/classes/${classroom.id}/progress`}
                 >
                   <BellRing size={17} />
-                  Page exits
-                  <span>{focusAlertCount}</span>
+                  Alerts
+                  <span>{alertCount}</span>
                 </Link>
                 {latestActivity && (
                   <Link

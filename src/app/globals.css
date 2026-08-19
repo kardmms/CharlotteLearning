@@ -4177,6 +4177,12 @@ tr:last-child td {
   color: var(--muted);
 }
 
+.progress-alert-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .status-bubble {
   display: inline-grid;
   place-items: center;
@@ -6310,6 +6316,16 @@ tr:last-child td {
 
 .answer-feedback-review p {
   color: #92400e;
+}
+
+.answer-feedback-safety {
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.answer-feedback-safety p {
+  color: #991b1b;
 }
 
 .student-writing-feedback ul {

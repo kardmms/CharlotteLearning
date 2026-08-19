@@ -71,21 +71,21 @@ export async function POST(
       }))
       .sort((a, b) => a.percentCorrect - b.percentCorrect);
 
-    const studentRows = classroom.students.map((student) => {
+    const studentRows = classroom.students.map((student, index) => {
       const latest = student.sessions[0];
       const incorrect = latest?.answers.filter((answer) => answer.isCorrect === false).length ?? 0;
       return {
-        student: student.displayName,
+        student: `Student ${index + 1}`,
         completed: Boolean(latest?.completedCharlotte),
         answers: latest?.answers.length ?? 0,
         incorrect,
         lastSeen: latest?.lastSeenAt?.toISOString() ?? "not started",
-        material: latest?.material.title ?? "No session yet"
+        material: latest ? "Latest assignment" : "No session yet"
       };
     });
 
     const summary = await summarizeClassData({
-      className: classroom.name,
+      className: "Current class",
       gradeLevel: classroom.gradeLevel,
       studentCount: classroom.students.length,
       skillRows,

@@ -4,7 +4,9 @@ allowBuilds:
   prisma: true
   sharp: true
 overrides:
-  postcss: ^8.5.10
+  deepmerge-ts: 8.0.1
+  nanoid: 3.3.18
+  postcss: 8.5.26
   sharp: 0.35.3
 minimumReleaseAgeExclude:
   - read-excel-file@9.3.4
