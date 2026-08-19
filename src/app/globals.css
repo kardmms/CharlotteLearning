@@ -9791,7 +9791,13 @@ tr:last-child td {
 .character-color-picker input,
 .character-accessory-picker input {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
   opacity: 0;
+  white-space: nowrap;
 }
 
 .character-color-picker label:has(input:checked),
