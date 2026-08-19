@@ -1,6 +1,12 @@
 import "server-only";
 
-const defaultAllowedHosts = ["api.openai.com", "api.resend.com", "api.vercel.com", "challenges.cloudflare.com"];
+const defaultAllowedHosts = [
+  "api.openai.com",
+  "api.resend.com",
+  "api.vercel.com",
+  "challenges.cloudflare.com",
+  "nces.ed.gov"
+];
 
 function allowedOutboundHosts() {
   const configured = process.env.ALLOWED_OUTBOUND_HOSTS;

@@ -424,6 +424,13 @@ export function StudentStation({
       return;
     }
 
+    if (result.safetyNotice) {
+      setStatus(result.safetyNotice);
+      setNeedsContinue(question.id);
+      setSubmitting(false);
+      return;
+    }
+
     if (result.isCorrect === true) {
       setStatus(result.attemptCount === 1 ? "Correct on the first try!" : "Correct. Nice recovery!");
       waitForContinue(result.attemptCount === 1 ? "Correct on the first try! Select continue." : "Correct. Nice recovery! Select continue.");
@@ -626,8 +633,8 @@ export function StudentStation({
               Your response
               <textarea
                 value={currentAnswer}
-                disabled={submitting || currentResult?.locked}
                 maxLength={4000}
+                disabled={submitting || currentResult?.locked}
                 onChange={(event) => setAnswers((previous) => ({
                   ...previous,
                   [question.id]: event.target.value
@@ -641,6 +648,13 @@ export function StudentStation({
             <div className="answer-feedback answer-feedback-missed">
               <strong>Here&apos;s the answer</strong>
               <p>{currentResult.correctAnswer}</p>
+            </div>
+          )}
+
+          {currentResult?.safetyNotice && (
+            <div className="answer-feedback answer-feedback-safety" role="alert">
+              <strong>Tell an adult now</strong>
+              <p>{currentResult.safetyNotice}</p>
             </div>
           )}
 

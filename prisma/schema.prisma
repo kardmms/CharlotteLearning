@@ -30,9 +30,31 @@ enum SessionStatus {
   COMPLETED
 }
 
+enum GameKind {
+  VOCAB_DASH
+}
+
+enum GameRoomStatus {
+  WAITING
+  STARTING
+  COMPLETED
+}
+
 enum IdentityMode {
   STANDARD
   SCHOOL_KEY
+}
+
+enum SchoolRole {
+  OWNER
+  ADMIN
+  TEACHER
+}
+
+enum SchoolDirectorySource {
+  NCES_PUBLIC
+  NCES_PRIVATE
+  MANUAL
 }
 
 enum AdminRole {
@@ -67,42 +89,125 @@ model Teacher {
   name                 String
   email                String           @unique
   passwordHash         String
+  defaultSchoolId      String?
   weeklySummaryEnabled Boolean          @default(true)
   isShowcase           Boolean          @default(false)
   showcaseExpiresAt    DateTime?
   showcaseNextTickAt   DateTime?
   showcaseCleanupAt    DateTime?
   createdAt            DateTime         @default(now())
+  defaultSchool        School?          @relation("TeacherDefaultSchool", fields: [defaultSchoolId], references: [id], onDelete: SetNull)
+  schoolMemberships    SchoolTeacher[]
   classrooms           Classroom[]
   materials            Material[]
   homeResources        AtHomeResource[]
+  gameRooms            GameRoom[]
   emailDeliveries      EmailDelivery[]
 
   @@index([isShowcase, showcaseExpiresAt])
+  @@index([defaultSchoolId])
+}
+
+model School {
+  id                   String            @id @default(cuid())
+  name                 String
+  slug                 String            @unique
+  districtName         String?
+  officialDirectoryId  String?
+  dataRegion           String            @default("us")
+  encryptionKeyVersion Int               @default(1)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  defaultTeachers      Teacher[]         @relation("TeacherDefaultSchool")
+  officialDirectory    SchoolDirectory?  @relation(fields: [officialDirectoryId], references: [id], onDelete: SetNull)
+  teacherMemberships   SchoolTeacher[]
+  classrooms           Classroom[]
+  students             Student[]
+  materials            Material[]
+  questions            Question[]
+  homeResources        AtHomeResource[]
+  sessions             StudentSession[]
+  answers              StudentAnswer[]
+  gameRooms            GameRoom[]
+  gameParticipants     GameParticipant[]
+  gameVocabTerms       GameVocabTerm[]
+  auditEvents          AuditEvent[]
+  emailDeliveries      EmailDelivery[]
+
+  @@index([createdAt])
+  @@index([officialDirectoryId])
+}
+
+model SchoolDirectory {
+  id             String                @id @default(cuid())
+  source         SchoolDirectorySource @default(NCES_PUBLIC)
+  externalId     String
+  ncesSchoolId   String?
+  ncesDistrictId String?
+  name           String
+  districtName   String?
+  street         String?
+  city           String
+  state          String
+  zip            String?
+  countyName     String?
+  locale         String?
+  latitude       Float?
+  longitude      Float?
+  sourceYear     String
+  searchText     String
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  schools        School[]
+
+  @@unique([source, externalId])
+  @@index([state, city])
+  @@index([zip])
+  @@index([name])
+  @@index([sourceYear])
+}
+
+model SchoolTeacher {
+  id        String     @id @default(cuid())
+  schoolId  String
+  teacherId String
+  role      SchoolRole @default(TEACHER)
+  createdAt DateTime   @default(now())
+  school    School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher   Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, teacherId])
+  @@index([teacherId, schoolId])
 }
 
 model Classroom {
   id                 String           @id @default(cuid())
   name               String
   gradeLevel         String
+  schoolId           String
   teacherId          String
-  identityMode       IdentityMode     @default(STANDARD)
+  identityMode       IdentityMode     @default(SCHOOL_KEY)
   privacyKeySalt     String?
   privacyKeyVerifier String?
   privacyKeyHint     String?
   createdAt          DateTime         @default(now())
   archivedAt         DateTime?
+  school             School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   teacher            Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   students           Student[]
   materials          Material[]
   homeResources      AtHomeResource[]
+  gameRooms          GameRoom[]
   emailDeliveries    EmailDelivery[]
 
   @@index([teacherId, archivedAt])
+  @@index([schoolId, archivedAt])
+  @@index([schoolId, teacherId, archivedAt])
 }
 
 model Student {
   id                    String           @id @default(cuid())
+  schoolId              String
   classroomId           String
   accountId             String?
   displayName           String
@@ -112,6 +217,7 @@ model Student {
   emailKeyHash          String?
   active                Boolean          @default(true)
   createdAt             DateTime         @default(now())
+  school                School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   classroom             Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   account               StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
   sessions              StudentSession[]
@@ -123,6 +229,8 @@ model Student {
   @@unique([classroomId, emailKeyHash])
   @@index([classroomId, active])
   @@index([accountId, active])
+  @@index([schoolId, classroomId, active])
+  @@index([schoolId, accountId, active])
 }
 
 model StudentAccount {
@@ -138,45 +246,51 @@ model StudentAccount {
 }
 
 model Material {
-  id               String           @id @default(cuid())
-  teacherId        String
-  classroomId      String
-  title            String
-  sourceName       String?
-  sourceHash       String?
-  sourcePreview    String?
-  sourceText       String?
-  atHomeScope      String?
-  gradeLevel       String
-  estimatedMinutes Int              @default(15)
-  activityKind     ActivityKind     @default(IN_CLASS)
-  dueAt            DateTime?
-  availableAt      DateTime?
-  seriesKey        String?
-  dayNumber        Int?
-  status           MaterialStatus   @default(DRAFT)
-  generationNotes  String?
-  isAdaptiveHome   Boolean          @default(false)
-  targetStudentId  String?
+  id                            String           @id @default(cuid())
+  schoolId                      String
+  teacherId                     String
+  classroomId                   String
+  title                         String
+  sourceName                    String?
+  sourceHash                    String?
+  sourcePreview                 String?
+  sourceText                    String?
+  atHomeScope                   String?
+  gradeLevel                    String
+  estimatedMinutes              Int              @default(15)
+  activityKind                  ActivityKind     @default(IN_CLASS)
+  dueAt                         DateTime?
+  availableAt                   DateTime?
+  seriesKey                     String?
+  dayNumber                     Int?
+  status                        MaterialStatus   @default(DRAFT)
+  generationNotes               String?
+  isAdaptiveHome                Boolean          @default(false)
+  targetStudentId               String?
   showcaseSimulationStartedAt   DateTime?
   showcaseSimulationCompletedAt DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  teacher          Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  classroom        Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-  questions        Question[]
-  sessions         StudentSession[]
-  targetStudent    Student?         @relation("AdaptiveHomeTarget", fields: [targetStudentId], references: [id], onDelete: Cascade)
+  createdAt                     DateTime         @default(now())
+  updatedAt                     DateTime         @updatedAt
+  school                        School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher                       Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom                     Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  questions                     Question[]
+  sessions                      StudentSession[]
+  targetStudent                 Student?         @relation("AdaptiveHomeTarget", fields: [targetStudentId], references: [id], onDelete: Cascade)
 
   @@unique([targetStudentId, seriesKey])
   @@index([teacherId, updatedAt])
   @@index([teacherId, showcaseSimulationStartedAt, showcaseSimulationCompletedAt])
   @@index([classroomId, createdAt])
   @@index([classroomId, activityKind, isAdaptiveHome, availableAt])
+  @@index([schoolId, teacherId, updatedAt])
+  @@index([schoolId, classroomId, createdAt])
+  @@index([schoolId, classroomId, activityKind, isAdaptiveHome, availableAt])
 }
 
 model Question {
   id               String          @id @default(cuid())
+  schoolId         String
   materialId       String
   type             QuestionType
   prompt           String
@@ -192,12 +306,16 @@ model Question {
   randomizeChoices Boolean         @default(false)
   difficulty       Int             @default(3)
   sortOrder        Int
+  school           School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   material         Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
   answers          StudentAnswer[]
+
+  @@index([schoolId, materialId, sortOrder])
 }
 
 model AtHomeResource {
   id            String    @id @default(cuid())
+  schoolId      String
   teacherId     String
   classroomId   String
   title         String
@@ -207,15 +325,18 @@ model AtHomeResource {
   sourceText    String
   readingScope  String?
   createdAt     DateTime  @default(now())
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   teacher       Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   classroom     Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
 
   @@unique([classroomId, sourceHash])
   @@index([classroomId, createdAt])
+  @@index([schoolId, classroomId, createdAt])
 }
 
 model StudentSession {
   id                  String          @id @default(cuid())
+  schoolId            String
   studentId           String
   materialId          String
   signInAt            DateTime        @default(now())
@@ -234,36 +355,109 @@ model StudentSession {
   focusViolationCount Int             @default(0)
   flaggedAt           DateTime?
   endedByFocusLoss    Boolean         @default(false)
+  school              School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student             Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
   material            Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
   answers             StudentAnswer[]
 
   @@index([materialId, status, completedAt])
   @@index([studentId, materialId, status])
+  @@index([schoolId, materialId, status, completedAt])
+  @@index([schoolId, studentId, materialId, status])
+  @@index([schoolId, lastSeenAt])
 }
 
 model StudentAnswer {
-  id              String         @id @default(cuid())
-  sessionId       String
-  questionId      String
-  answerText      String
-  isCorrect       Boolean?
-  attemptCount    Int            @default(0)
-  firstTryCorrect Boolean?
-  pointsEarned    Int            @default(0)
-  teacherFeedback String?
+  id                   String         @id @default(cuid())
+  schoolId             String
+  sessionId            String
+  questionId           String
+  answerText           String
+  isCorrect            Boolean?
+  attemptCount         Int            @default(0)
+  firstTryCorrect      Boolean?
+  pointsEarned         Int            @default(0)
+  teacherFeedback      String?
   safetyFlagCategories String?
-  safetyFlaggedAt DateTime?
-  gradedAt        DateTime?
-  revealedAnswer  Boolean        @default(false)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  session         StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question        Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  safetyFlaggedAt      DateTime?
+  gradedAt             DateTime?
+  revealedAnswer       Boolean        @default(false)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  school               School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session              StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question             Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, questionId])
   @@index([questionId])
   @@index([safetyFlaggedAt])
+  @@index([schoolId, sessionId])
+  @@index([schoolId, questionId])
+  @@index([schoolId, safetyFlaggedAt])
+}
+
+model GameRoom {
+  id           String            @id @default(cuid())
+  schoolId     String
+  teacherId    String
+  classroomId  String?
+  kind         GameKind          @default(VOCAB_DASH)
+  code         String            @unique
+  status       GameRoomStatus    @default(WAITING)
+  createdAt    DateTime          @default(now())
+  startedAt    DateTime?
+  endedAt      DateTime?
+  school       School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher      Teacher           @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom    Classroom?        @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  participants GameParticipant[]
+  vocabTerms   GameVocabTerm[]
+
+  @@index([teacherId, createdAt])
+  @@index([classroomId, createdAt])
+  @@index([code, status])
+  @@index([schoolId, teacherId, createdAt])
+  @@index([schoolId, classroomId, createdAt])
+}
+
+model GameParticipant {
+  id                String    @id @default(cuid())
+  schoolId          String
+  roomId            String
+  studentId         String?
+  displayName       String
+  characterKey      String    @default("rocket")
+  currentStreak     Int       @default(0)
+  totalCorrect      Int       @default(0)
+  totalAttempts     Int       @default(0)
+  streakTermIdsJson String    @default("[]")
+  completedAt       DateTime?
+  finishRank        Int?
+  joinedAt          DateTime  @default(now())
+  school            School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  room              GameRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, joinedAt])
+  @@index([roomId, finishRank])
+  @@index([studentId])
+  @@index([schoolId, roomId, joinedAt])
+  @@index([schoolId, roomId, finishRank])
+}
+
+model GameVocabTerm {
+  id         String   @id @default(cuid())
+  schoolId   String
+  roomId     String
+  word       String
+  definition String
+  sortOrder  Int
+  createdAt  DateTime @default(now())
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  room       GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, word])
+  @@index([roomId, sortOrder])
+  @@index([schoolId, roomId, sortOrder])
 }
 
 model ContactLead {
@@ -346,6 +540,7 @@ model TeacherFeedback {
 
 model AuditEvent {
   id         String   @id @default(cuid())
+  schoolId   String?
   actorType  String
   actorId    String?
   action     String
@@ -353,14 +548,17 @@ model AuditEvent {
   targetId   String?
   metadata   String?
   createdAt  DateTime @default(now())
+  school     School?  @relation(fields: [schoolId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([actorType, actorId, createdAt])
   @@index([targetType, targetId, createdAt])
+  @@index([schoolId, createdAt])
 }
 
 model EmailDelivery {
   id                String              @id @default(cuid())
+  schoolId          String?
   kind              EmailKind
   status            EmailDeliveryStatus @default(PENDING)
   recipientHash     String
@@ -373,6 +571,7 @@ model EmailDelivery {
   errorCode         String?
   createdAt         DateTime            @default(now())
   sentAt            DateTime?
+  school            School?             @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   teacher           Teacher?            @relation(fields: [teacherId], references: [id], onDelete: SetNull)
   student           Student?            @relation(fields: [studentId], references: [id], onDelete: SetNull)
   classroom         Classroom?          @relation(fields: [classroomId], references: [id], onDelete: SetNull)
@@ -381,4 +580,5 @@ model EmailDelivery {
   @@index([status, createdAt])
   @@index([teacherId, createdAt])
   @@index([classroomId, createdAt])
+  @@index([schoolId, createdAt])
 }

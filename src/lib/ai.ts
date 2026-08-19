@@ -37,9 +37,19 @@ const StudentRosterSchema = z.object({
   })).max(200)
 });
 
+const VocabDashTermSchema = z.object({
+  word: textField(80, 1),
+  definition: textField(260, 4)
+});
+
+const VocabDashTermsSchema = z.object({
+  terms: z.array(VocabDashTermSchema).min(1).max(30)
+});
+
 export type StudentRosterRow = z.infer<typeof StudentRosterSchema>["students"][number];
 
 export type GeneratedQuestion = z.infer<typeof GeneratedQuestionSchema>;
+export type VocabDashTermDraft = z.infer<typeof VocabDashTermSchema>;
 
 const HomePracticeQuestionSchema = z.object({
   type: z.enum(["VOCAB", "COMPREHENSION"]),
@@ -178,11 +188,137 @@ function fallbackStudentRoster(values: unknown[][]): StudentRosterRow[] {
     .slice(0, 200);
 }
 
+function cleanVocabWord(value: string) {
+  return value
+    .replace(/^\d+[.)]\s*/, "")
+    .replace(/^[-*•]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+function splitManualVocabLine(line: string) {
+  const cleaned = line.trim();
+  const separator = cleaned.match(/\s(?:-|–|—|:)\s/);
+  if (!separator?.index) return { word: cleanVocabWord(cleaned), definition: "" };
+  const word = cleanVocabWord(cleaned.slice(0, separator.index));
+  const definition = cleaned.slice(separator.index + separator[0].length).trim().slice(0, 260);
+  return { word, definition };
+}
+
+function uniqueVocabTerms(terms: VocabDashTermDraft[], maxTerms = 30) {
+  const seen = new Set<string>();
+  const output: VocabDashTermDraft[] = [];
+  for (const term of terms) {
+    const word = cleanVocabWord(term.word);
+    const definition = term.definition.replace(/\s+/g, " ").trim().slice(0, 260);
+    const key = word.toLowerCase();
+    if (!word || word.length > 80 || seen.has(key)) continue;
+    seen.add(key);
+    output.push({
+      word,
+      definition
+    });
+    if (output.length >= maxTerms) break;
+  }
+  return output;
+}
+
+function fallbackVocabTerms(text: string, manualList = false, requestedCount = 20) {
+  const manualLines = text
+    .split(/\r?\n/)
+    .map(splitManualVocabLine)
+    .filter((term) => term.word.length >= 2 && term.word.length <= 80);
+  if (manualList && manualLines.length >= 1) return uniqueVocabTerms(manualLines, requestedCount);
+
+  const stopWords = new Set([
+    "about", "after", "again", "because", "before", "between", "could", "every", "first",
+    "from", "have", "into", "little", "other", "people", "should", "their", "there",
+    "these", "thing", "through", "under", "where", "which", "while", "would"
+  ]);
+  const words = text
+    .match(/\b[A-Za-z][A-Za-z'-]{4,}\b/g)
+    ?.map(cleanVocabWord)
+    .filter((word) => word.length >= 5 && !stopWords.has(word.toLowerCase())) || [];
+  const counts = new Map<string, { word: string; count: number }>();
+  for (const word of words) {
+    const key = word.toLowerCase();
+    const existing = counts.get(key);
+    counts.set(key, { word, count: (existing?.count || 0) + 1 });
+  }
+  return uniqueVocabTerms(
+    [...counts.values()]
+      .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word))
+      .slice(0, requestedCount)
+      .map(({ word }) => ({
+        word,
+        definition: ""
+      }))
+  , requestedCount);
+}
+
+export async function generateVocabDashTerms(input: {
+  text: string;
+  sourceLabel?: string;
+  manualList?: boolean;
+  gradeLevel?: string;
+  requestedCount?: number;
+}) {
+  const requestedCount = Math.max(10, Math.min(30, input.requestedCount || 15));
+  const fallback = fallbackVocabTerms(input.text, input.manualList, requestedCount);
+  const apiKey = openAiApiKey();
+  if (!apiKey) return fallback;
+
+  try {
+    const openai = new OpenAI({ apiKey, fetch: restrictedFetch });
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const completion = await openai.chat.completions.create({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You create vocabulary game word lists for K-12 teachers. Return JSON only."
+        },
+        {
+          role: "user",
+          content: [
+            `Create exactly ${requestedCount} vocabulary terms from the supplied text or list.`,
+            `Target grade level: ${input.gradeLevel || "mixed K-12"}.`,
+            gradeLevelLanguageRule(input.gradeLevel || "6"),
+            input.manualList
+              ? "If the teacher typed words without definitions, write a definition for every word. Do not leave definitions blank."
+              : "If a definition is already supplied for a word, keep the teacher's meaning but rewrite it only if needed for clarity.",
+            "Definitions must be student-friendly, concise, and usable as multiple-choice answer options.",
+            "Choose the best instructional vocabulary for the target grade, not just the longest words.",
+            "For younger grades, prefer concrete, high-utility words. For older grades, include academic, technical, and domain-specific terms.",
+            "Avoid duplicate words, proper names, and definitions that repeat the word.",
+            "Return exactly this JSON shape:",
+            '{"terms":[{"word":"term","definition":"student-friendly definition"}]}',
+            input.sourceLabel ? `Source: ${input.sourceLabel}` : "",
+            `Text or word list: ${input.text.slice(0, 24000)}`
+          ].filter(Boolean).join("\n")
+        }
+      ]
+    });
+    const raw = completion.choices[0]?.message.content;
+    if (!raw) return fallback;
+    const parsed = VocabDashTermsSchema.parse(JSON.parse(raw));
+    return uniqueVocabTerms(parsed.terms, requestedCount);
+  } catch {
+    return fallback;
+  }
+}
+
 export async function extractStudentRosterWithAI(values: unknown[][]) {
   const compactValues = values.slice(0, 250).map((row) =>
     row.slice(0, 12).map((value) => String(value ?? "").trim().slice(0, 200))
   );
   const fallback = fallbackStudentRoster(compactValues);
+  if (!canSendStudentPiiToOpenAI()) return fallback;
+
   const apiKey = openAiApiKey();
   if (!apiKey) return fallback;
   if (!canSendStudentPiiToOpenAI()) return fallback;

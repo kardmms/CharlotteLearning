@@ -1,0 +1,1 @@
+ALTER TABLE "Classroom" ALTER COLUMN "identityMode" SET DEFAULT 'SCHOOL_KEY';

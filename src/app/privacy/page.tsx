@@ -172,29 +172,29 @@ export default function PrivacyPage() {
           <div className="privacy-section-heading">
             <AlertTriangle size={25} />
             <div>
-              <div className="eyebrow">Student safety</div>
-              <h2>Local safety flags for urgent review</h2>
+              <div className="eyebrow">Safety response</div>
+              <h2>Written-answer safety flags</h2>
             </div>
           </div>
           <p>
-            Charlotte includes limited local checks for written student responses that appear to mention
-            self-harm, violence, abuse, or exploitation. When a response is flagged, Charlotte stores the
-            flag category and timestamp with that answer, records an audit event, shows the student a
-            short message encouraging immediate help from a trusted adult, and makes the flag visible to
-            the teacher in response views, progress tables, and exports.
+            Charlotte is not an emergency, counseling, or mental-health service. Because students can type
+            written reading responses, Charlotte locally checks submitted answers for clear signals of
+            self-harm, violence, or abuse/exploitation. This check is deterministic and happens inside the
+            application; student crisis text is not sent to an AI provider for this safety screen.
           </p>
           <p>
-            These checks run in the application and are not sent to an AI provider. They are not a mental
-            health service, emergency service, law-enforcement service, or clinical assessment. The checks
-            can miss serious situations and can also flag text that is not an emergency. Teachers and
-            schools remain responsible for monitoring students and following their own safety,
-            mandated-reporting, family-notification, and emergency-response procedures.
+            If a response is flagged, Charlotte saves the answer with safety-flag metadata, records an audit
+            event, shows the student a brief notice to tell a teacher or trusted adult, and surfaces the flag
+            in teacher response views, progress views, and CSV exports. The flag is a routing signal for human
+            review, not a diagnosis or a final determination. Automated checks can miss context or flag a
+            classroom-literature response that is not actually a personal safety issue.
           </p>
-          <div className="privacy-callout warning">
-            <strong>Charlotte is not a crisis line.</strong> If a student is in immediate danger, the
-            student or supervising adult should contact local emergency services or the school&apos;s safety
-            contact. In the United States, anyone thinking about self-harm can call or text 988.
-          </div>
+          <p>
+            Schools remain responsible for their own student-safety, mandated-reporting, emergency-response,
+            parent/guardian-notification, and record-handling procedures. Teachers and administrators should
+            follow school policy promptly whenever a safety flag appears or when any student communication
+            independently raises concern.
+          </p>
         </section>
 
         <section className="panel privacy-section" id="information-we-store">
@@ -238,6 +238,7 @@ export default function PrivacyPage() {
               <h3>Student learning and activity records</h3>
               <ul>
                 <li>Student answer text, including written responses entered by the student.</li>
+                <li>Safety-flag category and timestamp when a written answer clearly signals self-harm, violence, or abuse/exploitation.</li>
                 <li>Whether an answer was correct, attempt count, first-try result, points, and whether an answer was revealed.</li>
                 <li>Session start, last-active, sign-out, and completion timestamps.</li>
                 <li>Assignment status such as in progress, partial, or completed.</li>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherSession } from "@/lib/auth";
+import { getTeacherContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { toCsv } from "@/lib/security";
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function GET(_request: Request, { params }: {
   params: Promise<{ classroomId: string; materialId: string }>;
 }) {
-  const teacher = await getTeacherSession();
+  const teacher = await getTeacherContext();
   if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { classroomId, materialId } = await params;
   try {
@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: {
     throw error;
   }
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.sub },
+    where: { id: materialId, classroomId, teacherId: teacher.sub, schoolId: teacher.schoolId },
     include: {
       questions: { orderBy: { sortOrder: "asc" } },
       sessions: {
@@ -67,10 +67,10 @@ export async function GET(_request: Request, { params }: {
         !answer || answer.answerText === "No response"
           ? "Incorrect"
           : answer.isCorrect === null
-          ? "Pending"
-          : answer.isCorrect
-            ? "Correct"
-            : "Incorrect",
+            ? "Pending"
+            : answer.isCorrect
+              ? "Correct"
+              : "Incorrect",
         answer?.safetyFlaggedAt ? answer.safetyFlagCategories || "Flagged" : ""
       );
     }

@@ -33,11 +33,11 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
   const query = await searchParams;
   const tab = query.tab === "responses" || query.tab === "settings" ? query.tab : "questions";
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.id },
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
       classroom: true,
       sessions: {
-        where: { status: { in: ["COMPLETED", "PARTIAL"] } },
+        where: { schoolId: teacher.schoolId, status: { in: ["COMPLETED", "PARTIAL"] } },
         orderBy: { completedAt: "desc" },
         include: { student: true, answers: true }
       },
@@ -45,7 +45,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
         orderBy: { sortOrder: "asc" },
         include: {
           answers: {
-            where: { session: { status: { in: ["COMPLETED", "PARTIAL"] } } }
+            where: { schoolId: teacher.schoolId, session: { status: { in: ["COMPLETED", "PARTIAL"] } } }
           }
         }
       }
@@ -79,7 +79,11 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
     : 0;
   const completed = material.sessions.filter((session) => session.completedCharlotte).length;
   const completion = material.classroom
-    ? Math.round((completed / Math.max(1, await prisma.student.count({ where: { classroomId, active: true } }))) * 100)
+    ? Math.round(
+        (completed /
+          Math.max(1, await prisma.student.count({ where: { schoolId: teacher.schoolId, classroomId, active: true } }))) *
+          100
+      )
     : 0;
   const responseOptions = [...finalizedSessions]
     .sort((a, b) => a.student.displayName.localeCompare(b.student.displayName))
@@ -172,7 +176,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
                 <div><span>Completion</span><strong>{completion}%</strong><small>{completed} students finished</small></div>
                 <div><span>Class average</span><strong>{classAverage}%</strong><small>Completed submissions only</small></div>
                 <div><span>Needs grading</span><strong>{pending}</strong><small>Free responses pending</small></div>
-                <div><span>Safety flags</span><strong>{safetyFlagCount}</strong><small>Teacher review needed</small></div>
+                <div><span>Safety flags</span><strong>{safetyFlagCount}</strong><small>Teacher review required</small></div>
               </section>
               <section className="form-response-card response-questions-section">
                 <div className="panel-header">
@@ -209,7 +213,8 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
                       <div className="response-question-heading"><span>Question {index + 1}</span><h3>{question.prompt}</h3></div>
                       {questionSafetyFlagCount > 0 && (
                         <span className="status-pill status-red">
-                          <AlertTriangle size={16} /> {questionSafetyFlagCount} safety {questionSafetyFlagCount === 1 ? "flag" : "flags"}
+                          <AlertTriangle size={16} />
+                          {questionSafetyFlagCount} safety {questionSafetyFlagCount === 1 ? "flag" : "flags"}
                         </span>
                       )}
                       {choices.length ? (

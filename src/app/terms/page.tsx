@@ -25,8 +25,8 @@ export default function TermsPage() {
           </div>
           <p className="privacy-lede">
             These terms explain the rules for using Charlotte AI, a school-directed literacy practice
-            service for teachers, schools, and students. They are designed to sit alongside the Privacy
-            Notice, not replace school, district, or state requirements.
+            service for teachers, schools, and students. They work together with the Privacy Notice and
+            any written school or district agreement that applies.
           </p>
           <div className="privacy-notice">
             <strong>Important legal note</strong>
@@ -88,12 +88,17 @@ export default function TermsPage() {
             private. Teachers should invite only the intended students, remove access when a student
             leaves a class, and promptly report suspected unauthorized access.
           </p>
-          <ul>
-            <li>Do not share teacher, admin, or student passwords with anyone who should not access the account.</li>
-            <li>Do not reuse passwords from other school or personal systems.</li>
-            <li>Do not attempt to view another class, student, or teacher account without authorization.</li>
+          <ul className="privacy-wide-list">
+            <li>Use only your own teacher, student, or administrator account.</li>
+            <li>Keep passwords, recovery keys, invite links, and admin credentials private.</li>
+            <li>Do not attempt to view another class, student, teacher, admin area, database record, API route, or provider account without authorization.</li>
+            <li>Do not upload malware, attempt scraping, bypass rate limits, attack the service, or probe vulnerabilities without written permission.</li>
             <li>Schools are responsible for maintaining any recovery key they create for protected rosters.</li>
           </ul>
+          <p>
+            Charlotte may suspend or remove access when needed to protect students, schools, users, the
+            service, or provider systems, or when an account appears to violate these terms.
+          </p>
         </section>
 
         <section className="panel privacy-section" id="uploads">
@@ -105,16 +110,21 @@ export default function TermsPage() {
             </div>
           </div>
           <p>
-            Teachers are responsible for the files, roster spreadsheets, titles, notes, and classroom
-            content they upload or enter. Upload only materials that the school has the right to use
-            and that are appropriate for the assigned class.
+            Teachers and schools are responsible for the files, roster spreadsheets, titles, notes,
+            and classroom content they upload or enter. Upload only material that the school has the
+            right to use and that is appropriate for the assigned class.
           </p>
           <ul>
-            <li>Do not upload medical, counseling, disability, disciplinary, family, financial, or government-ID information.</li>
+            <li>Do not upload medical, counseling, disability, disciplinary, family, financial, government-ID, or payment information.</li>
             <li>Do not upload content that infringes copyright, violates school policy, or is unrelated to approved instruction.</li>
             <li>Do not include passwords, access tokens, private keys, or credentials in uploads or prompts.</li>
             <li>Charlotte may remove, restrict, or delete content that appears unlawful, unsafe, abusive, or outside the intended school use.</li>
           </ul>
+          <p>
+            As between the school or user and Charlotte, the school or user keeps ownership of their
+            uploaded content and student work. Charlotte receives the limited permission needed to host,
+            process, secure, display, export, delete, and support that content as part of the service.
+          </p>
         </section>
 
         <section className="panel privacy-section" id="ai">
@@ -126,14 +136,16 @@ export default function TermsPage() {
             </div>
           </div>
           <p>
-            AI-assisted features can draft reading questions, practice activities, and teacher-facing
-            summaries. AI output may be inaccurate, incomplete, biased, or unsuitable. Teachers must
-            review generated instructional material before assigning it to students.
+            AI-assisted features can draft reading questions, practice activities, roster parsing,
+            and teacher-facing summaries as described in the Privacy Notice. AI output may be
+            inaccurate, incomplete, biased, or unsuitable. Teachers must review generated questions,
+            answers, explanations, rubrics, summaries, and suggestions before relying on them or
+            assigning them to students.
           </p>
           <ul>
             <li>Students do not receive an open-ended AI chatbot or AI companion in Charlotte.</li>
-            <li>Charlotte does not use AI to diagnose medical, mental-health, disability, or behavioral conditions.</li>
-            <li>Charlotte does not use AI as the final decision-maker for placement, discipline, special education, enrollment, or grading policy.</li>
+            <li>Charlotte does not provide legal, medical, counseling, mental-health, special-education, disability, discipline, placement, or emergency advice.</li>
+            <li>AI-assisted output must not be used as the sole basis for decisions that materially affect a student&apos;s rights, services, placement, safety, or access to education.</li>
             <li>Generated explanations and summaries are educational aids only and do not replace teacher judgment.</li>
           </ul>
         </section>
@@ -142,58 +154,58 @@ export default function TermsPage() {
           <div className="privacy-section-heading">
             <AlertTriangle size={25} />
             <div>
-              <div className="eyebrow">Student safety</div>
-              <h2>Charlotte is not an emergency service</h2>
+              <div className="eyebrow">Human response</div>
+              <h2>Student safety flags</h2>
             </div>
           </div>
           <p>
-            Charlotte includes limited local checks that may flag written student responses for
-            teacher review when they appear to mention self-harm, violence, abuse, or exploitation.
-            These checks are not comprehensive and may miss important signals or flag benign text.
+            Charlotte may flag written student responses that clearly signal self-harm, violence, or
+            abuse/exploitation. These flags are intended to route a response to responsible adults; they
+            are not a diagnosis, risk score, emergency dispatch system, or substitute for school safety
+            procedures. Automated checks can miss concerning content or flag content that is not actually
+            about the student.
           </p>
-          <ul>
-            <li>Students in immediate danger should contact a trusted adult, local emergency services, or a school safety contact right away.</li>
-            <li>In the United States, students who may hurt themselves can call or text 988 for crisis support.</li>
-            <li>Teachers and schools remain responsible for monitoring students and following required safety, mandated-reporting, and escalation procedures.</li>
-            <li>Safety flags are teacher-facing records, not clinical assessments or disciplinary conclusions.</li>
-          </ul>
+          <p>
+            Schools and authorized staff are responsible for reviewing safety flags promptly and following
+            their own mandated-reporting, emergency-response, parent/guardian-notification, and student
+            support policies.
+          </p>
         </section>
 
         <section className="panel privacy-section" id="billing">
           <div className="privacy-section-heading">
             <BadgeDollarSign size={25} />
             <div>
-              <div className="eyebrow">Paid services</div>
-              <h2>Subscriptions, renewal, cancellation, and refunds</h2>
+              <div className="eyebrow">No in-app charges</div>
+              <h2>Fees, subscriptions, and renewals</h2>
             </div>
           </div>
           <p>
-            If Charlotte offers a paid plan, pricing, renewal timing, cancellation instructions,
-            refund terms, and trial limitations must be shown before purchase. Cancellation should
-            be available through a straightforward account or support flow that is not materially
-            harder than sign-up.
+            Charlotte currently does not process payment-card data, in-app purchases, paid subscriptions,
+            free trials that convert to paid plans, or automatic renewals inside the application. Any paid
+            school, classroom, pilot, or district arrangement is handled outside the app under a separate
+            written agreement, invoice, or order form.
           </p>
-          <ul>
-            <li>Schools should confirm purchasing authority before starting a paid plan.</li>
-            <li>Auto-renewal terms and reminder requirements vary by jurisdiction and must be honored where applicable.</li>
-            <li>Refunds are governed by the plan terms shown at purchase unless law requires a different result.</li>
-            <li>Charlotte may suspend paid features for nonpayment, fraud, chargeback abuse, or unlawful use.</li>
-          </ul>
+          <p>
+            Charlotte should not add in-app billing, subscriptions, automatic renewals, paid trials, or
+            cancellation workflows unless the pricing terms, renewal terms, reminders, cancellation method,
+            refund rules, and required consumer or business notices are reviewed and published before launch.
+          </p>
         </section>
 
         <section className="panel privacy-section" id="reviews">
           <div className="privacy-section-heading">
             <FileCheck2 size={25} />
             <div>
-              <div className="eyebrow">Testimonials and claims</div>
-              <h2>Reviews must be truthful</h2>
+              <div className="eyebrow">Truthful marketing</div>
+              <h2>Reviews, testimonials, and public claims</h2>
             </div>
           </div>
           <p>
-            Any testimonials, endorsements, ratings, or case studies shown for Charlotte must reflect
-            real experiences and must not hide material relationships, compensation, or incentives.
-            Charlotte should not publish fake reviews, invented school quotes, or unverifiable claims
-            about outcomes.
+            Any public reviews, testimonials, case studies, endorsements, statistics, screenshots, or school
+            references must be truthful, authorized, and not misleading. Do not submit or publish fake
+            reviews, invented customer quotes, undisclosed insider reviews, compensated endorsements without
+            required disclosure, or claims that overstate what Charlotte does.
           </p>
         </section>
 
@@ -201,23 +213,27 @@ export default function TermsPage() {
           <div className="privacy-section-heading">
             <Scale size={25} />
             <div>
-              <div className="eyebrow">Availability and risk</div>
-              <h2>Service limits and liability</h2>
+              <div className="eyebrow">Service boundaries</div>
+              <h2>Availability, security, and liability</h2>
             </div>
           </div>
           <p>
-            Charlotte works to keep the service secure and available, but no online service can
-            guarantee uninterrupted operation, perfect security, error-free content, or complete
-            compatibility with every school system. To the extent permitted by law, Charlotte is
-            provided without implied warranties and liability is limited to the amount paid for the
-            service during the relevant period.
+            Charlotte works to protect the service through access controls, encryption, rate limits,
+            security headers, audit records, retention controls, and operational safeguards. No online
+            service can guarantee uninterrupted availability, error-free output, or perfect security.
           </p>
-          <ul>
-            <li>Schools should maintain their own official gradebooks, student records, backups, and incident procedures.</li>
-            <li>Charlotte may update, suspend, or discontinue features to improve security, comply with law, or maintain the service.</li>
-            <li>Nothing in these terms limits rights that cannot legally be waived, including rights under applicable student-privacy laws.</li>
-            <li>Questions about these terms can be sent through the contact information provided on the site.</li>
-          </ul>
+          <p>
+            To the fullest extent allowed by law, Charlotte is provided without warranties beyond those
+            expressly stated in a written agreement, and Charlotte is not liable for indirect, incidental,
+            consequential, special, exemplary, or punitive damages. Some jurisdictions do not allow certain
+            limitations, so those limitations apply only where permitted.
+          </p>
+          <p>
+            Charlotte may update these terms as the product, providers, legal requirements, or school use
+            cases change. Material updates will use a new effective date and, where appropriate, be
+            communicated to schools. Questions can be sent to{` `}
+            <a href="mailto:hello@charlottelearning.ai">hello@charlottelearning.ai</a>.
+          </p>
         </section>
       </main>
     </>

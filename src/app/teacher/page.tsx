@@ -21,7 +21,7 @@ export default async function TeacherHomePage({
   const params = await searchParams;
   const teacher = await requireTeacher();
   const classrooms = await prisma.classroom.findMany({
-    where: { teacherId: teacher.id, archivedAt: null },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
     include: {
       _count: {
         select: {

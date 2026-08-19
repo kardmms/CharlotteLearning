@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function TeacherAnalyticsPage() {
   const teacher = await requireTeacher();
   const classrooms = await prisma.classroom.findMany({
-    where: { teacherId: teacher.id, archivedAt: null },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
     include: {
       students: {
         where: { active: true },
@@ -25,7 +25,7 @@ export default async function TeacherAnalyticsPage() {
     orderBy: { createdAt: "desc" }
   });
   const questions = await prisma.question.findMany({
-    where: { material: { teacherId: teacher.id, classroom: { archivedAt: null } } },
+    where: { schoolId: teacher.schoolId, material: { teacherId: teacher.id, classroom: { archivedAt: null } } },
     orderBy: [{ material: { createdAt: "desc" } }, { sortOrder: "asc" }],
     include: {
       material: {

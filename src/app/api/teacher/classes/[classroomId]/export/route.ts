@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherSession } from "@/lib/auth";
+import { getTeacherContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { toCsv } from "@/lib/security";
@@ -10,7 +10,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ classroomId: string }> }
 ) {
-  const teacher = await getTeacherSession();
+  const teacher = await getTeacherContext();
   if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { classroomId } = await params;
@@ -32,7 +32,7 @@ export async function GET(
     throw error;
   }
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.sub },
+    where: { id: classroomId, teacherId: teacher.sub, schoolId: teacher.schoolId },
     include: {
       students: {
         where: { active: true },

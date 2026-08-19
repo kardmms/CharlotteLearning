@@ -270,6 +270,7 @@ function plainTextSummary(input: {
 }
 
 async function reserveDelivery(input: {
+  schoolId?: string | null;
   teacherId: string;
   teacherEmail: string;
   periodStart: Date;
@@ -289,6 +290,7 @@ async function reserveDelivery(input: {
       where: { id: existing.id },
       data: {
         status: EmailDeliveryStatus.PENDING,
+        schoolId: input.schoolId || null,
         recipientHash: hashText(input.teacherEmail.trim().toLowerCase()),
         subject: input.subject,
         errorCode: null
@@ -300,6 +302,7 @@ async function reserveDelivery(input: {
     return await prisma.emailDelivery.create({
       data: {
         ...unique,
+        schoolId: input.schoolId || null,
         recipientHash: hashText(input.teacherEmail.trim().toLowerCase()),
         subject: input.subject
       },
@@ -322,6 +325,7 @@ export async function sendWeeklyTeacherSummaries(now = new Date()) {
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
+      defaultSchoolId: true,
       name: true,
       email: true,
       classrooms: {
@@ -362,6 +366,7 @@ export async function sendWeeklyTeacherSummaries(now = new Date()) {
     const subject = `Your Charlotte weekly class summary · ${period}`;
     const delivery = await reserveDelivery({
       teacherId: teacher.id,
+      schoolId: teacher.defaultSchoolId,
       teacherEmail: teacher.email,
       periodStart,
       subject
@@ -391,11 +396,13 @@ export async function sendWeeklyTeacherSummaries(now = new Date()) {
       html,
       text: plainTextSummary({ teacherName: teacher.name, period, narrative, classes, dashboardUrl }),
       teacherId: teacher.id,
+      schoolId: teacher.defaultSchoolId || undefined,
       periodStart
     });
 
     await prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.defaultSchoolId,
         actorType: "system",
         action: `weekly_summary.${deliveryResult.status}`,
         targetType: "teacher",

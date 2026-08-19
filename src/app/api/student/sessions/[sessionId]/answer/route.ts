@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getStudentSession } from "@/lib/auth";
 import { auditEventData } from "@/lib/audit";
+import { getStudentSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
-import { assertSameOrigin } from "@/lib/security";
+import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 import { evaluateStudentSafety } from "@/lib/student-safety";
 
 export const runtime = "nodejs";
@@ -41,7 +41,11 @@ export async function POST(
     }
 
     const session = await prisma.studentSession.findFirst({
-      where: { id: sessionId, studentId: student.studentId },
+      where: {
+        id: sessionId,
+        ...(student.schoolId ? { schoolId: student.schoolId } : {}),
+        studentId: student.studentId
+      },
       include: {
         material: { include: { questions: true } },
         answers: { where: { questionId: body.questionId } }
@@ -98,6 +102,7 @@ export async function POST(
     const answer = await prisma.studentAnswer.upsert({
       where: { sessionId_questionId: { sessionId, questionId: question.id } },
       create: {
+        schoolId: session.schoolId,
         sessionId,
         questionId: question.id,
         answerText: storedAnswer,
@@ -122,12 +127,12 @@ export async function POST(
     });
 
     const total = await prisma.studentAnswer.aggregate({
-      where: { sessionId },
+      where: { sessionId, schoolId: session.schoolId },
       _sum: { pointsEarned: true }
     });
     const totalPoints = total._sum.pointsEarned || 0;
-    await prisma.studentSession.update({
-      where: { id: sessionId },
+    await prisma.studentSession.updateMany({
+      where: { id: sessionId, schoolId: session.schoolId },
       data: {
         lastSeenAt: new Date(),
         answeredPrompt: true,
@@ -140,10 +145,11 @@ export async function POST(
     if (safetySignal.flagged) {
       await prisma.auditEvent.create({
         data: auditEventData({
+          schoolId: session.schoolId,
           actorType: "student",
           actorId: student.studentId,
           action: "student_answer.safety_flagged",
-          targetType: "studentAnswer",
+          targetType: "student_answer",
           targetId: answer.id,
           metadata: {
             sessionId,
@@ -168,6 +174,9 @@ export async function POST(
       safetyNotice: safetySignal.studentNotice
     });
   } catch (error) {
+    if (isSameOriginError(error)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (error instanceof RateLimitError) {
       return NextResponse.json(
         { error: error.message },

@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 
 export type AuditEventInput = {
+  schoolId?: string | null;
   actorType: "teacher" | "student" | "admin" | "system";
   actorId?: string | null;
   action: string;
@@ -13,6 +14,7 @@ export type AuditEventInput = {
 
 export function auditEventData(input: AuditEventInput) {
   return {
+    schoolId: input.schoolId || null,
     actorType: input.actorType,
     actorId: input.actorId || null,
     action: input.action.slice(0, 120),

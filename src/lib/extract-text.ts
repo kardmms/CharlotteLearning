@@ -2,8 +2,16 @@ import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
 import { hashText } from "@/lib/security";
 
-const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
-const MAX_SOURCE_CHARS = 60_000;
+const DEFAULT_MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const DEFAULT_MIN_SOURCE_CHARS = 500;
+const DEFAULT_MAX_SOURCE_CHARS = 60_000;
+
+type ExtractTextOptions = {
+  maxBytes?: number;
+  minChars?: number;
+  maxChars?: number;
+  uploadLabel?: string;
+};
 
 export type ExtractedUpload = {
   sourceName: string;
@@ -12,13 +20,21 @@ export type ExtractedUpload = {
   text: string;
 };
 
-export async function extractTextFromUpload(file: File): Promise<ExtractedUpload> {
+export async function extractTextFromUpload(
+  file: File,
+  options: ExtractTextOptions = {}
+): Promise<ExtractedUpload> {
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_UPLOAD_BYTES;
+  const minChars = options.minChars ?? DEFAULT_MIN_SOURCE_CHARS;
+  const maxChars = options.maxChars ?? DEFAULT_MAX_SOURCE_CHARS;
+  const uploadLabel = options.uploadLabel || `${Math.floor(maxBytes / (1024 * 1024))} MB`;
+
   if (!file || file.size === 0) {
     throw new Error("Please upload a PDF, DOCX, or TXT file.");
   }
 
-  if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error("Please upload a file no larger than 4 MB.");
+  if (file.size > maxBytes) {
+    throw new Error(`Please upload a file no larger than ${uploadLabel}.`);
   }
 
   const sourceName = (file.name || "uploaded-material")
@@ -65,11 +81,11 @@ export async function extractTextFromUpload(file: File): Promise<ExtractedUpload
     .replace(/[^\S\n]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  if (cleaned.length < 500) {
+  if (cleaned.length < minChars) {
     throw new Error("I could not find enough readable text in that file.");
   }
 
-  const truncated = cleaned.slice(0, MAX_SOURCE_CHARS);
+  const truncated = cleaned.slice(0, maxChars);
   return {
     sourceName,
     sourceHash: hashText(buffer.toString("base64")),

@@ -20,7 +20,7 @@ export default async function NewMaterialPage({
   const { classroomId } = await params;
   const query = await searchParams;
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) notFound();
 

@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { ActivityKind, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
+import { ActivityKind, GameKind, GameRoomStatus, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
 import { readSheet } from "read-excel-file/node";
 import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -16,7 +16,7 @@ import {
   verifyPassword
 } from "@/lib/auth";
 import { normalizeStudentEmail } from "@/lib/codes";
-import { extractStudentRosterWithAI, generateQuestionsFromText } from "@/lib/ai";
+import { extractStudentRosterWithAI, generateQuestionsFromText, generateVocabDashTerms } from "@/lib/ai";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
 import {
@@ -26,6 +26,7 @@ import {
 } from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
 import { excerptForQuestion } from "@/lib/text-context";
+import { createDefaultSchoolForTeacher, ensureTeacherSchool, type DefaultSchoolOptions } from "@/lib/tenancy";
 import {
   deleteShowcaseWorkspace,
   runShowcaseTick,
@@ -50,7 +51,8 @@ function formText(formData: FormData, key: string) {
 }
 
 function errorRedirect(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}error=${encodeURIComponent(message)}`);
 }
 
 async function enforceOrRedirect(path: string, callback: () => Promise<void>) {
@@ -162,12 +164,78 @@ function questionPointValue(sortOrder: number, questionCount: number) {
   return base + (sortOrder <= remainder ? 1 : 0);
 }
 
+async function createUniqueGameRoomCode() {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+    const existing = await prisma.gameRoom.findUnique({ where: { code } });
+    if (!existing) return code;
+  }
+  throw new Error("Could not create a unique game room code.");
+}
+
+function cleanVocabDashTerm(word: string, definition: string) {
+  return {
+    word: word
+      .replace(/^\d+[.)]\s*/, "")
+      .replace(/^[-*•]\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80),
+    definition: definition.replace(/\s+/g, " ").trim().slice(0, 260)
+  };
+}
+
+function uniqueReviewedVocabTerms(words: string[], definitions: string[], keepValues: string[]) {
+  const keep = new Set(keepValues);
+  const seen = new Set<string>();
+  const terms: Array<{ word: string; definition: string }> = [];
+  for (let index = 0; index < words.length; index += 1) {
+    if (!keep.has(String(index))) continue;
+    const term = cleanVocabDashTerm(words[index] || "", definitions[index] || "");
+    const key = term.word.toLowerCase();
+    if (!term.word || !term.definition || seen.has(key)) continue;
+    seen.add(key);
+    terms.push(term);
+  }
+  return terms;
+}
+
 async function sendEnrollmentEmails(invitations: Array<Parameters<typeof sendStudentEnrollmentEmail>[0]>) {
   for (let index = 0; index < invitations.length; index += 5) {
     await Promise.allSettled(
       invitations.slice(index, index + 5).map((invitation) => sendStudentEnrollmentEmail(invitation))
     );
   }
+}
+
+async function schoolOptionsFromSignup(formData: FormData, path: string): Promise<DefaultSchoolOptions> {
+  const schoolName = boundedText(formData, "schoolName", 180);
+  const schoolDirectoryId = boundedText(formData, "schoolDirectoryId", 64);
+
+  if (schoolDirectoryId) {
+    const directorySchool = await prisma.schoolDirectory.findUnique({
+      where: { id: schoolDirectoryId },
+      select: {
+        id: true,
+        name: true,
+        districtName: true
+      }
+    });
+    if (!directorySchool) {
+      errorRedirect(path, "Please choose your school again or continue with the typed school name.");
+    }
+    return {
+      name: directorySchool.name,
+      districtName: directorySchool.districtName,
+      officialDirectoryId: directorySchool.id
+    };
+  }
+
+  if (schoolName.length < 2) {
+    errorRedirect(path, "Please enter your school name.");
+  }
+
+  return { name: schoolName };
 }
 
 export async function createFirstTeacher(formData: FormData) {
@@ -188,28 +256,36 @@ export async function createFirstTeacher(formData: FormData) {
     errorRedirect("/teacher/setup", "Use a password with at least 10 characters.");
   }
 
+  const schoolOptions = await schoolOptionsFromSignup(formData, "/teacher/setup");
   const passwordHash = await hashPassword(password);
   const teacher = await prisma.$transaction(async (transaction) => {
     const created = await transaction.teacher.create({
       data: { name, email, passwordHash }
     });
+    const school = await createDefaultSchoolForTeacher(transaction, created, schoolOptions);
     await transaction.auditEvent.create({
       data: auditEventData({
+        schoolId: school.id,
         actorType: "teacher",
         actorId: created.id,
         action: "teacher.created",
         targetType: "teacher",
         targetId: created.id,
-        metadata: { signupFlow: "first_teacher" }
+        metadata: {
+          signupFlow: "first_teacher",
+          schoolName: schoolOptions.name || null,
+          schoolDirectoryId: schoolOptions.officialDirectoryId || null
+        }
       })
     });
-    return created;
+    return { ...created, defaultSchoolId: school.id };
   });
 
   await sendTeacherWelcomeEmail(teacher).catch(() => null);
   await setTeacherSession(teacher);
+  const schoolContext = await ensureTeacherSchool(teacher);
   const classroomCount = await prisma.classroom.count({
-    where: { teacherId: teacher.id, archivedAt: null }
+    where: { teacherId: teacher.id, schoolId: schoolContext.schoolId, archivedAt: null }
   });
   redirect(classroomCount > 0 ? "/teacher/classes" : "/teacher");
 }
@@ -237,22 +313,29 @@ export async function createTeacherAccount(formData: FormData) {
     errorRedirect("/teacher/login", "An account already exists for this email. Sign in instead.");
   }
 
+  const schoolOptions = await schoolOptionsFromSignup(formData, signupPath);
   const passwordHash = await hashPassword(password);
   const teacher = await prisma.$transaction(async (transaction) => {
     const created = await transaction.teacher.create({
       data: { name, email, passwordHash }
     });
+    const school = await createDefaultSchoolForTeacher(transaction, created, schoolOptions);
     await transaction.auditEvent.create({
       data: auditEventData({
+        schoolId: school.id,
         actorType: "teacher",
         actorId: created.id,
         action: "teacher.created",
         targetType: "teacher",
         targetId: created.id,
-        metadata: { signupFlow: "public_signup" }
+        metadata: {
+          signupFlow: "public_signup",
+          schoolName: schoolOptions.name || null,
+          schoolDirectoryId: schoolOptions.officialDirectoryId || null
+        }
       })
     });
-    return created;
+    return { ...created, defaultSchoolId: school.id };
   });
 
   await sendTeacherWelcomeEmail(teacher).catch(() => null);
@@ -276,8 +359,9 @@ export async function loginTeacher(formData: FormData) {
   if (!ok) errorRedirect("/teacher/login", "Email or password was not recognized.");
 
   await setTeacherSession(teacher);
+  const schoolContext = await ensureTeacherSchool(teacher);
   const classroomCount = await prisma.classroom.count({
-    where: { teacherId: teacher.id, archivedAt: null }
+    where: { teacherId: teacher.id, schoolId: schoolContext.schoolId, archivedAt: null }
   });
   redirect(classroomCount > 0 ? "/teacher/classes" : "/teacher");
 }
@@ -314,6 +398,7 @@ export async function createClassroom(formData: FormData) {
       data: {
         name,
         gradeLevel,
+        schoolId: teacher.schoolId,
         teacherId: teacher.id,
         identityMode: IdentityMode.SCHOOL_KEY,
         privacyKeySalt: privacySalt,
@@ -323,6 +408,7 @@ export async function createClassroom(formData: FormData) {
     });
     await transaction.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "classroom.created",
@@ -350,13 +436,14 @@ export async function deleteClassroom(formData: FormData) {
   });
 
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
 
   await prisma.$transaction([
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "classroom.deleted",
@@ -377,7 +464,7 @@ export async function archiveClassroom(formData: FormData) {
   });
 
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) errorRedirect("/teacher/classes", "Class not found.");
 
@@ -388,6 +475,7 @@ export async function archiveClassroom(formData: FormData) {
     }),
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "classroom.archived",
@@ -407,7 +495,7 @@ export async function unarchiveClassroom(formData: FormData) {
   });
 
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) errorRedirect("/teacher/archive", "Class not found.");
 
@@ -418,6 +506,7 @@ export async function unarchiveClassroom(formData: FormData) {
     }),
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "classroom.restored",
@@ -427,6 +516,196 @@ export async function unarchiveClassroom(formData: FormData) {
     })
   ]);
   redirect("/teacher/archive");
+}
+
+export async function openVocabDashRoom() {
+  await requireTeacher();
+  redirect("/teacher/games/vocab-dash/new");
+}
+
+export async function createVocabDashDraft(formData: FormData) {
+  const teacher = await requireTeacher();
+  const classroomId = formText(formData, "classroomId");
+  const path = classroomId
+    ? `/teacher/games/vocab-dash/new?classroomId=${encodeURIComponent(classroomId)}`
+    : "/teacher/games";
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-open-game-room", limit: 40, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
+    select: { id: true, gradeLevel: true }
+  });
+  if (!classroom) errorRedirect("/teacher/games", "Choose a classroom before starting Vocab Dash.");
+
+  const manualText = boundedText(formData, "manualWords", 12000);
+  const gradeLevel = normalizeGrade(classroom.gradeLevel) || classroom.gradeLevel;
+  const requestedCount = Math.max(10, Math.min(30, Number.parseInt(formText(formData, "wordCount"), 10) || 15));
+  const file = formData.get("sourceFile");
+  let sourceText = manualText;
+  let sourceLabel = "Manual word list";
+  let manualList = Boolean(manualText);
+
+  if (file instanceof File && file.size > 0) {
+    try {
+      const extracted = await extractTextFromUpload(file, {
+        maxBytes: 90 * 1024 * 1024,
+        minChars: 100,
+        maxChars: 180_000,
+        uploadLabel: "90 MB"
+      });
+      sourceText = [manualText, extracted.text].filter(Boolean).join("\n\n");
+      sourceLabel = extracted.sourceName;
+      manualList = Boolean(manualText) && manualText.length > extracted.text.length;
+    } catch (error) {
+      errorRedirect(path, error instanceof Error ? error.message : "The file could not be read.");
+    }
+  }
+
+  if (sourceText.trim().length < 10) {
+    errorRedirect(path, "Upload a file or type at least 10 vocabulary words.");
+  }
+
+  const terms = await generateVocabDashTerms({
+    text: sourceText,
+    sourceLabel,
+    manualList,
+    gradeLevel,
+    requestedCount
+  });
+  if (terms.length < 10) {
+    errorRedirect(path, "Charlotte found fewer than 10 vocabulary words. Add more words or edit the source.");
+  }
+  if (terms.some((term) => !term.definition.trim())) {
+    errorRedirect(path, "Charlotte could not generate definitions yet. Add an OpenAI API key, or include definitions with the words.");
+  }
+
+  const code = await createUniqueGameRoomCode();
+  const room = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.gameRoom.create({
+      data: {
+        schoolId: teacher.schoolId,
+        teacherId: teacher.id,
+        classroomId: classroom.id,
+        kind: GameKind.VOCAB_DASH,
+        code,
+        vocabTerms: {
+          create: terms.slice(0, requestedCount).map((term, index) => ({
+            schoolId: teacher.schoolId,
+            word: term.word,
+            definition: term.definition,
+            sortOrder: index + 1
+          }))
+        }
+      }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        schoolId: teacher.schoolId,
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "game_room.drafted",
+        targetType: "game_room",
+        targetId: created.id,
+        metadata: { kind: "VOCAB_DASH", code, classroomId: classroom.id, termCount: terms.length, requestedCount }
+      })
+    });
+    return created;
+  });
+
+  redirect(`/teacher/games/vocab-dash/rooms/${room.id}/setup`);
+}
+
+export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
+  const teacher = await requireTeacher();
+  const roomId = formText(formData, "roomId");
+  const path = `/teacher/games/vocab-dash/rooms/${roomId}/setup`;
+  await enforceOrRedirect(path, async () => {
+    await enforceRateLimit({ scope: "teacher-save-game-terms", limit: 80, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
+
+  const room = await prisma.gameRoom.findFirst({
+    where: { id: roomId, teacherId: teacher.id, schoolId: teacher.schoolId, kind: GameKind.VOCAB_DASH },
+    select: { id: true, schoolId: true }
+  });
+  if (!room) errorRedirect("/teacher/games", "Game room not found.");
+
+  const words = formData.getAll("word").map((value) => String(value));
+  const definitions = formData.getAll("definition").map((value) => String(value));
+  const keepValues = formData.getAll("keep").map((value) => String(value));
+  const terms = uniqueReviewedVocabTerms(words, definitions, keepValues);
+  if (terms.length < 10) {
+    errorRedirect(path, "Keep at least 10 vocabulary words with definitions before opening the lobby.");
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.gameVocabTerm.deleteMany({ where: { roomId: room.id, schoolId: room.schoolId } });
+    await transaction.gameVocabTerm.createMany({
+      data: terms.map((term, index) => ({
+        schoolId: room.schoolId,
+        roomId: room.id,
+        word: term.word,
+        definition: term.definition,
+        sortOrder: index + 1
+      }))
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        schoolId: room.schoolId,
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "game_room.terms_saved",
+        targetType: "game_room",
+        targetId: room.id,
+        metadata: { kind: "VOCAB_DASH", termCount: terms.length }
+      })
+    });
+  });
+
+  redirect(`/teacher/games/vocab-dash/rooms/${room.id}`);
+}
+
+export async function startVocabDashRoom(formData: FormData) {
+  const teacher = await requireTeacher();
+  const roomId = formText(formData, "roomId");
+  await enforceOrRedirect("/teacher/games", async () => {
+    await enforceRateLimit({ scope: "teacher-start-game-room", limit: 80, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
+
+  const room = await prisma.gameRoom.findFirst({
+    where: { id: roomId, teacherId: teacher.id, schoolId: teacher.schoolId, kind: GameKind.VOCAB_DASH },
+    include: { _count: { select: { vocabTerms: true } } }
+  });
+  if (!room) errorRedirect("/teacher/games", "Game room not found.");
+  if (room._count.vocabTerms < 10) {
+    errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}/setup`, "Add at least 10 words before starting.");
+  }
+
+  if (room.status !== GameRoomStatus.STARTING) {
+    await prisma.$transaction([
+      prisma.gameRoom.update({
+        where: { id: room.id },
+        data: {
+          status: GameRoomStatus.STARTING,
+          startedAt: room.startedAt ?? new Date()
+        }
+      }),
+      prisma.auditEvent.create({
+        data: auditEventData({
+          schoolId: room.schoolId,
+          actorType: "teacher",
+          actorId: teacher.id,
+          action: "game_room.started",
+          targetType: "game_room",
+          targetId: room.id,
+          metadata: { kind: "VOCAB_DASH" }
+        })
+      })
+    ]);
+  }
+
+  redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
 }
 
 function isValidStudentEmail(email: string) {
@@ -444,13 +723,14 @@ function cleanStudentRows(rows: Array<{ displayName: string; email: string }>) {
 
 async function createStudentsFromRows(
   teacherId: string,
+  schoolId: string,
   classroomId: string,
   rows: Array<{ displayName: string; email: string }>,
   errorPath: string,
   rawPrivacyKey = ""
 ) {
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId },
+    where: { id: classroomId, teacherId, schoolId },
     include: { teacher: { select: { name: true, isShowcase: true } } }
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
@@ -493,6 +773,7 @@ async function createStudentsFromRows(
           });
           const student = await transaction.student.create({
             data: {
+              schoolId: classroom.schoolId,
               classroomId,
               accountId: account.id,
               displayName: row.displayName,
@@ -508,6 +789,7 @@ async function createStudentsFromRows(
         }
         await transaction.auditEvent.create({
           data: auditEventData({
+            schoolId: classroom.schoolId,
             actorType: "teacher",
             actorId: teacherId,
             action: "students.enrolled",
@@ -525,9 +807,10 @@ async function createStudentsFromRows(
       return cleaned.map((row, index) => ({
         studentId: enrolled[index].studentId,
         studentName: row.displayName,
-        studentEmail: row.email,
-        classroomId,
-        classroomName: classroom.name,
+	        studentEmail: row.email,
+	        classroomId,
+	        schoolId: classroom.schoolId,
+	        classroomName: classroom.name,
         teacherId,
         teacherName: classroom.teacher.name,
         hasAccount: true
@@ -544,7 +827,7 @@ async function createStudentsFromRows(
       errorRedirect(errorPath, "Enter this classroom recovery key before adding students.");
     }
 
-    const existingStudentCount = await prisma.student.count({ where: { classroomId } });
+    const existingStudentCount = await prisma.student.count({ where: { classroomId, schoolId: classroom.schoolId } });
     const salt = classroom.privacyKeySalt || createPrivacyKeySalt();
     const derivedKey = deriveClassPrivacyKey(privacyKey, salt);
     const verifier = privacyKeyVerifierFromDerivedKey(derivedKey);
@@ -581,6 +864,7 @@ async function createStudentsFromRows(
       ])
     );
     const data = rowsWithHashes.map((row, index) => ({
+      schoolId: classroom.schoolId,
       classroomId,
       accountId: accountByEmailHash.get(row.emailKeyHash) || null,
       displayName: `Student ${existingStudentCount + index + 1}`,
@@ -605,6 +889,7 @@ async function createStudentsFromRows(
         await transaction.student.createMany({ data });
         await transaction.auditEvent.create({
           data: auditEventData({
+            schoolId: classroom.schoolId,
             actorType: "teacher",
             actorId: teacherId,
             action: "students.enrolled",
@@ -619,6 +904,7 @@ async function createStudentsFromRows(
     }
     const created = await prisma.student.findMany({
       where: {
+        schoolId: classroom.schoolId,
         classroomId,
         emailKeyHash: { in: rowsWithHashes.map((row) => row.emailKeyHash) }
       },
@@ -632,6 +918,7 @@ async function createStudentsFromRows(
       studentName: row.displayName,
       studentEmail: row.email,
       classroomId,
+      schoolId: classroom.schoolId,
       classroomName: classroom.name,
       teacherId,
       teacherName: classroom.teacher.name,
@@ -651,6 +938,7 @@ async function createStudentsFromRows(
     }
     seen.add(row.email);
     return {
+      schoolId: classroom.schoolId,
       classroomId,
       accountId: accountByEmail.get(row.email) || null,
       displayName: row.displayName,
@@ -663,6 +951,7 @@ async function createStudentsFromRows(
       await transaction.student.createMany({ data });
       await transaction.auditEvent.create({
         data: auditEventData({
+          schoolId: classroom.schoolId,
           actorType: "teacher",
           actorId: teacherId,
           action: "students.enrolled",
@@ -676,7 +965,7 @@ async function createStudentsFromRows(
     errorRedirect(errorPath, "Student names and emails must be unique inside the class.");
   }
   const created = await prisma.student.findMany({
-    where: { classroomId, email: { in: cleaned.map((row) => row.email) } },
+    where: { schoolId: classroom.schoolId, classroomId, email: { in: cleaned.map((row) => row.email) } },
     select: { id: true, email: true }
   });
   const studentByEmail = new Map(created.filter((student) => student.email).map((student) => [student.email as string, student.id]));
@@ -685,6 +974,7 @@ async function createStudentsFromRows(
     studentName: row.displayName,
     studentEmail: row.email,
     classroomId,
+    schoolId: classroom.schoolId,
     classroomName: classroom.name,
     teacherId,
     teacherName: classroom.teacher.name,
@@ -710,6 +1000,7 @@ export async function addStudents(formData: FormData) {
   const setupPrivacyKey = submittedPrivacyKey ? "" : await readClassRosterSetupKey(classroomId);
   const invitations = await createStudentsFromRows(
     teacher.id,
+    teacher.schoolId,
     classroomId,
     rows,
     path,
@@ -761,13 +1052,13 @@ export async function revealRosterIdentities(
   }
 
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id },
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     select: {
       identityMode: true,
       privacyKeySalt: true,
       privacyKeyVerifier: true,
       students: {
-        where: { active: true },
+        where: { schoolId: teacher.schoolId, active: true },
         orderBy: { displayName: "asc" },
         select: {
           id: true,
@@ -888,7 +1179,7 @@ export async function prepareStudentImport(
     throw error;
   }
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) return { rows: [], fileName: "", error: "Class not found." };
 
@@ -935,7 +1226,7 @@ export async function createMaterial(formData: FormData) {
   });
 
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
   if (title.length < 2) errorRedirect(path, "Please enter a title for the material.");
@@ -943,6 +1234,7 @@ export async function createMaterial(formData: FormData) {
   if (creationMode === "manual") {
     const material = await prisma.material.create({
       data: {
+        schoolId: classroom.schoolId,
         teacherId: teacher.id,
         classroomId,
         title,
@@ -955,6 +1247,7 @@ export async function createMaterial(formData: FormData) {
         generationNotes: "Created manually by the teacher.",
         questions: {
           create: Array.from({ length: 5 }, (_, index) => ({
+            schoolId: classroom.schoolId,
             type: QuestionType.SHORT_RESPONSE,
             prompt: `Enter question ${index + 1}`,
             difficulty: 3,
@@ -985,6 +1278,7 @@ export async function createMaterial(formData: FormData) {
 
     const material = await prisma.material.create({
       data: {
+        schoolId: classroom.schoolId,
         teacherId: teacher.id,
         classroomId,
         title,
@@ -1001,6 +1295,7 @@ export async function createMaterial(formData: FormData) {
         generationNotes: generated.notes,
         questions: {
           create: generated.questions.map((question, questionIndex) => ({
+            schoolId: classroom.schoolId,
             type: question.type,
             prompt: question.prompt,
             choicesJson: question.choices?.length ? JSON.stringify(question.choices) : null,
@@ -1036,7 +1331,7 @@ export async function saveMaterialDraft(formData: FormData) {
   });
 
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.id },
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: { questions: true }
   });
   if (!material) errorRedirect("/teacher", "Material not found.");
@@ -1120,12 +1415,13 @@ export async function deleteMaterial(formData: FormData) {
     await enforceRateLimit({ scope: "teacher-delete-material", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
   });
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.id }
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!material) errorRedirect(`/teacher/classes/${classroomId}/materials`, "Assignment not found.");
   await prisma.$transaction([
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "material.deleted",
@@ -1147,7 +1443,7 @@ export async function uploadAtHomeResource(formData: FormData) {
     await enforceRateLimit({ scope: "teacher-upload-home-resource", limit: 20, windowSeconds: 60 * 60, identifier: teacher.id });
   });
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id }
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!classroom) errorRedirect("/teacher/classes", "Class not found.");
 
@@ -1162,6 +1458,7 @@ export async function uploadAtHomeResource(formData: FormData) {
     const defaultTitle = extracted.sourceName.replace(/\.[^.]+$/, "");
     await prisma.atHomeResource.create({
       data: {
+        schoolId: classroom.schoolId,
         teacherId: teacher.id,
         classroomId,
         title: customTitle || defaultTitle,
@@ -1193,12 +1490,13 @@ export async function deleteAtHomeResource(formData: FormData) {
     await enforceRateLimit({ scope: "teacher-delete-home-resource", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
   });
   const resource = await prisma.atHomeResource.findFirst({
-    where: { id: resourceId, classroomId, teacherId: teacher.id }
+    where: { id: resourceId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!resource) errorRedirect(path, "At-home resource not found.");
   await prisma.$transaction([
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "home_resource.deleted",
@@ -1221,7 +1519,7 @@ export async function publishMaterial(formData: FormData) {
   });
 
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.id },
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: { questions: true }
   });
   if (!material) errorRedirect("/teacher", "Material not found.");
@@ -1255,11 +1553,11 @@ export async function startShowcaseSimulation(formData: FormData) {
     });
   });
   try {
-    await startShowcaseMaterialSimulation(teacher.id, classroomId, materialId);
+    await startShowcaseMaterialSimulation(teacher.id, teacher.schoolId, classroomId, materialId);
   } catch (error) {
     errorRedirect(path, error instanceof Error ? error.message : "Simulation could not start.");
   }
-  const firstTick = await runShowcaseTick(teacher.id).catch((error) => {
+  const firstTick = await runShowcaseTick(teacher.id, teacher.schoolId).catch((error) => {
     console.error("Initial showcase simulation tick failed", error);
     return null;
   });
@@ -1284,7 +1582,7 @@ export async function unpublishMaterial(formData: FormData) {
   });
 
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.id }
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId }
   });
   if (!material) errorRedirect("/teacher", "Material not found.");
 
@@ -1316,10 +1614,12 @@ export async function gradeStudentAnswer(formData: FormData) {
   const answer = await prisma.studentAnswer.findFirst({
     where: {
       id: answerId,
+      schoolId: teacher.schoolId,
       questionId,
       question: {
         material: {
           id: materialId,
+          schoolId: teacher.schoolId,
           classroomId,
           teacherId: teacher.id
         }
@@ -1347,11 +1647,11 @@ export async function gradeStudentAnswer(formData: FormData) {
   });
 
   const total = await prisma.studentAnswer.aggregate({
-    where: { sessionId: answer.sessionId },
+    where: { sessionId: answer.sessionId, schoolId: teacher.schoolId },
     _sum: { pointsEarned: true }
   });
-  await prisma.studentSession.update({
-    where: { id: answer.sessionId },
+  await prisma.studentSession.updateMany({
+    where: { id: answer.sessionId, schoolId: teacher.schoolId },
     data: { pointsEarned: total._sum.pointsEarned || 0 }
   });
 
@@ -1385,6 +1685,7 @@ export async function updateTeacherPassword(formData: FormData) {
     }),
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "teacher.password_changed",
@@ -1416,6 +1717,7 @@ export async function updateWeeklySummaryPreference(formData: FormData) {
     }),
     prisma.auditEvent.create({
       data: auditEventData({
+        schoolId: teacher.schoolId,
         actorType: "teacher",
         actorId: teacher.id,
         action: "teacher.weekly_summary_preference_changed",

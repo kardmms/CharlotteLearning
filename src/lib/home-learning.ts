@@ -16,12 +16,12 @@ export function homeLearningDayKey(date = new Date()) {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
-export async function classroomHasHomeLearningSources(classroomId: string) {
+export async function classroomHasHomeLearningSources(classroomId: string, schoolId?: string) {
   const [materialCount, resourceCount] = await Promise.all([
     prisma.material.count({
-      where: { classroomId, activityKind: ActivityKind.IN_CLASS, isAdaptiveHome: false }
+      where: { classroomId, schoolId, activityKind: ActivityKind.IN_CLASS, isAdaptiveHome: false }
     }),
-    prisma.atHomeResource.count({ where: { classroomId } })
+    prisma.atHomeResource.count({ where: { classroomId, schoolId } })
   ]);
   return materialCount + resourceCount > 0;
 }
@@ -156,20 +156,20 @@ function instantQuestionsFromReading(
 export async function ensureDailyHomePractice(studentId: string) {
   const dayKey = homeLearningDayKey();
   const seriesKey = `adaptive-home:${dayKey}`;
-  const existing = await prisma.material.findFirst({
-    where: { targetStudentId: studentId, seriesKey, isAdaptiveHome: true }
-  });
-  if (existing) return existing;
-
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: { classroom: true }
   });
   if (!student) throw new Error("Student not found.");
+  const existing = await prisma.material.findFirst({
+    where: { schoolId: student.schoolId, targetStudentId: studentId, seriesKey, isAdaptiveHome: true }
+  });
+  if (existing) return existing;
 
   const [materials, resources, priorAnswers] = await Promise.all([
     prisma.material.findMany({
       where: {
+        schoolId: student.schoolId,
         classroomId: student.classroomId,
         activityKind: ActivityKind.IN_CLASS,
         isAdaptiveHome: false
@@ -179,12 +179,15 @@ export async function ensureDailyHomePractice(studentId: string) {
       include: { questions: { orderBy: { sortOrder: "asc" } } }
     }),
     prisma.atHomeResource.findMany({
-      where: { classroomId: student.classroomId },
+      where: { schoolId: student.schoolId, classroomId: student.classroomId },
       orderBy: { createdAt: "desc" },
       take: 8
     }),
     prisma.studentAnswer.findMany({
-      where: { session: { studentId, material: { classroomId: student.classroomId } } },
+      where: {
+        schoolId: student.schoolId,
+        session: { schoolId: student.schoolId, studentId, material: { schoolId: student.schoolId, classroomId: student.classroomId } }
+      },
       orderBy: { updatedAt: "desc" },
       take: 500,
       include: {
@@ -276,6 +279,7 @@ export async function ensureDailyHomePractice(studentId: string) {
   try {
     return await prisma.material.create({
       data: {
+        schoolId: student.schoolId,
         teacherId: student.classroom.teacherId,
         classroomId: student.classroomId,
         targetStudentId: student.id,
@@ -293,6 +297,7 @@ export async function ensureDailyHomePractice(studentId: string) {
         sourceText,
         questions: {
           create: seedQuestions.map((question, index) => ({
+            schoolId: student.schoolId,
             type: question.type,
             prompt: question.prompt,
             choicesJson: JSON.stringify(question.choices),
@@ -311,16 +316,16 @@ export async function ensureDailyHomePractice(studentId: string) {
     });
   } catch {
     const raced = await prisma.material.findFirst({
-      where: { targetStudentId: studentId, seriesKey, isAdaptiveHome: true }
+      where: { schoolId: student.schoolId, targetStudentId: studentId, seriesKey, isAdaptiveHome: true }
     });
     if (raced) return raced;
     throw new Error("Charlotte could not prepare today's at-home practice.");
   }
 }
 
-export async function extendDailyHomePractice(sessionId: string, studentId: string) {
+export async function extendDailyHomePractice(sessionId: string, studentId: string, schoolId?: string) {
   const session = await prisma.studentSession.findFirst({
-    where: { id: sessionId, studentId, status: "IN_PROGRESS" },
+    where: { id: sessionId, ...(schoolId ? { schoolId } : {}), studentId, status: "IN_PROGRESS" },
     include: {
       material: { include: { questions: { orderBy: { sortOrder: "asc" } } } }
     }
@@ -330,7 +335,14 @@ export async function extendDailyHomePractice(sessionId: string, studentId: stri
   }
 
   const priorAnswers = await prisma.studentAnswer.findMany({
-    where: { session: { studentId, material: { classroomId: session.material.classroomId } } },
+    where: {
+      schoolId: session.schoolId,
+      session: {
+        schoolId: session.schoolId,
+        studentId,
+        material: { schoolId: session.schoolId, classroomId: session.material.classroomId }
+      }
+    },
     orderBy: { updatedAt: "desc" },
     take: 500,
     include: { question: { select: { prompt: true, skillTag: true, standardCode: true } } }
@@ -370,6 +382,7 @@ export async function extendDailyHomePractice(sessionId: string, studentId: stri
   const startOrder = session.material.questions.length + 1;
   return Promise.all(unique.map((question, index) => prisma.question.create({
     data: {
+      schoolId: session.material.schoolId,
       materialId: session.materialId,
       type: question.type,
       prompt: question.prompt,

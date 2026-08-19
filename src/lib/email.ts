@@ -17,6 +17,7 @@ type TrackedEmailInput = {
   subject: string;
   html: string;
   text: string;
+  schoolId?: string;
   teacherId?: string;
   studentId?: string;
   classroomId?: string;
@@ -127,6 +128,7 @@ export async function sendTrackedEmail(input: TrackedEmailInput) {
           kind: input.kind,
           recipientHash: hashText(recipient),
           subject,
+          schoolId: input.schoolId || null,
           teacherId: input.teacherId || null,
           studentId: input.studentId || null,
           classroomId: input.classroomId || null,
@@ -164,6 +166,8 @@ export async function sendTeacherWelcomeEmail(teacher: {
   id: string;
   name: string;
   email: string;
+  defaultSchoolId?: string | null;
+  schoolId?: string | null;
 }) {
   const loginUrl = appUrl("/teacher/login");
   const subject = "Welcome to Charlotte Learning";
@@ -179,6 +183,7 @@ export async function sendTeacherWelcomeEmail(teacher: {
     subject,
     html: emailFrame(content),
     text: `Welcome, ${teacher.name}! Your Charlotte Learning teacher account is ready.${loginUrl ? ` Sign in: ${loginUrl}` : ""}`,
+    schoolId: teacher.schoolId || teacher.defaultSchoolId || undefined,
     teacherId: teacher.id
   });
 }
@@ -188,6 +193,7 @@ export async function sendStudentEnrollmentEmail(input: {
   studentName: string;
   studentEmail: string;
   classroomId: string;
+  schoolId?: string | null;
   classroomName: string;
   teacherId: string;
   teacherName: string;
@@ -210,6 +216,7 @@ export async function sendStudentEnrollmentEmail(input: {
     subject,
     html: emailFrame(content),
     text: `${input.teacherName} added you to ${input.classroomName}.${destination ? ` Open Charlotte: ${destination}` : ""}`,
+    schoolId: input.schoolId || undefined,
     teacherId: input.teacherId,
     studentId: input.studentId,
     classroomId: input.classroomId

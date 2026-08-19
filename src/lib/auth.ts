@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getAuthSecret } from "@/lib/security";
 import { isShowcaseExpired, SHOWCASE_LIFETIME_MS } from "@/lib/showcase-policy";
+import { ensureTeacherSchool } from "@/lib/tenancy";
 
 const teacherCookie = "charlotte_teacher_session";
 const teacherReturnCookie = "charlotte_teacher_return_session";
@@ -28,6 +29,7 @@ type StudentJwt = {
   role: "student";
   email: string;
   name: string;
+  schoolId?: string;
   studentId?: string;
   classroomId?: string;
 };
@@ -172,13 +174,14 @@ export async function setStudentSession(account: {
   id: string;
   displayName: string;
   email: string;
-}, enrollment?: { id: string; classroomId: string }) {
+}, enrollment?: { id: string; classroomId: string; schoolId?: string | null }) {
   const token = await signToken(
     {
       sub: account.id,
       role: "student",
       email: account.email,
       name: account.displayName,
+      schoolId: enrollment?.schoolId || undefined,
       studentId: enrollment?.id,
       classroomId: enrollment?.classroomId
     },
@@ -281,6 +284,7 @@ export async function requireTeacher() {
       id: true,
       name: true,
       email: true,
+      defaultSchoolId: true,
       weeklySummaryEnabled: true,
       isShowcase: true,
       showcaseExpiresAt: true,
@@ -295,7 +299,33 @@ export async function requireTeacher() {
   if (teacher.isShowcase && isShowcaseExpired(teacher.createdAt, teacher.showcaseExpiresAt)) {
     redirect("/api/showcase/expire");
   }
-  return teacher;
+  const schoolContext = await ensureTeacherSchool(teacher);
+  return { ...teacher, ...schoolContext };
+}
+
+export async function getTeacherContext() {
+  const session = await getTeacherSession();
+  if (!session) return null;
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: session.sub },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      defaultSchoolId: true,
+      weeklySummaryEnabled: true,
+      isShowcase: true,
+      showcaseExpiresAt: true,
+      createdAt: true
+    }
+  });
+  if (!teacher) return null;
+  if (teacher.isShowcase && isShowcaseExpired(teacher.createdAt, teacher.showcaseExpiresAt)) {
+    return null;
+  }
+  const schoolContext = await ensureTeacherSchool(teacher);
+  return { ...session, ...teacher, sub: teacher.id, ...schoolContext };
 }
 
 export async function requireAdmin() {
@@ -320,6 +350,7 @@ export async function requireStudent() {
     where: {
       id: session.studentId,
       accountId: session.sub,
+      ...(session.schoolId ? { schoolId: session.schoolId } : {}),
       classroomId: session.classroomId,
       active: true
     },

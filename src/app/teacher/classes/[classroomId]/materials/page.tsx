@@ -23,10 +23,10 @@ export default async function MaterialsPage({
   const { classroomId } = await params;
   const query = await searchParams;
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id },
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
       materials: {
-        where: { isAdaptiveHome: false },
+        where: { schoolId: teacher.schoolId, isAdaptiveHome: false },
         orderBy: { createdAt: "desc" },
         include: {
           _count: { select: { questions: true, sessions: true } }

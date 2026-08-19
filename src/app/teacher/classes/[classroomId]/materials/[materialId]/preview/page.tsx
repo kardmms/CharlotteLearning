@@ -25,7 +25,7 @@ export default async function TeacherPreviewPage({
   const teacher = await requireTeacher();
   const { classroomId, materialId } = await params;
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId, teacherId: teacher.id },
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
       classroom: true,
       questions: { orderBy: { sortOrder: "asc" } }

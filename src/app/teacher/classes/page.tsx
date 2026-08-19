@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function TeacherClassesPage() {
   const teacher = await requireTeacher();
   const classrooms = await prisma.classroom.findMany({
-    where: { teacherId: teacher.id, archivedAt: null },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
     orderBy: { createdAt: "desc" },
     include: {
       _count: { select: { students: true, materials: true } }

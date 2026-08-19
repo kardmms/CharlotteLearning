@@ -24,11 +24,11 @@ export default async function HomeLearningPage({
   const { classroomId } = await params;
   const query = await searchParams;
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id },
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
-      homeResources: { orderBy: { createdAt: "desc" } },
+      homeResources: { where: { schoolId: teacher.schoolId }, orderBy: { createdAt: "desc" } },
       materials: {
-        where: { activityKind: "IN_CLASS", isAdaptiveHome: false },
+        where: { schoolId: teacher.schoolId, activityKind: "IN_CLASS", isAdaptiveHome: false },
         orderBy: { updatedAt: "desc" },
         include: { _count: { select: { questions: true } } }
       },
@@ -37,7 +37,7 @@ export default async function HomeLearningPage({
         orderBy: { displayName: "asc" },
         include: {
           sessions: {
-            where: { material: { activityKind: "AT_HOME", isAdaptiveHome: true } },
+            where: { schoolId: teacher.schoolId, material: { activityKind: "AT_HOME", isAdaptiveHome: true } },
             include: {
               material: { select: { seriesKey: true } },
               _count: { select: { answers: true } }

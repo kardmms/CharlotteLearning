@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getTeacherSession } from "@/lib/auth";
+import { getTeacherContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { assertSameOrigin } from "@/lib/security";
+import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 import { summarizeClassData } from "@/lib/ai";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 
@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     assertSameOrigin(request);
-    const teacher = await getTeacherSession();
+    const teacher = await getTeacherContext();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { classroomId } = await params;
@@ -25,17 +25,18 @@ export async function POST(
     });
     await clearExpiredRateLimits();
     const classroom = await prisma.classroom.findFirst({
-      where: { id: classroomId, teacherId: teacher.sub },
+      where: { id: classroomId, teacherId: teacher.sub, schoolId: teacher.schoolId },
       include: {
         students: {
-          where: { active: true },
+          where: { schoolId: teacher.schoolId, active: true },
           include: {
             sessions: {
+              where: { schoolId: teacher.schoolId },
               orderBy: { signInAt: "desc" },
               take: 1,
               include: {
                 material: { select: { title: true } },
-                answers: { select: { isCorrect: true } }
+                answers: { where: { schoolId: teacher.schoolId }, select: { isCorrect: true } }
               }
             }
           }
@@ -45,9 +46,9 @@ export async function POST(
     if (!classroom) return NextResponse.json({ error: "Class not found" }, { status: 404 });
 
     const questions = await prisma.question.findMany({
-      where: { material: { classroomId, teacherId: teacher.sub } },
+      where: { schoolId: teacher.schoolId, material: { schoolId: teacher.schoolId, classroomId, teacherId: teacher.sub } },
       include: {
-        answers: { select: { isCorrect: true } }
+        answers: { where: { schoolId: teacher.schoolId }, select: { isCorrect: true } }
       }
     });
 
@@ -94,6 +95,9 @@ export async function POST(
 
     return NextResponse.json({ summary });
   } catch (error) {
+    if (isSameOriginError(error)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (error instanceof RateLimitError) {
       return NextResponse.json(
         { error: error.message },

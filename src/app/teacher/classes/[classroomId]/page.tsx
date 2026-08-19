@@ -117,15 +117,16 @@ export default async function ClassOverviewPage({
   const query = await searchParams;
   const [classroom, latestDraft] = await Promise.all([
     prisma.classroom.findFirst({
-      where: { id: classroomId, teacherId: teacher.id },
+      where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
       include: {
         students: {
-          where: { active: true },
+          where: { schoolId: teacher.schoolId, active: true },
           orderBy: { displayName: "asc" },
           select: { id: true }
         },
         materials: {
           where: {
+            schoolId: teacher.schoolId,
             isAdaptiveHome: false,
             status: "PUBLISHED",
             activityKind: "IN_CLASS"
@@ -134,6 +135,7 @@ export default async function ClassOverviewPage({
           include: {
             _count: { select: { questions: true } },
             sessions: {
+              where: { schoolId: teacher.schoolId },
               orderBy: { lastSeenAt: "desc" },
               include: { answers: true }
             }
@@ -145,6 +147,7 @@ export default async function ClassOverviewPage({
       where: {
         classroomId,
         teacherId: teacher.id,
+        schoolId: teacher.schoolId,
         isAdaptiveHome: false,
         status: "DRAFT",
         activityKind: "IN_CLASS"
@@ -159,7 +162,7 @@ export default async function ClassOverviewPage({
   ]);
   if (!classroom && teacher.isShowcase) {
     const activeShowcaseClass = await prisma.classroom.findFirst({
-      where: { teacherId: teacher.id, archivedAt: null },
+      where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
       orderBy: { createdAt: "asc" },
       select: { id: true }
     });

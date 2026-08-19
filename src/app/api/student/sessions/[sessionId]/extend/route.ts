@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getStudentSession } from "@/lib/auth";
 import { extendDailyHomePractice } from "@/lib/home-learning";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
-import { assertSameOrigin } from "@/lib/security";
+import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -43,7 +43,7 @@ export async function POST(
       identifier: `${student.studentId}:${sessionId}`
     });
     await clearExpiredRateLimits();
-    const questions = await extendDailyHomePractice(sessionId, student.studentId);
+    const questions = await extendDailyHomePractice(sessionId, student.studentId, student.schoolId);
     return NextResponse.json({
       questions: questions.map((question) => ({
         id: question.id,
@@ -64,6 +64,9 @@ export async function POST(
       }))
     });
   } catch (error) {
+    if (isSameOriginError(error)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (error instanceof RateLimitError) {
       return NextResponse.json(
         { error: error.message },

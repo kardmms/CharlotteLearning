@@ -13,16 +13,42 @@ async function main() {
       passwordHash: await bcrypt.hash("Charlotte14!", 12)
     }
   });
+  let membership = await prisma.schoolTeacher.findFirst({
+    where: { teacherId: teacher.id },
+    include: { school: true }
+  });
+  if (!membership) {
+    const school = await prisma.school.create({
+      data: {
+        name: "Demo School Workspace",
+        slug: `demo-${teacher.id.slice(0, 16)}`
+      }
+    });
+    membership = await prisma.schoolTeacher.create({
+      data: {
+        schoolId: school.id,
+        teacherId: teacher.id,
+        role: "OWNER"
+      },
+      include: { school: true }
+    });
+    await prisma.teacher.update({
+      where: { id: teacher.id },
+      data: { defaultSchoolId: school.id }
+    });
+  }
+  const schoolId = membership.schoolId;
 
   let classroom = await prisma.classroom.findFirst({
-    where: { teacherId: teacher.id, name: "Demo Literacy Class" }
+    where: { teacherId: teacher.id, schoolId, name: "Demo Literacy Class" }
   });
   if (!classroom) {
     classroom = await prisma.classroom.create({
       data: {
-      name: "Demo Literacy Class",
-      gradeLevel: "3",
-      teacherId: teacher.id
+        schoolId,
+        name: "Demo Literacy Class",
+        gradeLevel: "3",
+        teacherId: teacher.id
       }
     });
   }
@@ -77,6 +103,7 @@ async function main() {
       },
       update: { email, accountId: account.id },
       create: {
+        schoolId,
         classroomId: classroom.id,
         accountId: account.id,
         displayName,
@@ -93,6 +120,7 @@ async function main() {
     await prisma.material.create({
       data: {
         teacherId: teacher.id,
+        schoolId,
         classroomId: classroom.id,
         title: "The Wild Robot Escapes - Chapter 1 Demo",
         sourceName: "Charlotte14_Wild_Robot_Escapes_Ch1-10_Workbook.xlsx",
@@ -104,6 +132,7 @@ async function main() {
         questions: {
           create: [
             {
+              schoolId,
               type: "VOCAB",
               prompt:
                 "In the story setup, why does the word automated matter when describing Roz's new world?",
@@ -121,6 +150,7 @@ async function main() {
               sortOrder: 1
             },
             {
+              schoolId,
               type: "VOCAB",
               prompt: "Which detail best matches the meaning of landscape?",
               choicesJson: JSON.stringify([
@@ -137,6 +167,7 @@ async function main() {
               sortOrder: 2
             },
             {
+              schoolId,
               type: "VOCAB",
               prompt:
                 "If traffic is part of Roz's surroundings, what must she pay close attention to?",
@@ -154,6 +185,7 @@ async function main() {
               sortOrder: 3
             },
             {
+              schoolId,
               type: "COMPREHENSION",
               prompt: "Why does Roz have to leave the island?",
               choicesJson: JSON.stringify([
@@ -170,6 +202,7 @@ async function main() {
               sortOrder: 4
             },
             {
+              schoolId,
               type: "COMPREHENSION",
               prompt:
                 "Which feeling is most reasonable for Roz as she leaves, and why would that fit the situation?",
@@ -187,6 +220,7 @@ async function main() {
               sortOrder: 5
             },
             {
+              schoolId,
               type: "COMPREHENSION",
               prompt:
                 "What is the strongest reason this chapter is a setup for later problems?",
@@ -204,6 +238,7 @@ async function main() {
               sortOrder: 6
             },
             {
+              schoolId,
               type: "PREDICTION",
               prompt:
                 "What problem is most likely to affect Roz next? Use one detail from the chapter setup to support your prediction.",
@@ -216,6 +251,7 @@ async function main() {
               sortOrder: 7
             },
             {
+              schoolId,
               type: "SHORT_RESPONSE",
               prompt:
                 "Explain one way Roz's new setting could change how she solves problems. Use evidence from the chapter idea.",

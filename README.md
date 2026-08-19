@@ -8,7 +8,7 @@ It gives teachers a setup flow, secure teacher/student access, source-based 15-m
 1. Copy `.env.example` to `.env`.
 2. Fill in `AUTH_SECRET` with at least 32 random characters.
 3. Add `OPENAI_API_KEY` when you are ready to generate real AI questions. The deployed app also accepts `OPEN_AI_KEY` for compatibility with the current Vercel environment.
-4. Required for production: create a Cloudflare Turnstile widget and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"` in Vercel.
+4. Required for production public forms: create a Cloudflare Turnstile widget and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_REQUIRED="true"` in Vercel.
 5. Set `CRON_SECRET` in Vercel before deploying scheduled privacy-retention and weekly-summary jobs.
 6. Install dependencies:
 
@@ -28,7 +28,15 @@ It gives teachers a setup flow, secure teacher/student access, source-based 15-m
 & 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' db:seed
 ```
 
-9. Start the app:
+9. Optional official school search index:
+
+```powershell
+& 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' school-directory:import
+```
+
+This imports the NCES public school directory into Postgres for fast teacher signup autocomplete. Without the import, signup can still fall back to live NCES lookup while the local directory is empty.
+
+10. Start the app:
 
 ```powershell
 & 'C:\Users\disha\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd' dev
@@ -77,6 +85,9 @@ manual adjustment control.
 - Teacher welcome emails and student enrollment invitations are delivered through Resend and recorded without storing recipient addresses in the delivery log.
 - Teachers can opt in or out of Monday summary emails from Account settings. Weekly emails include participation, completion, accuracy, question-type strengths, growth areas, and per-student signals.
 - Weekly AI narrative generation receives anonymized labels and aggregate performance only. Student emails and raw answer text are not included in its prompt.
+- On-demand class AI summaries use anonymous student labels and generic assignment labels rather than real student, class, or assignment names.
+- AI-assisted roster import uses local spreadsheet parsing by default. Sending student roster names or emails to OpenAI is disabled unless `OPENAI_STUDENT_PII_TO_AI_ENABLED="true"` and `OPENAI_ZERO_DATA_RETENTION_CONFIRMED="true"` are both set after legal and data-retention review.
+- Student written responses are screened locally for clear self-harm, violence, or abuse/exploitation signals. Flagged responses show a student safety notice, create an audit event, and appear as safety flags in teacher response views and exports.
 - Account creation, access revocation, classroom lifecycle changes, roster additions, password changes, destructive teacher actions, and weekly deliveries are written to an append-only application audit table.
 - Production and preview deployments are prevented from sharing a production-labeled database.
 - CSV export neutralizes spreadsheet formula injection.
@@ -102,10 +113,11 @@ The app is configured for Vercel with managed Postgres.
 6. Add Cloudflare Turnstile production keys and set `TURNSTILE_REQUIRED=true`. Production builds intentionally fail without enforced bot protection.
 7. Leave `OPENAI_STUDENT_PII_TO_AI_ENABLED=false` unless Charlotte has reviewed the school use case and `OPENAI_ZERO_DATA_RETENTION_CONFIRMED=true` is approved for the project.
 8. Verify a sending domain in Resend, then add `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_DELIVERY_ENABLED=true`, and the canonical `NEXT_PUBLIC_SITE_URL`. The same settings deliver teacher, student, and admin invitation emails; no separate admin sender variable is needed.
-9. If `ALLOWED_OUTBOUND_HOSTS` is explicitly set, include `api.openai.com` and `api.resend.com`.
+9. If `ALLOWED_OUTBOUND_HOSTS` is explicitly set, include `api.openai.com`, `api.resend.com`, and `nces.ed.gov`.
 10. Deploy with `pnpm vercel-build`. The production-readiness check runs first, then applies checked-in migrations and builds Next.js.
-11. Verify `/api/health` returns `{ "ok": true }`, create a teacher account, and confirm the welcome message, a test student invitation, and a test admin invitation arrive.
-12. Confirm the weekly cron is scheduled for Mondays at 15:00 UTC and test it against non-production data before onboarding classrooms.
+11. Run `pnpm school-directory:import` against the production database after the first deployment that includes the school-directory migration. If the production database URL is only available inside Vercel builds, set `SCHOOL_DIRECTORY_IMPORT_ON_BUILD=true` for one production deployment, then set it back to `false`.
+12. Verify `/api/health` returns `{ "ok": true }`, create a teacher account, and confirm the welcome message, a test student invitation, and a test admin invitation arrive.
+13. Confirm the weekly cron is scheduled for Mondays at 15:00 UTC and test it against non-production data before onboarding classrooms.
 
 The removed presentation-reset utility must not be restored or executed against production. Use a separately provisioned development database for disposable demos and tests.
 

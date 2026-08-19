@@ -18,13 +18,13 @@ export default async function StudentResultPage({
   const { materialId } = await params;
   const query = await searchParams;
   const material = await prisma.material.findFirst({
-    where: { id: materialId, classroomId: student.classroomId },
+    where: { id: materialId, schoolId: student.schoolId, classroomId: student.classroomId },
     include: {
       sessions: {
-        where: { studentId: student.id, status: { in: ["COMPLETED", "PARTIAL"] } },
+        where: { schoolId: student.schoolId, studentId: student.id, status: { in: ["COMPLETED", "PARTIAL"] } },
         orderBy: { completedAt: "desc" },
         take: 1,
-        include: { answers: { include: { question: true } } }
+        include: { answers: { where: { schoolId: student.schoolId }, include: { question: true } } }
       }
     }
   });
@@ -42,13 +42,14 @@ export default async function StudentResultPage({
 
   const leaderboard = material.activityKind === "AT_HOME"
     ? (await prisma.student.findMany({
-        where: { classroomId: student.classroomId, active: true },
+        where: { schoolId: student.schoolId, classroomId: student.classroomId, active: true },
         orderBy: { displayName: "asc" },
         include: {
           sessions: {
             where: {
+              schoolId: student.schoolId,
               status: "COMPLETED",
-              material: { activityKind: "AT_HOME", isAdaptiveHome: true }
+              material: { schoolId: student.schoolId, activityKind: "AT_HOME", isAdaptiveHome: true }
             },
             select: { pointsEarned: true }
           }

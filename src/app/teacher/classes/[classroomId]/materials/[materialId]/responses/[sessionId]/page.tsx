@@ -35,9 +35,10 @@ export default async function IndividualResponsePage({
   const session = await prisma.studentSession.findFirst({
     where: {
       id: sessionId,
+      schoolId: teacher.schoolId,
       materialId,
       status: { in: ["COMPLETED", "PARTIAL"] },
-      material: { classroomId, teacherId: teacher.id }
+      material: { schoolId: teacher.schoolId, classroomId, teacherId: teacher.id }
     },
     include: {
       student: true,
@@ -54,9 +55,10 @@ export default async function IndividualResponsePage({
 
   const responses = await prisma.studentSession.findMany({
     where: {
+      schoolId: teacher.schoolId,
       materialId,
       status: { in: ["COMPLETED", "PARTIAL"] },
-      material: { classroomId, teacherId: teacher.id }
+      material: { schoolId: teacher.schoolId, classroomId, teacherId: teacher.id }
     },
     orderBy: { completedAt: "desc" },
     include: { student: true }
@@ -147,7 +149,8 @@ export default async function IndividualResponsePage({
                   <div className="individual-answer-footer">
                     {answer?.safetyFlaggedAt && (
                       <span className="status-pill status-red">
-                        <AlertTriangle size={16} /> Safety flag
+                        <AlertTriangle size={16} />
+                        Safety flag
                       </span>
                     )}
                     {pending ? (

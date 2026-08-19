@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   BookOpen,
   FileQuestion,
+  Gamepad2,
   GraduationCap,
   LogOut,
   Archive,
@@ -45,6 +46,9 @@ export function TeacherTopbar({ name, classroomId }: { name: string; classroomId
   const assignmentsHref = classroomId
     ? `/teacher/classes/${classroomId}/materials`
     : "/teacher/assignments";
+  const gamesHref = classroomId
+    ? `/teacher/games?classroomId=${classroomId}`
+    : "/teacher/games";
 
   return (
     <header className="topbar teacher-topbar" data-tour="teacher-sidebar">
@@ -55,6 +59,7 @@ export function TeacherTopbar({ name, classroomId }: { name: string; classroomId
       <nav className="teacher-topbar-nav" aria-label="Teacher navigation">
         <Link href="/teacher/classes"><UsersRound size={17} /> Classes</Link>
         <Link href={assignmentsHref}><FileQuestion size={17} /> Assignments</Link>
+        <Link className="teacher-games-link" href={gamesHref}><Gamepad2 size={17} /> Games</Link>
       </nav>
       <details className="teacher-account-menu teacher-topbar-account">
         <summary>

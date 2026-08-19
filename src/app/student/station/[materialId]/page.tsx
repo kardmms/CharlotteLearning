@@ -37,18 +37,20 @@ export default async function StationPage({
   const material = await prisma.material.findFirst({
     where: {
       id: materialId,
+      schoolId: student.schoolId,
       classroomId: student.classroomId,
       status: "PUBLISHED",
       OR: [{ targetStudentId: null }, { targetStudentId: student.id }]
     },
     include: {
-      questions: { orderBy: { sortOrder: "asc" } }
+      questions: { where: { schoolId: student.schoolId }, orderBy: { sortOrder: "asc" } }
     }
   });
   if (!material) notFound();
 
   const finishedSession = await prisma.studentSession.findFirst({
     where: {
+      schoolId: student.schoolId,
       studentId: student.id,
       materialId,
       status: { in: ["COMPLETED", "PARTIAL"] }
@@ -59,6 +61,7 @@ export default async function StationPage({
 
   let session = await prisma.studentSession.findFirst({
     where: {
+      schoolId: student.schoolId,
       studentId: student.id,
       materialId,
       status: "IN_PROGRESS"
@@ -69,6 +72,7 @@ export default async function StationPage({
   if (!session) {
     session = await prisma.studentSession.create({
       data: {
+        schoolId: material.schoolId,
         studentId: student.id,
         materialId
       },

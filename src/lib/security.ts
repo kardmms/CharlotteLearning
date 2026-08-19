@@ -34,15 +34,33 @@ export function toCsv(rows: unknown[][]) {
     .join("\n");
 }
 
+export class SameOriginError extends Error {
+  constructor() {
+    super("Blocked cross-origin request.");
+    this.name = "SameOriginError";
+  }
+}
+
+export function isSameOriginError(error: unknown) {
+  return error instanceof SameOriginError;
+}
+
 export function assertSameOrigin(request: Request) {
   if (request.method === "GET" || request.method === "HEAD") return;
 
   const origin = request.headers.get("origin");
   const host = request.headers.get("host");
-  if (!origin || !host) return;
+  if (!origin || !host) {
+    throw new SameOriginError();
+  }
 
-  const originHost = new URL(origin).host;
+  let originHost = "";
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    throw new SameOriginError();
+  }
   if (originHost !== host) {
-    throw new Error("Blocked cross-origin request.");
+    throw new SameOriginError();
   }
 }

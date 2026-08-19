@@ -12,7 +12,7 @@ export default async function LegacyStudentDetailPage({
   const teacher = await requireTeacher();
   const { classroomId, studentId } = await params;
   const student = await prisma.student.findFirst({
-    where: { id: studentId, classroomId, classroom: { teacherId: teacher.id } },
+    where: { id: studentId, schoolId: teacher.schoolId, classroomId, classroom: { teacherId: teacher.id } },
     include: {
       sessions: {
         where: { status: { in: ["COMPLETED", "PARTIAL"] } },

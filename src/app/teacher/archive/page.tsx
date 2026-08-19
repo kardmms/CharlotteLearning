@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function TeacherArchivePage() {
   const teacher = await requireTeacher();
   const classrooms = await prisma.classroom.findMany({
-    where: { teacherId: teacher.id, archivedAt: { not: null } },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: { not: null } },
     orderBy: { archivedAt: "desc" },
     include: {
       _count: { select: { students: true, materials: true } }

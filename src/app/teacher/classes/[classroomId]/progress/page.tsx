@@ -67,14 +67,15 @@ export default async function ProgressPage({
   const { classroomId } = await params;
   const query = await searchParams;
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id },
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
       students: {
-        where: { active: true },
+        where: { schoolId: teacher.schoolId, active: true },
         orderBy: { displayName: "asc" }
       },
       materials: {
         where: {
+          schoolId: teacher.schoolId,
           status: "PUBLISHED",
           activityKind: "IN_CLASS",
           ...(query.materialId ? { id: query.materialId } : {})
@@ -93,8 +94,9 @@ export default async function ProgressPage({
     material
       ? prisma.studentSession.findMany({
         where: {
+          schoolId: teacher.schoolId,
           materialId: material.id,
-          student: { classroomId: classroom.id, active: true }
+          student: { schoolId: teacher.schoolId, classroomId: classroom.id, active: true }
         },
         orderBy: { signInAt: "desc" },
         include: { answers: true }
@@ -102,6 +104,7 @@ export default async function ProgressPage({
       : Promise.resolve([]),
     prisma.material.findMany({
       where: {
+        schoolId: teacher.schoolId,
         classroomId: classroom.id,
         teacherId: teacher.id,
         status: "PUBLISHED",
@@ -113,7 +116,7 @@ export default async function ProgressPage({
         id: true,
         createdAt: true,
         sessions: {
-          where: { status: { in: ["COMPLETED", "PARTIAL"] } },
+          where: { schoolId: teacher.schoolId, status: { in: ["COMPLETED", "PARTIAL"] } },
           select: {
             studentId: true,
             status: true,

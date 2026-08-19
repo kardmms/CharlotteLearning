@@ -14,13 +14,15 @@ import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { normalizeStudentEmail } from "@/lib/codes";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { privacyAccountEmail, studentEmailLookupHash } from "@/lib/school-privacy";
+import { joinCode, vocabDashCharacters } from "@/lib/vocab-dash";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
 function errorRedirect(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}error=${encodeURIComponent(message)}`);
 }
 
 function boundedText(formData: FormData, key: string, maxLength: number) {
@@ -82,6 +84,7 @@ export async function registerStudent(formData: FormData) {
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
+      schoolId: true,
       classroomId: true,
       accountId: true,
       displayName: true,
@@ -116,6 +119,7 @@ export async function registerStudent(formData: FormData) {
       });
       await transaction.auditEvent.create({
         data: auditEventData({
+          schoolId: firstEnrollment.schoolId,
           actorType: "student",
           actorId: created.id,
           action: "student_account.created",
@@ -170,7 +174,7 @@ export async function selectStudentClassroom(formData: FormData) {
   const enrollmentId = formText(formData, "enrollmentId");
   const enrollment = await prisma.student.findFirst({
     where: { id: enrollmentId, accountId: account.id, active: true },
-    select: { id: true, classroomId: true }
+    select: { id: true, classroomId: true, schoolId: true }
   });
   if (!enrollment) errorRedirect("/student/classes", "That class enrollment is not available.");
   await setStudentSession(account, enrollment);
@@ -180,4 +184,53 @@ export async function selectStudentClassroom(formData: FormData) {
 export async function logoutStudent() {
   await clearStudentSession();
   redirect("/");
+}
+
+export async function joinVocabDashRoom(formData: FormData) {
+  const code = joinCode(formText(formData, "code"));
+  const displayName = boundedText(formData, "displayName", 80);
+  const requestedCharacter = formText(formData, "characterKey");
+  const characterKey = vocabDashCharacters.some((character) => character.key === requestedCharacter)
+    ? requestedCharacter
+    : vocabDashCharacters[0].key;
+  await enforceOrRedirect("/student/games/vocab-dash", async () => {
+    await enforceRateLimit({ scope: "vocab-dash-join-ip", limit: 80, windowSeconds: 60 * 60 });
+  });
+
+  if (code.length !== 6) errorRedirect("/student/games/vocab-dash", "Enter the 6-digit game code.");
+  if (displayName.length < 2) errorRedirect(`/student/games/vocab-dash?code=${code}`, "Enter your name.");
+
+  const room = await prisma.gameRoom.findFirst({
+    where: {
+      code,
+      kind: "VOCAB_DASH",
+      status: { in: ["WAITING", "STARTING"] }
+    },
+    include: { _count: { select: { vocabTerms: true } } }
+  });
+  if (!room) errorRedirect("/student/games/vocab-dash", "That Vocab Dash room is not open.");
+  if (room._count.vocabTerms < 10) errorRedirect("/student/games/vocab-dash", "That room is not ready yet.");
+
+  const participant = await prisma.gameParticipant.create({
+    data: {
+      schoolId: room.schoolId,
+      roomId: room.id,
+      displayName,
+      characterKey
+    }
+  });
+
+  await prisma.auditEvent.create({
+    data: auditEventData({
+      schoolId: room.schoolId,
+      actorType: "student",
+      actorId: participant.id,
+      action: "game_participant.joined",
+      targetType: "game_room",
+      targetId: room.id,
+      metadata: { kind: "VOCAB_DASH" }
+    })
+  });
+
+  redirect(`/student/games/vocab-dash/play/${participant.id}`);
 }

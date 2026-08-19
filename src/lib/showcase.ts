@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { ActivityKind, MaterialStatus, QuestionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { SHOWCASE_LIFETIME_MS } from "@/lib/showcase-policy";
+import { createDefaultSchoolForTeacher } from "@/lib/tenancy";
 
 export const SHOWCASE_STUDENT_NAMES = [
   "Avery M.",
@@ -38,6 +39,7 @@ export async function deleteShowcaseWorkspace(teacherId: string) {
     where: { id: teacherId, isShowcase: true },
     select: {
       id: true,
+      defaultSchoolId: true,
       classrooms: {
         select: {
           id: true,
@@ -71,6 +73,7 @@ export async function deleteShowcaseWorkspace(teacherId: string) {
       }
     }),
     prisma.studentAccount.deleteMany({ where: { id: { in: studentAccountIds } } }),
+    prisma.school.deleteMany({ where: { id: workspace.defaultSchoolId || "" } }),
     prisma.teacher.deleteMany({ where: { id: workspace.id, isShowcase: true } })
   ]);
   await deleteOrphanedShowcaseStudentAccounts();
@@ -108,15 +111,19 @@ export async function createShowcaseWorkspace(passwordHash: string) {
   const now = new Date();
   await removeExpiredShowcaseWorkspaces(now).catch(() => undefined);
 
-  const teacher = await prisma.teacher.create({
-    data: {
-      name: "Showcase Teacher",
-      email: `showcase-${crypto.randomUUID()}@demo.charlottelearning.ai`,
-      passwordHash,
-      weeklySummaryEnabled: false,
-      isShowcase: true,
-      showcaseExpiresAt: new Date(now.getTime() + SHOWCASE_LIFETIME_MS)
-    }
+  const teacher = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.teacher.create({
+      data: {
+        name: "Showcase Teacher",
+        email: `showcase-${crypto.randomUUID()}@demo.charlottelearning.ai`,
+        passwordHash,
+        weeklySummaryEnabled: false,
+        isShowcase: true,
+        showcaseExpiresAt: new Date(now.getTime() + SHOWCASE_LIFETIME_MS)
+      }
+    });
+    const school = await createDefaultSchoolForTeacher(transaction, created);
+    return { ...created, defaultSchoolId: school.id };
   });
   return { teacher };
 }
@@ -315,12 +322,14 @@ async function scheduleNextShowcaseTick(teacherId: string, delayMs = 4_000) {
 
 export async function startShowcaseMaterialSimulation(
   teacherId: string,
+  schoolId: string,
   classroomId: string,
   materialId: string
 ) {
   const material = await prisma.material.findFirst({
     where: {
       id: materialId,
+      schoolId,
       classroomId,
       teacherId,
       isAdaptiveHome: false,
@@ -328,7 +337,7 @@ export async function startShowcaseMaterialSimulation(
     },
     include: {
       _count: { select: { questions: true } },
-      classroom: { select: { _count: { select: { students: { where: { active: true } } } } } }
+      classroom: { select: { _count: { select: { students: { where: { schoolId, active: true } } } } } }
     }
   });
   if (!material) throw new Error("Showcase assignment not found.");
@@ -337,18 +346,19 @@ export async function startShowcaseMaterialSimulation(
 
   const now = new Date();
   await prisma.$transaction([
-    prisma.studentSession.deleteMany({ where: { materialId } }),
+    prisma.studentSession.deleteMany({ where: { materialId, schoolId } }),
     prisma.material.updateMany({
       where: {
         teacherId,
+        schoolId,
         id: { not: materialId },
         showcaseSimulationStartedAt: { not: null },
         showcaseSimulationCompletedAt: null
       },
       data: { showcaseSimulationCompletedAt: now }
     }),
-    prisma.material.update({
-      where: { id: materialId },
+    prisma.material.updateMany({
+      where: { id: materialId, schoolId },
       data: {
         status: MaterialStatus.PUBLISHED,
         showcaseSimulationStartedAt: now,
@@ -362,10 +372,11 @@ export async function startShowcaseMaterialSimulation(
   ]);
 }
 
-export async function getShowcaseSimulationStatus(teacherId: string) {
+export async function getShowcaseSimulationStatus(teacherId: string, schoolId?: string) {
   const material = await prisma.material.findFirst({
     where: {
       teacherId,
+      ...(schoolId ? { schoolId } : {}),
       showcaseSimulationStartedAt: { not: null },
       showcaseSimulationCompletedAt: null
     },
@@ -374,9 +385,15 @@ export async function getShowcaseSimulationStatus(teacherId: string) {
       id: true,
       classroomId: true,
       title: true,
-      classroom: { select: { _count: { select: { students: { where: { active: true } } } } } },
+      classroom: {
+        select: {
+          _count: {
+            select: { students: { where: { ...(schoolId ? { schoolId } : {}), active: true } } }
+          }
+        }
+      },
       sessions: {
-        where: { status: "COMPLETED" },
+        where: { ...(schoolId ? { schoolId } : {}), status: "COMPLETED" },
         select: { id: true }
       }
     }
@@ -393,7 +410,7 @@ export async function getShowcaseSimulationStatus(teacherId: string) {
   };
 }
 
-export async function runShowcaseTick(teacherId: string) {
+export async function runShowcaseTick(teacherId: string, schoolId?: string) {
   const now = new Date();
   const claimed = await prisma.teacher.updateMany({
     where: {
@@ -414,13 +431,14 @@ export async function runShowcaseTick(teacherId: string) {
     }
   });
   if (claimed.count !== 1) {
-    return getShowcaseSimulationStatus(teacherId);
+    return getShowcaseSimulationStatus(teacherId, schoolId);
   }
 
   try {
   const materials = await prisma.material.findMany({
     where: {
       teacherId,
+      ...(schoolId ? { schoolId } : {}),
       status: MaterialStatus.PUBLISHED,
       activityKind: ActivityKind.IN_CLASS,
       isAdaptiveHome: false,
@@ -437,13 +455,14 @@ export async function runShowcaseTick(teacherId: string) {
       classroom: {
         include: {
           students: {
-            where: { active: true },
+            where: { ...(schoolId ? { schoolId } : {}), active: true },
             orderBy: { createdAt: "asc" }
           }
         }
       },
-      questions: { orderBy: { sortOrder: "asc" } },
+      questions: { where: { ...(schoolId ? { schoolId } : {}) }, orderBy: { sortOrder: "asc" } },
       sessions: {
+        where: { ...(schoolId ? { schoolId } : {}) },
         orderBy: { signInAt: "asc" },
         include: { answers: true, student: true }
       }
@@ -462,6 +481,7 @@ export async function runShowcaseTick(teacherId: string) {
   if (studentsToStart.length > 0) {
     await prisma.studentSession.createMany({
       data: studentsToStart.map((student, index) => ({
+        schoolId: material.schoolId,
         studentId: student.id,
         materialId: material.id,
         signInAt: new Date(now.getTime() + index * 250),
@@ -472,7 +492,7 @@ export async function runShowcaseTick(teacherId: string) {
   }
 
   const currentSessions = await prisma.studentSession.findMany({
-    where: { materialId: material.id },
+    where: { schoolId: material.schoolId, materialId: material.id },
     orderBy: { signInAt: "asc" },
     include: { answers: true, student: true }
   });
@@ -540,6 +560,7 @@ export async function runShowcaseTick(teacherId: string) {
     advance.pointsEarned += pointsEarned;
     sessionAdvances.set(session.id, advance);
     return {
+      schoolId: material.schoolId,
       sessionId: session.id,
       questionId: question.id,
       answerText,
@@ -559,8 +580,8 @@ export async function runShowcaseTick(teacherId: string) {
       const answerCount = session.answers.length + questions.length;
       const isComplete = answerCount >= material.questions.length;
       const addFocusAlert = session.focusViolationCount === 0 && answerCount >= 3 && stableNumber(session.studentId) % 9 === 0;
-      await transaction.studentSession.update({
-        where: { id: session.id },
+      await transaction.studentSession.updateMany({
+        where: { id: session.id, schoolId: material.schoolId },
         data: {
           lastSeenAt: now,
           foundChapter: true,
@@ -582,13 +603,13 @@ export async function runShowcaseTick(teacherId: string) {
   });
 
   const completedStudents = await prisma.studentSession.count({
-    where: { materialId: material.id, status: "COMPLETED" }
+    where: { schoolId: material.schoolId, materialId: material.id, status: "COMPLETED" }
   });
   const totalStudents = material.classroom.students.length;
   const simulationCompleted = totalStudents > 0 && completedStudents >= totalStudents;
   if (simulationCompleted) {
-    await prisma.material.update({
-      where: { id: material.id },
+    await prisma.material.updateMany({
+      where: { id: material.id, schoolId: material.schoolId },
       data: { showcaseSimulationCompletedAt: new Date() }
     });
   }

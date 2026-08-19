@@ -24,7 +24,7 @@ This project is a classroom application, so privacy and simple access matter tog
 ## Network Access
 
 - Browser access is restricted by Content Security Policy. The app allows itself and Cloudflare Turnstile for public form verification.
-- Server-side outbound requests fail closed through `src/lib/outbound.ts`. The default allowlist is `api.openai.com,api.resend.com,api.vercel.com,challenges.cloudflare.com`.
+- Server-side outbound requests fail closed through `src/lib/outbound.ts`. The default allowlist is `api.openai.com,api.resend.com,api.vercel.com,challenges.cloudflare.com,nces.ed.gov`.
 - Update `ALLOWED_OUTBOUND_HOSTS` only when a new production integration is intentionally added and reviewed.
 - Inbound HTTP methods are deny-by-default through `src/middleware.ts`; normal app traffic uses `GET`, `HEAD`, `POST`, and `OPTIONS`.
 

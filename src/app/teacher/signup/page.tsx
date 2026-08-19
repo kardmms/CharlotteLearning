@@ -4,6 +4,7 @@ import { createTeacherAccount } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
+import { SchoolAutocomplete } from "@/components/SchoolAutocomplete";
 import { TurnstileField } from "@/components/TurnstileField";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export default async function TeacherSignupPage({
               Email
               <input name="email" type="email" autoComplete="email" maxLength={254} required />
             </label>
+            <SchoolAutocomplete />
             <PasswordField
               name="password"
               label="Password"

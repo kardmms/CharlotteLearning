@@ -129,24 +129,26 @@ export function buildStudentMonthlyScores(
   }));
 }
 
-export async function getClassroomMonthlyPerformance(classroomId: string, now = new Date()) {
+export async function getClassroomMonthlyPerformance(classroomId: string, schoolId?: string, now = new Date()) {
   const firstMonth = recentMonthStarts(6, now)[0];
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacher: { isShowcase: false } },
+    where: { id: classroomId, ...(schoolId ? { schoolId } : {}), teacher: { isShowcase: false } },
     select: {
       id: true,
+      schoolId: true,
       name: true,
       gradeLevel: true,
       identityMode: true,
       privacyKeyHint: true,
       teacher: { select: { name: true } },
       students: {
-        where: { active: true },
+        where: { ...(schoolId ? { schoolId } : {}), active: true },
         orderBy: { displayName: "asc" },
         select: { id: true, displayName: true }
       },
       materials: {
         where: {
+          ...(schoolId ? { schoolId } : {}),
           status: "PUBLISHED",
           activityKind: "IN_CLASS",
           isAdaptiveHome: false,
@@ -156,7 +158,7 @@ export async function getClassroomMonthlyPerformance(classroomId: string, now = 
           id: true,
           createdAt: true,
           sessions: {
-            where: { status: { in: ["COMPLETED", "PARTIAL"] } },
+            where: { ...(schoolId ? { schoolId } : {}), status: { in: ["COMPLETED", "PARTIAL"] } },
             select: {
               studentId: true,
               status: true,

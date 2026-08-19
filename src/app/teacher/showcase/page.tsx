@@ -9,7 +9,7 @@ export default async function ShowcaseTeacherEntryPage() {
   if (!teacher.isShowcase) redirect("/teacher/classes");
 
   const classroom = await prisma.classroom.findFirst({
-    where: { teacherId: teacher.id, archivedAt: null },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
     orderBy: { createdAt: "asc" },
     select: { id: true }
   });

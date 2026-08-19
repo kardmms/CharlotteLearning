@@ -50,7 +50,8 @@ export default async function QuestionResponsesPage({
     where: {
       id: questionId,
       materialId,
-      material: { classroomId, teacherId: teacher.id }
+      schoolId: teacher.schoolId,
+      material: { schoolId: teacher.schoolId, classroomId, teacherId: teacher.id }
     },
     include: {
       material: {
@@ -60,7 +61,10 @@ export default async function QuestionResponsesPage({
         }
       },
       answers: {
-        where: { session: { status: { in: ["COMPLETED", "PARTIAL"] } } },
+        where: {
+          schoolId: teacher.schoolId,
+          session: { schoolId: teacher.schoolId, status: { in: ["COMPLETED", "PARTIAL"] } }
+        },
         include: {
           session: {
             include: {
@@ -175,6 +179,12 @@ export default async function QuestionResponsesPage({
                 </div>
               </div>
             )}
+            {safetyFlagCount > 0 && (
+              <span className="status-pill status-red">
+                <AlertTriangle size={16} />
+                {safetyFlagCount} safety {safetyFlagCount === 1 ? "flag" : "flags"}
+              </span>
+            )}
           </div>
 
           {isFreeResponse && (
@@ -192,7 +202,8 @@ export default async function QuestionResponsesPage({
                     <strong>{activeAnswer.session.student.displayName}</strong>
                     {activeAnswer.safetyFlaggedAt && (
                       <span className="status-pill status-red">
-                        <AlertTriangle size={16} /> Safety flag
+                        <AlertTriangle size={16} />
+                        Safety flag
                       </span>
                     )}
                     <p>{activeAnswer.answerText}</p>
@@ -253,6 +264,12 @@ export default async function QuestionResponsesPage({
                   </div>
                   <p>{answer.answerText}</p>
                   <div className="response-row-actions">
+                    {answer.safetyFlaggedAt && (
+                      <span className="status-pill status-red">
+                        <AlertTriangle size={16} />
+                        Safety flag
+                      </span>
+                    )}
                     {answer.isCorrect !== null && <strong>{answer.pointsEarned} / {maxPoints} points</strong>}
                     {answer.safetyFlaggedAt && (
                       <span className="status-pill status-red">

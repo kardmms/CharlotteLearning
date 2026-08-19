@@ -5,6 +5,7 @@ import { createFirstTeacher } from "@/app/teacher/actions";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
+import { SchoolAutocomplete } from "@/components/SchoolAutocomplete";
 import { TurnstileField } from "@/components/TurnstileField";
 import { prisma } from "@/lib/db";
 
@@ -44,6 +45,7 @@ export default async function TeacherSetupPage({
               Email
               <input name="email" type="email" autoComplete="email" maxLength={254} required />
             </label>
+            <SchoolAutocomplete />
             <PasswordField
               name="password"
               label="Password"

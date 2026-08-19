@@ -3,7 +3,7 @@ import { getStudentSession, setStudentCompletionLock } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { finalizeStudentSession } from "@/lib/finalize-session";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
-import { assertSameOrigin } from "@/lib/security";
+import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,11 @@ export async function POST(
     });
     await clearExpiredRateLimits();
     const session = await prisma.studentSession.findFirst({
-      where: { id: sessionId, studentId: student.studentId },
+      where: {
+        id: sessionId,
+        ...(student.schoolId ? { schoolId: student.schoolId } : {}),
+        studentId: student.studentId
+      },
       include: { material: true }
     });
     if (!session || session.status !== "IN_PROGRESS") {
@@ -37,11 +41,12 @@ export async function POST(
       await finalizeStudentSession({
         sessionId: session.id,
         outcome: "focus-loss",
+        schoolId: session.schoolId,
         focusViolationCount: violationCount
       });
     } else {
-      await prisma.studentSession.update({
-        where: { id: session.id },
+      await prisma.studentSession.updateMany({
+        where: { id: session.id, schoolId: session.schoolId },
         data: {
           focusViolationCount: violationCount,
           flaggedAt: new Date(),
@@ -56,6 +61,9 @@ export async function POST(
 
     return NextResponse.json({ violationCount, ended });
   } catch (error) {
+    if (isSameOriginError(error)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (error instanceof RateLimitError) {
       return NextResponse.json(
         { error: error.message },

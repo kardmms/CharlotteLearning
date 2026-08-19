@@ -55,8 +55,8 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       // Leave room for multipart form metadata while extractTextFromUpload
-      // enforces the advertised 4 MB file limit itself.
-      bodySizeLimit: "5mb"
+      // enforces the advertised file limit itself.
+      bodySizeLimit: "100mb"
     }
   },
   async headers() {

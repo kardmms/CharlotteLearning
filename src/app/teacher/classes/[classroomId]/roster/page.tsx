@@ -43,7 +43,7 @@ export default async function RosterPage({
     cookieStore.get("charlotte_class_recovery_key_flash")?.value
   );
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId: teacher.id },
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
       students: {
         where: { active: true },

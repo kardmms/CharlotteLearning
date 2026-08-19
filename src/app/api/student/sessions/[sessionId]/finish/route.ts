@@ -3,7 +3,7 @@ import { getStudentSession, setStudentCompletionLock } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { finalizeStudentSession } from "@/lib/finalize-session";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
-import { assertSameOrigin } from "@/lib/security";
+import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,11 @@ export async function POST(
     });
     await clearExpiredRateLimits();
     const session = await prisma.studentSession.findFirst({
-      where: { id: sessionId, studentId: student.studentId },
+      where: {
+        id: sessionId,
+        ...(student.schoolId ? { schoolId: student.schoolId } : {}),
+        studentId: student.studentId
+      },
       include: { material: true }
     });
     if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -33,6 +37,7 @@ export async function POST(
     const body = await request.json().catch(() => ({})) as { timeExpired?: boolean };
     const updated = await finalizeStudentSession({
       sessionId,
+      schoolId: session.schoolId,
       outcome: body.timeExpired ? "timed-out" : "submitted"
     });
 
@@ -42,6 +47,9 @@ export async function POST(
 
     return NextResponse.json({ ok: true, pointsEarned: updated.pointsEarned });
   } catch (error) {
+    if (isSameOriginError(error)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (error instanceof RateLimitError) {
       return NextResponse.json(
         { error: error.message },

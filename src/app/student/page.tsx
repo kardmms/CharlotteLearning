@@ -64,6 +64,7 @@ export default async function StudentHomePage({
   const [materials, hasHomeSources, points, completedHomeSessions] = await Promise.all([
     prisma.material.findMany({
       where: {
+        schoolId: student.schoolId,
         classroomId: student.classroomId,
         status: "PUBLISHED",
         OR: [
@@ -76,24 +77,25 @@ export default async function StudentHomePage({
       include: {
         _count: { select: { questions: true } },
         sessions: {
-          where: { studentId: student.id },
+          where: { schoolId: student.schoolId, studentId: student.id },
           orderBy: { signInAt: "desc" },
           take: 1,
           select: { status: true, completedCharlotte: true, pointsEarned: true }
         }
       }
     }),
-    classroomHasHomeLearningSources(student.classroomId),
+    classroomHasHomeLearningSources(student.classroomId, student.schoolId),
     prisma.studentSession.aggregate({
-      where: { studentId: student.id, status: "COMPLETED" },
+      where: { schoolId: student.schoolId, studentId: student.id, status: "COMPLETED" },
       _sum: { pointsEarned: true }
     }),
     prisma.studentSession.findMany({
       where: {
+        schoolId: student.schoolId,
         studentId: student.id,
         status: "COMPLETED",
         completedAt: { not: null },
-        material: { activityKind: "AT_HOME" }
+        material: { schoolId: student.schoolId, activityKind: "AT_HOME" }
       },
       select: { completedAt: true }
     })

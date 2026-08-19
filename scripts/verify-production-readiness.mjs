@@ -35,11 +35,8 @@ if (process.env.EMAIL_DELIVERY_ENABLED !== "true") {
 if (process.env.TURNSTILE_REQUIRED !== "true") {
   missing.push("TURNSTILE_REQUIRED=true");
 }
-if (!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()) {
-  missing.push("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
-}
-if (!process.env.TURNSTILE_SECRET_KEY?.trim()) {
-  missing.push("TURNSTILE_SECRET_KEY");
+for (const name of ["NEXT_PUBLIC_TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"]) {
+  if (!process.env[name]?.trim()) missing.push(name);
 }
 if (!process.env.OPENAI_API_KEY?.trim() && !process.env.OPEN_AI_KEY?.trim()) {
   missing.push("OPENAI_API_KEY or OPEN_AI_KEY");
@@ -65,7 +62,7 @@ const configuredHosts = (process.env.ALLOWED_OUTBOUND_HOSTS || "")
   .map((host) => host.trim().toLowerCase())
   .filter(Boolean);
 if (configuredHosts.length) {
-  for (const host of ["api.openai.com", "api.resend.com"]) {
+  for (const host of ["api.openai.com", "api.resend.com", "nces.ed.gov"]) {
     if (!configuredHosts.includes(host)) missing.push(`ALLOWED_OUTBOUND_HOSTS must include ${host}`);
   }
 }

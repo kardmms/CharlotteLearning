@@ -7,14 +7,14 @@ export const dynamic = "force-dynamic";
 export default async function TeacherAssignmentsPage() {
   const teacher = await requireTeacher();
   const latestMaterial = await prisma.material.findFirst({
-    where: { teacherId: teacher.id, isAdaptiveHome: false, classroom: { archivedAt: null } },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, isAdaptiveHome: false, classroom: { archivedAt: null } },
     orderBy: { updatedAt: "desc" },
     select: { classroomId: true }
   });
   if (latestMaterial) redirect(`/teacher/classes/${latestMaterial.classroomId}/materials`);
 
   const classroom = await prisma.classroom.findFirst({
-    where: { teacherId: teacher.id, archivedAt: null },
+    where: { teacherId: teacher.id, schoolId: teacher.schoolId, archivedAt: null },
     orderBy: { createdAt: "desc" },
     select: { id: true }
   });

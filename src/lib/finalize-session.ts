@@ -3,15 +3,17 @@ import { prisma } from "@/lib/db";
 export async function finalizeStudentSession({
   sessionId,
   outcome,
+  schoolId,
   focusViolationCount
 }: {
   sessionId: string;
   outcome: "submitted" | "timed-out" | "focus-loss";
+  schoolId?: string;
   focusViolationCount?: number;
 }) {
   return prisma.$transaction(async (transaction) => {
-    const session = await transaction.studentSession.findUnique({
-      where: { id: sessionId },
+    const session = await transaction.studentSession.findFirst({
+      where: { id: sessionId, ...(schoolId ? { schoolId } : {}) },
       include: {
         material: { include: { questions: true } },
         answers: true
@@ -29,6 +31,7 @@ export async function finalizeStudentSession({
     if (!isAtHome && unansweredQuestions.length > 0) {
       await transaction.studentAnswer.createMany({
         data: unansweredQuestions.map((question) => ({
+          schoolId: session.schoolId,
           sessionId: session.id,
           questionId: question.id,
           answerText: "No response",

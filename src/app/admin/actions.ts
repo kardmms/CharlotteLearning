@@ -46,7 +46,8 @@ function normalizeUsername(value: string) {
 }
 
 function errorRedirect(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}error=${encodeURIComponent(message)}`);
 }
 
 export type AdminRosterRevealState = {
