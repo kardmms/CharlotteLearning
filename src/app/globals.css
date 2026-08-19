@@ -8341,10 +8341,100 @@ tr:last-child td {
   border-color: #334155;
 }
 
+:root[data-theme="dark"] .slider-readout {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+:root[data-theme="dark"] .slider-scale {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .grade-slider {
+  background: transparent;
+}
+
+:root[data-theme="dark"] .grade-slider::-webkit-slider-runnable-track {
+  background: #334155;
+  border-radius: 999px;
+}
+
+:root[data-theme="dark"] .grade-slider::-moz-range-track {
+  background: #334155;
+  border-radius: 999px;
+}
+
 :root[data-theme="dark"] .password-toggle {
   background: #172554;
   border-color: #3b82f6;
   color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .feedback-card,
+:root[data-theme="dark"] .admin-empty-state.light,
+:root[data-theme="dark"] .analytics-strip > div,
+:root[data-theme="dark"] .question-chart-row,
+:root[data-theme="dark"] .class-activity-row,
+:root[data-theme="dark"] .summary-card {
+  background: #111827;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .feedback-card h1,
+:root[data-theme="dark"] .admin-empty-state.light strong,
+:root[data-theme="dark"] .analytics-strip strong,
+:root[data-theme="dark"] .question-chart-row strong,
+:root[data-theme="dark"] .class-activity-row strong,
+:root[data-theme="dark"] .summary-card strong {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .feedback-card p,
+:root[data-theme="dark"] .admin-empty-state.light p,
+:root[data-theme="dark"] .summary-card p {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .analytics-strip svg,
+:root[data-theme="dark"] .privacy-section a,
+:root[data-theme="dark"] .privacy-section-heading > svg,
+:root[data-theme="dark"] .privacy-summary-card > svg,
+:root[data-theme="dark"] .home-resource-card span {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .privacy-toc a:hover {
+  color: #93c5fd;
+  border-color: #3b82f6;
+}
+
+:root[data-theme="dark"] .bar,
+:root[data-theme="dark"] .horizontal-chart,
+:root[data-theme="dark"] .progress-track {
+  background: #334155;
+}
+
+:root[data-theme="dark"] .weekly-up {
+  color: #86efac;
+}
+
+:root[data-theme="dark"] .weekly-down {
+  color: #fca5a5;
+}
+
+:root[data-theme="dark"] .kebab-menu-panel button {
+  background: #111827;
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .kebab-menu-panel button:hover {
+  background: #172554;
+}
+
+:root[data-theme="dark"] .kebab-menu-panel .danger-menu-item {
+  color: #fca5a5;
 }
 
 :root[data-theme="dark"] .click-loading {
@@ -8378,6 +8468,21 @@ tr:last-child td {
 :root[data-theme="dark"] .question-context-card p,
 :root[data-theme="dark"] .upload-guide-card p {
   color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .upload-guide-card,
+:root[data-theme="dark"] .home-resource-dropzone {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .home-resource-dropzone small {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .leaderboard-rank {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #f8fafc;
 }
 
 :root[data-theme="dark"] .question-context-card span {

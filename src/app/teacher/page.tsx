@@ -70,7 +70,7 @@ export default async function TeacherHomePage({
               <p className="form-note">
                 {teacher.isShowcase
                   ? "After setup, save the classroom recovery key, then use the downloadable sample roster to generate 12 fictional student accounts safely."
-                  : "Charlotte will generate a classroom recovery key after setup. Save it somewhere safe; students will not need it."}
+                  : "Charlotte will generate a classroom recovery key after setup. Save it somewhere safe; you will not need it to add students."}
               </p>
               <button
                 className="button"

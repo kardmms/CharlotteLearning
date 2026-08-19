@@ -7,19 +7,14 @@ import {
   prepareStudentImport,
   type RosterImportState
 } from "@/app/teacher/actions";
-import { PasswordField } from "@/components/PasswordField";
 
 const initialState: RosterImportState = { rows: [], fileName: "" };
 
 export function StudentSpreadsheetImport({
   classroomId,
-  privacyProtected,
-  privacyKeyHint,
   isShowcase = false
 }: {
   classroomId: string;
-  privacyProtected?: boolean;
-  privacyKeyHint?: string | null;
   isShowcase?: boolean;
 }) {
   const [state, prepareAction, pending] = useActionState(prepareStudentImport, initialState);
@@ -90,26 +85,11 @@ export function StudentSpreadsheetImport({
               <p>
                 {isShowcase
                   ? "Check the fictional roster, then approve it. Every student account will be activated automatically."
-                  : "Double-check every field below. Nothing is official until you confirm."}
+                  : "Double-check every field below. Students are added when you confirm."}
               </p>
             </div>
             <span className="status-pill status-blue"><Sparkles size={15} /> {state.fileName}</span>
           </div>
-
-          {privacyProtected && !isShowcase && (
-            <PasswordField
-              name="privacyKey"
-              label="Classroom recovery key"
-              required
-              minLength={12}
-              autoComplete="off"
-              helpText={
-                privacyKeyHint
-                  ? `Hint: ${privacyKeyHint}`
-                  : "Students do not need this. Charlotte uses it to encrypt the roster entry, then does not store the raw key."
-              }
-            />
-          )}
 
           <div className="student-entry-fields spreadsheet-review-fields">
             <div className="student-entry-head" aria-hidden="true">

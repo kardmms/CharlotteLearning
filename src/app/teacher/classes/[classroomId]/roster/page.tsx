@@ -4,7 +4,6 @@ import { addStudents } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { Message } from "@/components/Message";
-import { PasswordField } from "@/components/PasswordField";
 import { RecoveryKeyPopup } from "@/components/RecoveryKeyPopup";
 import { RosterIdentityReveal } from "@/components/RosterIdentityReveal";
 import { StudentSpreadsheetImport } from "@/components/StudentSpreadsheetImport";
@@ -109,8 +108,8 @@ export default async function RosterPage({
             {teacher.isShowcase
               ? "This temporary class uses a real classroom recovery key with fictional student data. You do not need the key to approve the sample roster; save it only if you want to reveal the roster later."
               : isPrivacyProtected
-              ? "Student names and emails are stored as encrypted identity data. Students only use email and password. The classroom recovery key is for teachers and approved admin recovery."
-              : "This class stores student names and emails normally. New classes use classroom recovery keys for database-anonymous student identities."}
+              ? "Add students without the classroom recovery key. The key is only for revealing protected roster identities later."
+              : "This class stores student names and emails normally. Student adds do not require a classroom recovery key."}
           </p>
           {isPrivacyProtected && classroom.privacyKeyHint && (
             <span className="status-pill status-blue">Hint: {classroom.privacyKeyHint}</span>
@@ -142,8 +141,6 @@ export default async function RosterPage({
             </p>
             <StudentSpreadsheetImport
               classroomId={classroom.id}
-              privacyProtected={isPrivacyProtected}
-              privacyKeyHint={classroom.privacyKeyHint}
               isShowcase={teacher.isShowcase}
             />
           </div>
@@ -158,16 +155,6 @@ export default async function RosterPage({
             </div>
             <form className="form-grid" action={addStudents}>
               <input type="hidden" name="classroomId" value={classroom.id} />
-              {isPrivacyProtected && (
-                <PasswordField
-                  name="privacyKey"
-                  label="Classroom recovery key"
-                  required
-                  minLength={12}
-                  autoComplete="off"
-                  helpText="Students do not need this. Charlotte uses it to encrypt the roster entry, then does not store the raw key."
-                />
-              )}
               <div className="student-entry-fields">
                 <div className="student-entry-head" aria-hidden="true">
                   <span>Student name</span>

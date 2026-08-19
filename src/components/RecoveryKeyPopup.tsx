@@ -50,7 +50,7 @@ export function RecoveryKeyPopup({
             This is the recovery key for <strong>{classroomName}</strong>. Save it somewhere secure.
             {isShowcase
               ? " You will not need it to approve the sample roster; use it only if you want to reveal the roster later."
-              : " Charlotte will not show this key again after this popup."}
+              : " You will not need it to add students; use it only if you need to reveal protected roster identities later."}
           </p>
         </div>
         <code>{recoveryKey}</code>

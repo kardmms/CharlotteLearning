@@ -820,7 +820,7 @@ async function createStudentsFromRows(
     }
   }
 
-  const usesPrivacyKey = classroom.identityMode === IdentityMode.SCHOOL_KEY || Boolean(privacyKey);
+  const usesPrivacyKey = Boolean(privacyKey);
 
   if (usesPrivacyKey) {
     if (!isUsablePrivacyKey(privacyKey)) {
@@ -997,7 +997,7 @@ export async function addStudents(formData: FormData) {
   }));
 
   const submittedPrivacyKey = formText(formData, "privacyKey");
-  const setupPrivacyKey = submittedPrivacyKey ? "" : await readClassRosterSetupKey(classroomId);
+  const setupPrivacyKey = submittedPrivacyKey || !teacher.isShowcase ? "" : await readClassRosterSetupKey(classroomId);
   const invitations = await createStudentsFromRows(
     teacher.id,
     teacher.schoolId,
