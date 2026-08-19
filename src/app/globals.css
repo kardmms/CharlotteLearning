@@ -4613,7 +4613,7 @@ p {
   display: grid;
   grid-template-columns: repeat(4, minmax(110px, 1fr));
   gap: clamp(12px, 2.4vw, 28px);
-  align-items: flex-end;
+  align-items: start;
   min-width: 0;
 }
 
