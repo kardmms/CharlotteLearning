@@ -950,7 +950,10 @@ export function AdminDashboardClient({
 
   useEffect(() => {
     let mounted = true;
+    let inFlight = false;
     async function refresh() {
+      if (inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
         setRefreshing(true);
         const response = await fetch("/api/admin/metrics", { cache: "no-store" });
@@ -960,11 +963,12 @@ export function AdminDashboardClient({
         setMetrics(next);
         setLastUpdated(new Date(next.generatedAt));
       } finally {
+        inFlight = false;
         if (mounted) setRefreshing(false);
       }
     }
 
-    const timer = window.setInterval(refresh, 8000);
+    const timer = window.setInterval(refresh, 15000);
     return () => {
       mounted = false;
       window.clearInterval(timer);
