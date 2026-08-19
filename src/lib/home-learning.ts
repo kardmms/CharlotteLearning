@@ -17,13 +17,14 @@ export function homeLearningDayKey(date = new Date()) {
 }
 
 export async function classroomHasHomeLearningSources(classroomId: string, schoolId?: string) {
-  const [materialCount, resourceCount] = await Promise.all([
+  const [materialCount, resourceCount, vocabSetCount] = await Promise.all([
     prisma.material.count({
       where: { classroomId, schoolId, activityKind: ActivityKind.IN_CLASS, isAdaptiveHome: false }
     }),
-    prisma.atHomeResource.count({ where: { classroomId, schoolId } })
+    prisma.atHomeResource.count({ where: { classroomId, schoolId } }),
+    prisma.gameRoom.count({ where: { classroomId, schoolId, vocabTerms: { some: {} } } })
   ]);
-  return materialCount + resourceCount > 0;
+  return materialCount + resourceCount + vocabSetCount > 0;
 }
 
 function choicesFromJson(value?: string | null) {
@@ -166,7 +167,7 @@ export async function ensureDailyHomePractice(studentId: string) {
   });
   if (existing) return existing;
 
-  const [materials, resources, priorAnswers] = await Promise.all([
+  const [materials, resources, vocabRooms, priorAnswers] = await Promise.all([
     prisma.material.findMany({
       where: {
         schoolId: student.schoolId,
@@ -183,6 +184,12 @@ export async function ensureDailyHomePractice(studentId: string) {
       orderBy: { createdAt: "desc" },
       take: 8
     }),
+    prisma.gameRoom.findMany({
+      where: { schoolId: student.schoolId, classroomId: student.classroomId, vocabTerms: { some: {} } },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: { vocabTerms: { orderBy: { sortOrder: "asc" } } }
+    }),
     prisma.studentAnswer.findMany({
       where: {
         schoolId: student.schoolId,
@@ -196,8 +203,8 @@ export async function ensureDailyHomePractice(studentId: string) {
       }
     })
   ]);
-  if (!materials.length && !resources.length) {
-    throw new Error("Your teacher has not added at-home learning material yet.");
+  if (!materials.length && !resources.length && !vocabRooms.length) {
+    throw new Error("Your class has not covered practice material yet.");
   }
 
   const sourceParts: string[] = [];
@@ -228,6 +235,12 @@ export async function ensureDailyHomePractice(studentId: string) {
       applyReadingScope(resource.sourceText, resource.readingScope)
     ].filter(Boolean).join("\n"));
   }
+  for (const room of vocabRooms) {
+    sourceParts.push([
+      "Class vocabulary:",
+      ...room.vocabTerms.map((term) => `${term.word}: ${term.definition}`)
+    ].join("\n"));
+  }
   const sourceText = sourceParts.join("\n\n").slice(0, 24_000);
 
   const correctlyAnsweredAtHome = new Set(
@@ -236,6 +249,24 @@ export async function ensureDailyHomePractice(studentId: string) {
       .map((answer) => normalizePrompt(answer.question.prompt))
   );
   const seedQuestions: HomePracticeQuestion[] = [];
+  for (const room of vocabRooms) {
+    for (const term of room.vocabTerms) {
+      const distractors = room.vocabTerms.filter((item) => item.id !== term.id).slice(0, 3).map((item) => item.word);
+      if (distractors.length < 3) continue;
+      seedQuestions.push({
+        type: "VOCAB",
+        prompt: term.definition,
+        choices: [term.word, ...distractors],
+        correctAnswer: term.word,
+        explanation: `${term.word} matches this definition.`,
+        skillTag: "Vocabulary",
+        standardCode: `L.${student.classroom.gradeLevel}.4`,
+        difficulty: 2
+      });
+      if (seedQuestions.length >= 4) break;
+    }
+    if (seedQuestions.length >= 4) break;
+  }
   for (const material of materials) {
     if (material.sourceText && material.atHomeScope) continue;
     for (const question of material.questions) {
@@ -283,7 +314,7 @@ export async function ensureDailyHomePractice(studentId: string) {
         teacherId: student.classroom.teacherId,
         classroomId: student.classroomId,
         targetStudentId: student.id,
-        title: `Daily Win · ${titleDate}`,
+        title: `Extra Practice · ${titleDate}`,
         gradeLevel: student.classroom.gradeLevel,
         estimatedMinutes: 20,
         activityKind: ActivityKind.AT_HOME,

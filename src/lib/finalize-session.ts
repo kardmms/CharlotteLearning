@@ -16,7 +16,8 @@ export async function finalizeStudentSession({
       where: { id: sessionId, ...(schoolId ? { schoolId } : {}) },
       include: {
         material: { include: { questions: true } },
-        answers: true
+        answers: true,
+        student: { select: { accountId: true } }
       }
     });
     if (!session) throw new Error("Session not found");
@@ -46,7 +47,19 @@ export async function finalizeStudentSession({
 
     const completed = isAtHome || (outcome === "submitted" && unansweredQuestions.length === 0);
     const now = new Date();
-    return transaction.studentSession.update({
+    const priorHomeCompletion = isAtHome
+      ? await transaction.studentSession.count({
+          where: {
+            id: { not: session.id },
+            schoolId: session.schoolId,
+            studentId: session.studentId,
+            materialId: session.materialId,
+            status: "COMPLETED"
+          }
+        })
+      : 0;
+    const homeStars = isAtHome && priorHomeCompletion === 0 ? 5 : 0;
+    const updated = await transaction.studentSession.update({
       where: { id: session.id },
       data: {
         lastSeenAt: now,
@@ -54,6 +67,7 @@ export async function finalizeStudentSession({
         completedAt: now,
         status: completed ? "COMPLETED" : "PARTIAL",
         completedCharlotte: completed,
+        ...(isAtHome ? { pointsEarned: homeStars } : {}),
         ...(outcome === "focus-loss"
           ? {
               focusViolationCount: focusViolationCount ?? session.focusViolationCount,
@@ -63,5 +77,12 @@ export async function finalizeStudentSession({
           : {})
       }
     });
+    if (homeStars && session.student.accountId) {
+      await transaction.studentAccount.update({
+        where: { id: session.student.accountId },
+        data: { stars: { increment: homeStars } }
+      });
+    }
+    return updated;
   });
 }

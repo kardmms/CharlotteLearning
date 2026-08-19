@@ -39,6 +39,25 @@ function bucketByDay<T>(items: T[], days: number, getDate: (item: T) => Date) {
   });
 }
 
+function bucketUniqueByDay<T>(
+  items: T[],
+  days: number,
+  getDate: (item: T) => Date,
+  getKey: (item: T) => string
+) {
+  const starts = recentDayStarts(days);
+  return starts.map((start) => {
+    const end = new Date(start.getTime() + dayMs);
+    return {
+      label: shortDate(start),
+      value: new Set(items.filter((item) => {
+        const date = getDate(item);
+        return date >= start && date < end;
+      }).map(getKey)).size
+    };
+  });
+}
+
 function timeAgo(date: Date) {
   const diff = Date.now() - date.getTime();
   const minutes = Math.max(1, Math.round(diff / (60 * 1000)));
@@ -127,7 +146,7 @@ export async function getAdminMetrics() {
         lastSeenAt: { gte: since7d },
         material: { teacher: { isShowcase: false } }
       },
-      select: { studentId: true, student: { select: { accountId: true } } }
+      select: { schoolId: true, studentId: true, student: { select: { accountId: true } } }
     }),
     prisma.classroom.count({ where: { teacher: { isShowcase: false } } }),
     prisma.classroom.count({
@@ -186,7 +205,7 @@ export async function getAdminMetrics() {
     }),
     prisma.studentSession.findMany({
       where: { signInAt: { gte: since14d }, material: { teacher: { isShowcase: false } } },
-      select: { signInAt: true }
+      select: { signInAt: true, studentId: true }
     }),
     prisma.teacherFeedback.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
     prisma.contactLead.findMany({ where: { createdAt: { gte: since14d } }, select: { createdAt: true } }),
@@ -212,7 +231,7 @@ export async function getAdminMetrics() {
     }),
     prisma.studentSession.findMany({
       where: { signInAt: { gte: since14d }, material: { teacher: { isShowcase: false } } },
-      select: { signInAt: true }
+      select: { signInAt: true, studentId: true }
     }),
     prisma.classroom.groupBy({
       by: ["gradeLevel"],
@@ -310,12 +329,50 @@ export async function getAdminMetrics() {
     })
   ]);
 
+  const [schoolRows, completedGameGroups, completedHomeGroups, schoolAnswerGroups] = await Promise.all([
+    prisma.school.findMany({
+      orderBy: { createdAt: "asc" },
+      include: {
+        _count: { select: { teacherMemberships: true } },
+        classrooms: {
+          where: { archivedAt: null, teacher: { isShowcase: false } },
+          orderBy: { name: "asc" },
+          include: {
+            _count: {
+              select: {
+                students: { where: { active: true } },
+                materials: true
+              }
+            }
+          }
+        }
+      }
+    }),
+    prisma.gameRoom.groupBy({
+      by: ["schoolId"],
+      where: { status: "COMPLETED", teacher: { isShowcase: false } },
+      _count: { _all: true }
+    }),
+    prisma.studentSession.groupBy({
+      by: ["schoolId"],
+      where: { status: "COMPLETED", material: { activityKind: "AT_HOME", teacher: { isShowcase: false } } },
+      _count: { _all: true }
+    }),
+    prisma.studentAnswer.groupBy({
+      by: ["schoolId", "isCorrect"],
+      where: { isCorrect: { not: null }, session: { material: { teacher: { isShowcase: false } } } },
+      _count: { _all: true }
+    })
+  ]);
+
   const activeTeacherIds = new Set([
     ...activeTeacherMaterials.map((item) => item.teacherId),
     ...activeTeacherClasses.map((item) => item.teacherId)
   ]);
   const activeStudentIds = new Set(activeStudentRows.map((item) => item.student.accountId || item.studentId));
   const totalActiveUsers = activeTeacherIds.size + activeStudentIds.size;
+  const completedGames = completedGameGroups.reduce((sum, item) => sum + item._count._all, 0);
+  const completedHomeActivities = completedHomeGroups.reduce((sum, item) => sum + item._count._all, 0);
   const todaySessions = await prisma.studentSession.count({
     where: {
       signInAt: { gte: since24h },
@@ -361,10 +418,37 @@ export async function getAdminMetrics() {
     .sort((a, b) => (b.students + b.sessions) - (a.students + a.sessions))
     .slice(0, 8);
 
+  const schoolAnalytics = schoolRows.map((school) => {
+    const activeStudents = new Set(
+      activeStudentRows.filter((row) => row.schoolId === school.id).map((row) => row.student.accountId || row.studentId)
+    ).size;
+    const totalSchoolAnswers = schoolAnswerGroups
+      .filter((row) => row.schoolId === school.id)
+      .reduce((sum, row) => sum + row._count._all, 0);
+    const correctSchoolAnswers = schoolAnswerGroups
+      .filter((row) => row.schoolId === school.id && row.isCorrect === true)
+      .reduce((sum, row) => sum + row._count._all, 0);
+    return {
+      id: school.id,
+      name: school.name,
+      districtName: school.districtName,
+      teachers: school._count.teacherMemberships,
+      classes: school.classrooms.length,
+      activeStudents,
+      enrolledStudents: school.classrooms.reduce((sum, classroom) => sum + classroom._count.students, 0),
+      assignments: school.classrooms.reduce((sum, classroom) => sum + classroom._count.materials, 0),
+      gamesCompleted: completedGameGroups.find((row) => row.schoolId === school.id)?._count._all || 0,
+      homeActivitiesCompleted: completedHomeGroups.find((row) => row.schoolId === school.id)?._count._all || 0,
+      averageAccuracy: pct(correctSchoolAnswers, totalSchoolAnswers),
+      classroomNames: school.classrooms.map((classroom) => classroom.name)
+    };
+  });
+
   return {
     generatedAt: now.toISOString(),
     headline: {
       totalActiveUsers,
+      totalSchools: schoolRows.length,
       activeTeachers: activeTeacherIds.size,
       activeStudents: activeStudentIds.size,
       totalTeachers,
@@ -377,6 +461,10 @@ export async function getAdminMetrics() {
       homeMaterials,
       totalSessions,
       completedSessions,
+      assignmentsCompleted: completedSessions,
+      completedGames,
+      completedHomeActivities,
+      participationRate: pct(activeStudentIds.size, totalStudents),
       completionRate: pct(completedSessions, totalSessions),
       totalAnswers,
       correctRate: pct(correctAnswers, totalAnswers),
@@ -392,6 +480,7 @@ export async function getAdminMetrics() {
       classes: bucketByDay(chartClasses, 14, (item) => item.createdAt),
       students: bucketByDay(chartStudents, 14, (item) => item.createdAt),
       sessions: bucketByDay(chartSessions, 14, (item) => item.signInAt),
+      activeStudents: bucketUniqueByDay(chartSessions, 14, (item) => item.signInAt, (item) => item.studentId),
       gradeMix: gradeGroups
         .map((item) => ({ label: item.gradeLevel, value: item._count._all }))
         .sort((a, b) => b.value - a.value),
@@ -402,6 +491,7 @@ export async function getAdminMetrics() {
       ]
     },
     monthlyClassScores: buildMonthlyClassScores(monthlyScoreMaterials, 6, now),
+    schoolAnalytics,
     topClassrooms,
     leads: leads.map((lead) => ({
       id: lead.id,
@@ -474,6 +564,7 @@ export function getEmptyAdminMetrics(): AdminMetrics {
     generatedAt: now.toISOString(),
     headline: {
       totalActiveUsers: 0,
+      totalSchools: 0,
       activeTeachers: 0,
       activeStudents: 0,
       totalTeachers: 0,
@@ -486,6 +577,10 @@ export function getEmptyAdminMetrics(): AdminMetrics {
       homeMaterials: 0,
       totalSessions: 0,
       completedSessions: 0,
+      assignmentsCompleted: 0,
+      completedGames: 0,
+      completedHomeActivities: 0,
+      participationRate: 0,
       completionRate: 0,
       totalAnswers: 0,
       correctRate: 0,
@@ -501,6 +596,7 @@ export function getEmptyAdminMetrics(): AdminMetrics {
       classes: emptyChart,
       students: emptyChart,
       sessions: emptyChart,
+      activeStudents: emptyChart,
       gradeMix: [],
       assignmentMix: [
         { label: "Published", value: 0 },
@@ -509,6 +605,7 @@ export function getEmptyAdminMetrics(): AdminMetrics {
       ]
     },
     monthlyClassScores: buildMonthlyClassScores([], 6, now),
+    schoolAnalytics: [],
     topClassrooms: [],
     leads: [],
     activityTimeline: [],

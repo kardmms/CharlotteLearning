@@ -45,7 +45,7 @@ export default async function VocabDashLeaderboardPage({
           <div>
             <div className="eyebrow">Live game</div>
             <h1>Vocab Dash</h1>
-            <p>Students move forward with each correct answer. A wrong answer resets their streak.</p>
+            <p>Every answer advances the race. Accuracy breaks ties and shapes each student&apos;s results.</p>
           </div>
           <div className="vocab-leaderboard-code">
             <span>Join code</span>

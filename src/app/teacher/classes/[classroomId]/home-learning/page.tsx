@@ -1,8 +1,5 @@
-import { BookOpenCheck, FileQuestion, FileText, Sparkles, Star, Trash2, Trophy, UsersRound } from "lucide-react";
-import Link from "next/link";
-import { deleteAtHomeResource } from "@/app/teacher/actions";
+import { BookOpenCheck, FileQuestion, FileText, Gamepad2, Sparkles, Star, Trophy, UsersRound } from "lucide-react";
 import { ClassNav } from "@/components/ClassNav";
-import { HomeResourceUpload } from "@/components/HomeResourceUpload";
 import { Message } from "@/components/Message";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { requireTeacher } from "@/lib/auth";
@@ -32,10 +29,16 @@ export default async function HomeLearningPage({
         orderBy: { updatedAt: "desc" },
         include: { _count: { select: { questions: true } } }
       },
+      gameRooms: {
+        where: { schoolId: teacher.schoolId, vocabTerms: { some: {} } },
+        orderBy: { createdAt: "desc" },
+        include: { _count: { select: { vocabTerms: true } } }
+      },
       students: {
         where: { active: true },
         orderBy: { displayName: "asc" },
         include: {
+          account: { select: { stars: true } },
           sessions: {
             where: { schoolId: teacher.schoolId, material: { activityKind: "AT_HOME", isAdaptiveHome: true } },
             include: {
@@ -57,7 +60,7 @@ export default async function HomeLearningPage({
     return {
       id: student.id,
       name: student.displayName,
-      points: sessions.reduce((sum, session) => sum + session.pointsEarned, 0),
+      points: student.account?.stars || 0,
       answers: sessions.reduce((sum, session) => sum + session._count.answers, 0),
       activeDays,
       today: todaySession ? (todaySession.status === "IN_PROGRESS" ? "In progress" : "Complete") : "Not started",
@@ -75,11 +78,11 @@ export default async function HomeLearningPage({
       <main className="page">
         <section className="workspace-heading home-learning-heading">
           <div>
-            <div className="eyebrow">Adaptive daily practice</div>
-            <h1>At-home learning</h1>
-            <p>Charlotte builds each student a grade-appropriate 20-minute Daily Win from your materials and their learning needs.</p>
+            <div className="eyebrow">Optional extra practice</div>
+            <h1>Practice library</h1>
+            <p>Charlotte automatically reuses class assignments and Vocab Dash words students have already covered.</p>
           </div>
-          <div className="home-learning-badge"><Sparkles size={20} /> Adapts each day</div>
+          <div className="home-learning-badge"><Sparkles size={20} /> Built from class learning</div>
         </section>
         <ClassNav classroomId={classroom.id} />
         <Message success={query.saved ? "Document added to at-home learning." : query.deleted ? "Document removed." : undefined} error={query.error} />
@@ -87,24 +90,14 @@ export default async function HomeLearningPage({
         <section className="home-metric-grid">
           <div><UsersRound size={22} /><span>Participating today</span><strong>{participatingToday}/{classroom.students.length}</strong></div>
           <div><Star size={22} /><span>Class points</span><strong>{totalPoints}</strong></div>
-          <div><BookOpenCheck size={22} /><span>Learning sources</span><strong>{classroom.materials.length + classroom.homeResources.length}</strong></div>
+          <div><BookOpenCheck size={22} /><span>Covered content sets</span><strong>{classroom.materials.length + classroom.gameRooms.length}</strong></div>
         </section>
 
         <section className="panel home-resource-panel">
           <div className="panel-header">
-            <div><div className="eyebrow">Teacher resource library</div><h2>What Charlotte can teach and reinforce</h2></div>
+            <div><div className="eyebrow">Automatic practice sources</div><h2>Covered class content</h2></div>
           </div>
-          <p>Lesson plans and manual assignments appear automatically. Add more readings or question sheets anytime.</p>
-          <div className="upload-guide-card">
-            <div>
-              <strong>Have book text, a chapter, or a reading packet?</strong>
-              <p>Use the upload box below when Charlotte should reinforce that material during at-home Daily Wins.</p>
-            </div>
-            <Link className="ghost-button" href={`/teacher/classes/${classroom.id}/materials/new`}>
-              Need an in-class quiz?
-            </Link>
-          </div>
-          <HomeResourceUpload classroomId={classroom.id} />
+          <p>New class activities and Vocab Dash sets appear here automatically. Students choose when they want extra practice.</p>
 
           <div className="home-resource-grid">
             {classroom.materials.map((material) => (
@@ -117,23 +110,28 @@ export default async function HomeLearningPage({
                 </div>
               </article>
             ))}
+            {classroom.gameRooms.map((room) => (
+              <article className="home-resource-card linked" key={room.id}>
+                <div className="home-resource-thumb"><Gamepad2 size={28} /></div>
+                <div>
+                  <span>Vocab Dash set</span>
+                  <strong>{room._count.vocabTerms} vocabulary words</strong>
+                  <small>Flashcards and solo practice are available to students.</small>
+                </div>
+              </article>
+            ))}
             {classroom.homeResources.map((resource) => (
               <article className="home-resource-card" key={resource.id}>
                 <div className="home-resource-thumb"><FileText size={28} /></div>
                 <div>
-                  <span>At-home document</span>
+                  <span>Previously uploaded source</span>
                   <strong>{resource.sourceName}</strong>
                   <small>{resource.title} · {resource.readingScope || "All document content"}</small>
                 </div>
-                <form action={deleteAtHomeResource}>
-                  <input type="hidden" name="classroomId" value={classroom.id} />
-                  <input type="hidden" name="resourceId" value={resource.id} />
-                  <button className="icon-button danger" type="submit" aria-label={`Delete ${resource.sourceName}`}><Trash2 size={17} /></button>
-                </form>
               </article>
             ))}
-            {classroom.materials.length + classroom.homeResources.length === 0 && (
-              <div className="empty-state"><h3>Add the first learning source</h3><p>Upload a lesson, reading, or question sheet to activate Daily Wins.</p></div>
+            {classroom.materials.length + classroom.homeResources.length + classroom.gameRooms.length === 0 && (
+              <div className="empty-state"><h3>No covered content yet</h3><p>Practice appears after this class completes an assignment or uses a Vocab Dash word set.</p></div>
             )}
           </div>
         </section>
@@ -151,7 +149,7 @@ export default async function HomeLearningPage({
                 <span className={`status-pill ${student.today === "Complete" ? "status-green" : student.today === "In progress" ? "status-yellow" : "status-red"}`}>{student.today}</span>
                 <span>{student.answers}</span>
                 <span>{student.activeDays}</span>
-                <strong>{student.points} pts</strong>
+                <strong>{student.points} stars</strong>
                 <span>{student.lastSeen ? formatDateTime(student.lastSeen) : "Not yet"}</span>
               </div>
             ))}

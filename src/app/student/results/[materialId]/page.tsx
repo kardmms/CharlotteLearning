@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Clock3, LogOut, Star, Trophy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, LogOut, RotateCcw, Star, Trophy } from "lucide-react";
 import { logoutStudent } from "@/app/student/actions";
 import { CompletionCelebration } from "@/components/CompletionCelebration";
 import { requireStudent } from "@/lib/auth";
@@ -66,7 +67,9 @@ export default async function StudentResultPage({
 
   return (
     <div className="student-result-shell">
-      {query.ended !== "focus" && !session.endedByFocusLoss && <CompletionCelebration points={session.pointsEarned} />}
+      {query.ended !== "focus" && !session.endedByFocusLoss && (
+        <CompletionCelebration points={session.pointsEarned} unit={material.activityKind === "AT_HOME" ? "stars" : "points"} />
+      )}
       <header className="result-topbar">
         <div className="brand"><img className="brand-logo" src="/images/charlotte-ai-logo.png" alt="" /><span>Charlotte AI</span></div>
         <form action={logoutStudent}><button className="ghost-button" type="submit"><LogOut size={18} /> Log out</button></form>
@@ -76,7 +79,7 @@ export default async function StudentResultPage({
           <div className="result-hero-icon">
             {session.endedByFocusLoss ? <AlertTriangle size={34} /> : <CheckCircle2 size={34} />}
           </div>
-          <span>{material.activityKind === "IN_CLASS" ? "In-class activity" : "At-home Daily Win"}</span>
+          <span>{material.activityKind === "IN_CLASS" ? "In-class activity" : "Optional extra practice"}</span>
           <h1>{session.endedByFocusLoss ? "Activity ended." : "You finished!"}</h1>
           <p>{material.title}</p>
           {session.endedByFocusLoss && (
@@ -88,12 +91,17 @@ export default async function StudentResultPage({
 
         <section className="result-score-grid">
           <div className="result-score-card"><strong>{score}%</strong><span>Score</span></div>
-          <div className="result-score-card points"><strong>{session.pointsEarned}</strong><span>Points earned</span></div>
+          <div className="result-score-card points"><strong>{session.pointsEarned}</strong><span>{material.activityKind === "AT_HOME" ? "Stars earned" : "Points earned"}</span></div>
           <div className="result-score-card"><strong>{durationMinutes}m</strong><span>Time</span></div>
         </section>
         {pending > 0 && <p className="result-pending"><Clock3 size={17} /> {pending} written {pending === 1 ? "response is" : "responses are"} waiting for teacher review.</p>}
 
         {material.activityKind === "AT_HOME" && (
+          <>
+          <div className="result-practice-actions">
+            <Link className="primary-button" href="/student?view=home"><RotateCcw size={18} /> Practice again</Link>
+            <Link className="ghost-button" href="/student/practice">Vocabulary practice</Link>
+          </div>
           <section className="leaderboard-panel">
             <div className="leaderboard-heading">
               <div><span>Class leaderboard</span><h2>Top point earners</h2></div>
@@ -104,11 +112,12 @@ export default async function StudentResultPage({
                 <div className={`leaderboard-row ${entry.id === student.id ? "current" : ""}`} key={entry.id}>
                   <span className="leaderboard-rank">{index + 1}</span>
                   <strong>{entry.name}</strong>
-                  <span><Star size={16} /> {entry.points} pts</span>
+                  <span><Star size={16} /> {entry.points} stars</span>
                 </div>
               ))}
             </div>
           </section>
+          </>
         )}
       </main>
     </div>

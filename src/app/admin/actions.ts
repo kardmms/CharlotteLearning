@@ -475,7 +475,7 @@ export async function updateLeadStatus(formData: FormData) {
     ]);
   }
 
-  redirect(`${leadsPath}?updated=1`);
+  return { leadId: lead.id, status: requestedStatus };
 }
 
 export async function acceptAdminInvite(formData: FormData) {

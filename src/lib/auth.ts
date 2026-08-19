@@ -366,7 +366,16 @@ export async function requireStudentAccount() {
   if (!session) redirect("/student/login");
   const account = await prisma.studentAccount.findUnique({
     where: { id: session.sub },
-    select: { id: true, displayName: true, email: true, emailKeyHash: true }
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      emailKeyHash: true,
+      stars: true,
+      characterColor: true,
+      unlockedAccessories: true,
+      selectedAccessory: true
+    }
   });
   if (!account) redirect("/student/login");
   return account;

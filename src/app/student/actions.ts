@@ -14,7 +14,12 @@ import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { normalizeStudentEmail } from "@/lib/codes";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { privacyAccountEmail, studentEmailLookupHash } from "@/lib/school-privacy";
-import { joinCode, vocabDashCharacters } from "@/lib/vocab-dash";
+import {
+  joinCode,
+  shuffledTermIds,
+  vocabDashAccessories,
+  vocabDashColors
+} from "@/lib/vocab-dash";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -27,6 +32,10 @@ function errorRedirect(path: string, message: string): never {
 
 function boundedText(formData: FormData, key: string, maxLength: number) {
   return formText(formData, key).slice(0, maxLength);
+}
+
+function safeStudentNext(value: string) {
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/student/classes";
 }
 
 async function enforceOrRedirect(path: string, callback: () => Promise<void>) {
@@ -44,23 +53,25 @@ async function enforceOrRedirect(path: string, callback: () => Promise<void>) {
 export async function loginStudent(formData: FormData) {
   const email = normalizeStudentEmail(formText(formData, "email")).slice(0, 254);
   const password = boundedText(formData, "password", 1024);
-  await enforceOrRedirect("/student/login", async () => {
+  const next = safeStudentNext(formText(formData, "next"));
+  const loginPath = `/student/login?next=${encodeURIComponent(next)}`;
+  await enforceOrRedirect(loginPath, async () => {
     await enforceRateLimit({ scope: "student-login-ip", limit: 100, windowSeconds: 60 * 60 });
     await enforceRateLimit({ scope: "student-login-email", limit: 20, windowSeconds: 15 * 60, identifier: email });
     await enforceTurnstile(formData, "student_login");
   });
   if (!email.includes("@") || !password) {
-    errorRedirect("/student/login", "Enter your email and password.");
+    errorRedirect(loginPath, "Enter your email and password.");
   }
 
   const account = await prisma.studentAccount.findUnique({ where: { email } }) ||
     await prisma.studentAccount.findUnique({ where: { emailKeyHash: studentEmailLookupHash(email) } });
   if (!account || !(await verifyPassword(password, account.passwordHash))) {
-    errorRedirect("/student/login", "Email or password was not recognized.");
+    errorRedirect(loginPath, "Email or password was not recognized.");
   }
 
   await setStudentSession(account);
-  redirect("/student/classes");
+  redirect(next);
 }
 
 export async function registerStudent(formData: FormData) {
@@ -187,18 +198,13 @@ export async function logoutStudent() {
 }
 
 export async function joinVocabDashRoom(formData: FormData) {
+  const account = await requireStudentAccount();
   const code = joinCode(formText(formData, "code"));
-  const displayName = boundedText(formData, "displayName", 80);
-  const requestedCharacter = formText(formData, "characterKey");
-  const characterKey = vocabDashCharacters.some((character) => character.key === requestedCharacter)
-    ? requestedCharacter
-    : vocabDashCharacters[0].key;
-  await enforceOrRedirect("/student/games/vocab-dash", async () => {
+  await enforceOrRedirect("/play", async () => {
     await enforceRateLimit({ scope: "vocab-dash-join-ip", limit: 80, windowSeconds: 60 * 60 });
   });
 
-  if (code.length !== 6) errorRedirect("/student/games/vocab-dash", "Enter the 6-digit game code.");
-  if (displayName.length < 2) errorRedirect(`/student/games/vocab-dash?code=${code}`, "Enter your name.");
+  if (code.length !== 6) errorRedirect("/play", "Enter the 6-digit game code.");
 
   const room = await prisma.gameRoom.findFirst({
     where: {
@@ -206,17 +212,45 @@ export async function joinVocabDashRoom(formData: FormData) {
       kind: "VOCAB_DASH",
       status: { in: ["WAITING", "STARTING"] }
     },
-    include: { _count: { select: { vocabTerms: true } } }
+    include: {
+      vocabTerms: { orderBy: { sortOrder: "asc" } },
+      _count: { select: { vocabTerms: true } }
+    }
   });
-  if (!room) errorRedirect("/student/games/vocab-dash", "That Vocab Dash room is not open.");
-  if (room._count.vocabTerms < 10) errorRedirect("/student/games/vocab-dash", "That room is not ready yet.");
+  if (!room) errorRedirect("/play", "That Vocab Dash room is not open.");
+  if (room._count.vocabTerms < 10) errorRedirect("/play", "That room is not ready yet.");
+
+  const enrollment = await prisma.student.findFirst({
+    where: {
+      accountId: account.id,
+      schoolId: room.schoolId,
+      classroomId: room.classroomId || undefined,
+      active: true
+    },
+    select: { id: true, schoolId: true, classroomId: true }
+  });
+  if (!enrollment) {
+    errorRedirect("/play", "This game belongs to a class you are not enrolled in.");
+  }
+
+  const existing = await prisma.gameParticipant.findFirst({
+    where: { roomId: room.id, schoolId: room.schoolId, studentId: enrollment.id }
+  });
+  if (existing) {
+    await setStudentSession(account, enrollment);
+    redirect(`/student/games/vocab-dash/play/${existing.id}`);
+  }
 
   const participant = await prisma.gameParticipant.create({
     data: {
       schoolId: room.schoolId,
       roomId: room.id,
-      displayName,
-      characterKey
+      studentId: enrollment.id,
+      displayName: account.displayName,
+      characterKey: "runner",
+      characterColor: account.characterColor,
+      accessoryKey: account.selectedAccessory,
+      questionOrderJson: JSON.stringify(shuffledTermIds(room.vocabTerms))
     }
   });
 
@@ -224,7 +258,7 @@ export async function joinVocabDashRoom(formData: FormData) {
     data: auditEventData({
       schoolId: room.schoolId,
       actorType: "student",
-      actorId: participant.id,
+      actorId: account.id,
       action: "game_participant.joined",
       targetType: "game_room",
       targetId: room.id,
@@ -232,5 +266,42 @@ export async function joinVocabDashRoom(formData: FormData) {
     })
   });
 
+  await setStudentSession(account, enrollment);
   redirect(`/student/games/vocab-dash/play/${participant.id}`);
+}
+
+export async function updateStudentCharacter(formData: FormData) {
+  const account = await requireStudentAccount();
+  const color = formText(formData, "characterColor");
+  const requestedAccessory = formText(formData, "accessoryKey");
+  const path = "/play";
+  if (!vocabDashColors.some((item) => item.key === color)) {
+    errorRedirect(path, "Choose an available character color.");
+  }
+
+  let savedAccessories: unknown = [];
+  try {
+    savedAccessories = JSON.parse(account.unlockedAccessories || "[]");
+  } catch {
+    savedAccessories = [];
+  }
+  const unlocked = new Set<string>(Array.isArray(savedAccessories) ? savedAccessories.filter((item): item is string => typeof item === "string") : []);
+  const accessory = vocabDashAccessories.find((item) => item.key === requestedAccessory);
+  let stars = account.stars;
+  if (accessory && !unlocked.has(accessory.key)) {
+    if (stars < accessory.cost) errorRedirect(path, `You need ${accessory.cost} stars to unlock ${accessory.label}.`);
+    stars -= accessory.cost;
+    unlocked.add(accessory.key);
+  }
+
+  await prisma.studentAccount.update({
+    where: { id: account.id },
+    data: {
+      stars,
+      characterColor: color,
+      unlockedAccessories: JSON.stringify([...unlocked]),
+      selectedAccessory: accessory?.key || null
+    }
+  });
+  redirect("/play?saved=1");
 }

@@ -57,7 +57,7 @@ export default async function StationPage({
     },
     orderBy: { completedAt: "desc" }
   });
-  if (finishedSession) redirect(`/student/results/${materialId}`);
+  if (finishedSession && material.activityKind !== "AT_HOME") redirect(`/student/results/${materialId}`);
 
   let session = await prisma.studentSession.findFirst({
     where: {

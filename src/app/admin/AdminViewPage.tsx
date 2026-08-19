@@ -26,7 +26,7 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
           return undefined;
         })
       : Promise.resolve(undefined),
-    view === "ai-usage"
+    view === "ai-usage" || view === "server"
       ? getOpenAiUsageMetrics().catch((error) => {
           console.error("OpenAI usage metrics failed to load", error);
           return undefined;

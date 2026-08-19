@@ -33,7 +33,7 @@ export default async function VocabDashTermsSetupPage({
           <div>
             <div className="eyebrow">Review word list</div>
             <h1>Approve Vocab Dash words.</h1>
-            <p>Keep at least 10 words. Edit any definition before students join the room.</p>
+            <p>Keep at least 10 words. Review the main meaning and add a second common meaning when it helps.</p>
           </div>
           <Rocket size={34} />
         </section>
@@ -45,7 +45,7 @@ export default async function VocabDashTermsSetupPage({
           <div className="vocab-review-head">
             <span>Keep</span>
             <span>Word</span>
-            <span>Definition</span>
+            <span>Definitions</span>
           </div>
           <div className="vocab-review-list">
             {room.vocabTerms.map((term, index) => (
@@ -55,7 +55,16 @@ export default async function VocabDashTermsSetupPage({
                   <CheckCircle2 size={18} />
                 </label>
                 <input name="word" defaultValue={term.word} maxLength={80} required />
-                <textarea name="definition" defaultValue={term.definition} maxLength={260} required rows={2} />
+                <div className="vocab-definition-fields">
+                  <label>
+                    <span>Main definition</span>
+                    <textarea name="definition" defaultValue={term.definition} maxLength={260} required rows={2} />
+                  </label>
+                  <label>
+                    <span>Alternate definition <small>Optional</small></span>
+                    <textarea name="alternateDefinition" defaultValue={term.alternateDefinition || ""} maxLength={260} rows={2} />
+                  </label>
+                </div>
               </div>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, Clock3, Home, LockKeyhole, School, Star, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, CheckCircle2, Clock3, Home, LockKeyhole, School, Star, Trophy } from "lucide-react";
 import { StudentTopbar } from "@/components/AppTopbar";
 import { StartActivityButton } from "@/components/StartActivityButton";
 import { getStudentCompletionLock, requireStudent } from "@/lib/auth";
@@ -55,13 +55,13 @@ export default async function StudentHomePage({
     try {
       await ensureDailyHomePractice(student.id);
     } catch (error) {
-      homeGenerationError = error instanceof Error ? error.message : "Charlotte could not prepare today's Daily Win.";
+      homeGenerationError = error instanceof Error ? error.message : "Charlotte could not prepare today's extra practice.";
     }
   }
 
   const now = new Date();
   const todayHomeSeriesKey = `adaptive-home:${homeLearningDayKey(now)}`;
-  const [materials, hasHomeSources, points, completedHomeSessions] = await Promise.all([
+  const [materials, hasHomeSources, points, completedHomeSessions, practiceSetCount] = await Promise.all([
     prisma.material.findMany({
       where: {
         schoolId: student.schoolId,
@@ -85,9 +85,9 @@ export default async function StudentHomePage({
       }
     }),
     classroomHasHomeLearningSources(student.classroomId, student.schoolId),
-    prisma.studentSession.aggregate({
-      where: { schoolId: student.schoolId, studentId: student.id, status: "COMPLETED" },
-      _sum: { pointsEarned: true }
+    prisma.studentAccount.findUnique({
+      where: { id: student.accountId || "" },
+      select: { stars: true }
     }),
     prisma.studentSession.findMany({
       where: {
@@ -98,18 +98,21 @@ export default async function StudentHomePage({
         material: { schoolId: student.schoolId, activityKind: "AT_HOME" }
       },
       select: { completedAt: true }
+    }),
+    prisma.gameRoom.count({
+      where: { schoolId: student.schoolId, classroomId: student.classroomId, vocabTerms: { some: {} } }
     })
   ]);
   const isOpen = (material: (typeof materials)[number]) =>
     (!material.availableAt || material.availableAt <= now) &&
     (!material.dueAt || material.dueAt >= now) &&
-    !material.sessions.some((session) => session.status === "COMPLETED" || session.status === "PARTIAL");
+    (material.activityKind === "AT_HOME" || !material.sessions.some((session) => session.status === "COMPLETED" || session.status === "PARTIAL"));
   const inClassActivity = materials.find((material) => material.activityKind === "IN_CLASS" && isOpen(material));
   const atHomeActivity = materials.find((material) => material.activityKind === "AT_HOME" && isOpen(material));
   const completedInClass = materials.some(
     (material) => material.activityKind === "IN_CLASS" && material.sessions.some((session) => session.status === "COMPLETED")
   );
-  const totalPoints = points._sum.pointsEarned || 0;
+  const totalPoints = points?.stars || 0;
   const completedKeys = new Set(
     completedHomeSessions.map((session) => session.completedAt).filter((date): date is Date => Boolean(date)).map(dayKey)
   );
@@ -130,7 +133,7 @@ export default async function StudentHomePage({
               <div className={`student-mode-symbol ${activityView}`}>
                 {activityView === "class" ? <School size={32} /> : <Home size={32} />}
               </div>
-              <span>{activityView === "class" ? "In-class activity" : "At-home activity"}</span>
+              <span>{activityView === "class" ? "In-class activity" : "Optional extra practice"}</span>
               <h1>
                 {selectedActivity
                   ? selectedActivity.title
@@ -143,12 +146,12 @@ export default async function StudentHomePage({
                   <div className="student-start-meta">
                     <span><Clock3 size={17} /> {selectedActivity.estimatedMinutes} minutes</span>
                     {activityView === "class" && <span>{selectedActivity._count.questions} questions</span>}
-                    <span><Star size={17} /> {activityView === "home" ? "Earn points as you go" : "Up to 100 points"}</span>
+                    <span><Star size={17} /> {activityView === "home" ? "5 stars on your first completion" : "Up to 100 points"}</span>
                     <span>{formatDue(selectedActivity.dueAt)}</span>
                   </div>
                   <p className="student-start-note">
                     {activityView === "home"
-                      ? "Your Daily Win opens in a new window and continues until the 20-minute timer ends."
+                      ? "Practice opens in a new window. You can repeat it anytime; stars are awarded only the first time."
                       : "Your activity opens in a focused window. Leaving that window will flag the session."}
                   </p>
                   <StartActivityButton materialId={selectedActivity.id} focused />
@@ -162,9 +165,9 @@ export default async function StudentHomePage({
               <section className="daily-win-panel compact-daily-win student-mode-calendar">
                 <div className="daily-win-copy">
                   <div className="daily-win-icon"><CalendarDays size={24} /></div>
-                  <div><h3>Daily Win calendar</h3><p>Green days mark completed at-home activities.</p></div>
+                  <div><h3>Practice calendar</h3><p>Green days mark completed extra-practice activities.</p></div>
                 </div>
-                <div className="win-calendar" aria-label={`Daily Win calendar for ${monthLabel}`}>
+                <div className="win-calendar" aria-label={`Extra practice calendar for ${monthLabel}`}>
                   <div className="win-calendar-title">{monthLabel}</div>
                   {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span className="win-calendar-weekday" key={`${day}-${index}`}>{day}</span>)}
                   {calendarCells.map((cell, index) => cell ? (
@@ -180,7 +183,7 @@ export default async function StudentHomePage({
           <>
             <section className="student-menu-heading">
               <div><span>Hi, {student.displayName.split(" ")[0]}!</span><h1>What are you working on?</h1></div>
-              <div className="student-points-total"><Trophy size={23} /><strong>{totalPoints}</strong><span>total points</span></div>
+              <div className="student-points-total"><Trophy size={23} /><strong>{totalPoints}</strong><span>total stars</span></div>
             </section>
             <section className="student-mode-grid">
               <Link className={`student-mode-card class ${inClassActivity ? "available" : "unavailable"}`} href="/student?view=class">
@@ -195,11 +198,20 @@ export default async function StudentHomePage({
               <Link className={`student-mode-card home ${atHomeActivity || hasHomeSources ? "available" : "unavailable"}`} href="/student?view=home">
                 <div className="student-mode-symbol home"><Home size={36} /></div>
                 <div>
-                  <span>{atHomeActivity || hasHomeSources ? "Today's Daily Win" : "Come back later"}</span>
-                  <h2>At-home activity</h2>
-                  <p>{atHomeActivity || hasHomeSources ? "Your adaptive 20-minute practice is ready." : "Your teacher has not added at-home material yet."}</p>
+                  <span>{atHomeActivity || hasHomeSources ? "Available anytime" : "Come back later"}</span>
+                  <h2>Extra practice</h2>
+                  <p>{atHomeActivity || hasHomeSources ? "Review material your class has already covered." : "Practice appears after your class completes material."}</p>
                 </div>
                 {atHomeActivity || hasHomeSources ? <ArrowRight size={28} /> : <LockKeyhole size={25} />}
+              </Link>
+              <Link className={`student-mode-card practice ${practiceSetCount ? "available" : "unavailable"}`} href="/student/practice">
+                <div className="student-mode-symbol practice"><BookOpen size={36} /></div>
+                <div>
+                  <span>{practiceSetCount ? `${practiceSetCount} vocabulary ${practiceSetCount === 1 ? "set" : "sets"}` : "No sets yet"}</span>
+                  <h2>Vocabulary practice</h2>
+                  <p>{practiceSetCount ? "Use flashcards or practice solo at your own pace." : "Vocabulary sets appear after they are covered in class."}</p>
+                </div>
+                {practiceSetCount ? <ArrowRight size={28} /> : <LockKeyhole size={25} />}
               </Link>
             </section>
           </>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Star, Trophy } from "lucide-react";
 
-export function CompletionCelebration({ points }: { points: number }) {
+export function CompletionCelebration({ points, unit = "points" }: { points: number; unit?: "points" | "stars" }) {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
     const timer = window.setTimeout(() => setVisible(false), 3200);
@@ -19,7 +19,7 @@ export function CompletionCelebration({ points }: { points: number }) {
       <div className="celebration-card">
         <div className="celebration-trophy"><Trophy size={34} /></div>
         <strong>Activity complete!</strong>
-        <span><Star size={18} /> You earned {points} points</span>
+        <span><Star size={18} /> You earned {points} {unit}</span>
       </div>
     </div>
   );

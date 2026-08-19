@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Rocket, XCircle } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Clock3, Rocket, Star, XCircle } from "lucide-react";
 
 type QuestionPayload = {
   termId: string;
-  word: string;
+  definition: string;
   choices: string[];
+};
+
+type IncorrectAnswer = {
+  termId: string;
+  definition: string;
+  answer: string;
+  correctAnswer: string;
 };
 
 type GamePayload = {
@@ -16,8 +24,13 @@ type GamePayload = {
   progress?: number;
   finishRank?: number | null;
   accuracy?: number;
+  totalAttempts?: number;
+  totalCorrect?: number;
+  starsEarned?: number;
+  roomId?: string;
+  incorrectAnswers?: IncorrectAnswer[];
   correct?: boolean;
-  correctDefinition?: string;
+  correctAnswer?: string;
   question?: QuestionPayload | null;
 };
 
@@ -74,12 +87,12 @@ export function VocabDashPlayer({
       return;
     }
     const next = await response.json() as GamePayload;
-    setFeedback(next.correct ? "Correct. Keep the streak going." : `Not quite. The right definition was: ${next.correctDefinition}`);
+    setFeedback(next.correct ? "Correct." : "Incorrect.");
     window.setTimeout(() => {
       setFeedback("");
       setPayload(next);
       setSelected("");
-    }, next.correct ? 650 : 1300);
+    }, 750);
   }
 
   const progress = payload.termCount ? Math.round((payload.streak / payload.termCount) * 100) : 0;
@@ -97,30 +110,50 @@ export function VocabDashPlayer({
         </div>
 
         <div className="vocab-player-progress">
-          <span>Streak: {payload.streak}/{payload.termCount}</span>
+          <span>Answered: {payload.streak}/{payload.termCount}</span>
           <div><i style={{ width: `${progress}%` }} /></div>
         </div>
 
         {payload.status === "WAITING" && (
           <div className="vocab-player-waiting">
             <Clock3 size={34} />
-            <h2>Waiting for the teacher to start</h2>
+            <h2>Waiting for the game to begin.</h2>
             <p>Stay on this screen. Your first word will appear when the game begins.</p>
           </div>
         )}
 
         {payload.status === "COMPLETED" && (
-          <div className="vocab-player-waiting complete">
-            <CheckCircle2 size={38} />
-            <h2>You finished Vocab Dash.</h2>
-            <p>{payload.finishRank ? `Final place: #${payload.finishRank}.` : "Your result is on the teacher screen."}</p>
+          <div className="vocab-results-panel">
+            <div className="vocab-results-hero">
+              <CheckCircle2 size={38} />
+              <div><span>Game complete</span><h2>You finished Vocab Dash.</h2></div>
+            </div>
+            <div className="vocab-results-grid">
+              <div><strong>{payload.totalCorrect ?? 0}/{payload.totalAttempts ?? 0}</strong><span>Correct answers</span></div>
+              <div><strong>{payload.accuracy ?? 0}%</strong><span>Accuracy</span></div>
+              <div><strong>#{payload.finishRank || "-"}</strong><span>Final place</span></div>
+              <div className="stars"><strong>{payload.starsEarned || 0}</strong><span><Star size={15} fill="currentColor" /> Stars earned</span></div>
+            </div>
+            {(payload.incorrectAnswers?.length || 0) > 0 && (
+              <section className="vocab-missed-list">
+                <h3>Questions to review</h3>
+                {payload.incorrectAnswers?.map((answer) => (
+                  <article key={`${answer.termId}-${answer.answer}`}>
+                    <p>{answer.definition}</p>
+                    <span>Your answer: <strong>{answer.answer}</strong></span>
+                    <span>Correct answer: <strong>{answer.correctAnswer}</strong></span>
+                  </article>
+                ))}
+              </section>
+            )}
+            {payload.roomId && <Link className="button" href={`/student/practice/vocab/${payload.roomId}`}>More practice</Link>}
           </div>
         )}
 
         {payload.status === "PLAYING" && payload.question && (
           <div className="vocab-question-panel">
-            <span>Choose the correct definition</span>
-            <h2>{payload.question.word}</h2>
+            <span>Choose the vocabulary word</span>
+            <h2>{payload.question.definition}</h2>
             <div className="vocab-choice-grid">
               {payload.question.choices.map((choice) => (
                 <button

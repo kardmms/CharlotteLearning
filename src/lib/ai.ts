@@ -39,7 +39,8 @@ const StudentRosterSchema = z.object({
 
 const VocabDashTermSchema = z.object({
   word: textField(80, 1),
-  definition: textField(260, 4)
+  definition: textField(260, 4),
+  alternateDefinition: textField(260, 4).optional().default("")
 });
 
 const VocabDashTermsSchema = z.object({
@@ -200,10 +201,10 @@ function cleanVocabWord(value: string) {
 function splitManualVocabLine(line: string) {
   const cleaned = line.trim();
   const separator = cleaned.match(/\s(?:-|–|—|:)\s/);
-  if (!separator?.index) return { word: cleanVocabWord(cleaned), definition: "" };
+  if (!separator?.index) return { word: cleanVocabWord(cleaned), definition: "", alternateDefinition: "" };
   const word = cleanVocabWord(cleaned.slice(0, separator.index));
   const definition = cleaned.slice(separator.index + separator[0].length).trim().slice(0, 260);
-  return { word, definition };
+  return { word, definition, alternateDefinition: "" };
 }
 
 function uniqueVocabTerms(terms: VocabDashTermDraft[], maxTerms = 30) {
@@ -217,7 +218,8 @@ function uniqueVocabTerms(terms: VocabDashTermDraft[], maxTerms = 30) {
     seen.add(key);
     output.push({
       word,
-      definition
+      definition,
+      alternateDefinition: term.alternateDefinition?.replace(/\s+/g, " ").trim().slice(0, 260) || ""
     });
     if (output.length >= maxTerms) break;
   }
@@ -252,7 +254,8 @@ function fallbackVocabTerms(text: string, manualList = false, requestedCount = 2
       .slice(0, requestedCount)
       .map(({ word }) => ({
         word,
-        definition: ""
+        definition: "",
+        alternateDefinition: ""
       }))
   , requestedCount);
 }
@@ -291,12 +294,14 @@ export async function generateVocabDashTerms(input: {
             input.manualList
               ? "If the teacher typed words without definitions, write a definition for every word. Do not leave definitions blank."
               : "If a definition is already supplied for a word, keep the teacher's meaning but rewrite it only if needed for clarity.",
-            "Definitions must be student-friendly, concise, and usable as multiple-choice answer options.",
+            "Give each word one concise main definition representing its most common meaning in this source.",
+            "When a word has another common meaning, add one concise alternateDefinition. Otherwise return an empty string.",
+            "Definitions must be student-friendly and usable as multiple-choice clues.",
             "Choose the best instructional vocabulary for the target grade, not just the longest words.",
             "For younger grades, prefer concrete, high-utility words. For older grades, include academic, technical, and domain-specific terms.",
             "Avoid duplicate words, proper names, and definitions that repeat the word.",
             "Return exactly this JSON shape:",
-            '{"terms":[{"word":"term","definition":"student-friendly definition"}]}',
+            '{"terms":[{"word":"term","definition":"main student-friendly definition","alternateDefinition":"another common meaning or empty string"}]}',
             input.sourceLabel ? `Source: ${input.sourceLabel}` : "",
             `Text or word list: ${input.text.slice(0, 24000)}`
           ].filter(Boolean).join("\n")

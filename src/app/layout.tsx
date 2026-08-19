@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Charlotte AI",
-  description: "Short reading challenges, daily wins, and classroom momentum."
+  description: "Short reading challenges, optional practice, and classroom momentum."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

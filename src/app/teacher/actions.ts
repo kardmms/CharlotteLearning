@@ -173,7 +173,7 @@ async function createUniqueGameRoomCode() {
   throw new Error("Could not create a unique game room code.");
 }
 
-function cleanVocabDashTerm(word: string, definition: string) {
+function cleanVocabDashTerm(word: string, definition: string, alternateDefinition = "") {
   return {
     word: word
       .replace(/^\d+[.)]\s*/, "")
@@ -181,17 +181,27 @@ function cleanVocabDashTerm(word: string, definition: string) {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 80),
-    definition: definition.replace(/\s+/g, " ").trim().slice(0, 260)
+    definition: definition.replace(/\s+/g, " ").trim().slice(0, 260),
+    alternateDefinition: alternateDefinition.replace(/\s+/g, " ").trim().slice(0, 260)
   };
 }
 
-function uniqueReviewedVocabTerms(words: string[], definitions: string[], keepValues: string[]) {
+function uniqueReviewedVocabTerms(
+  words: string[],
+  definitions: string[],
+  alternateDefinitions: string[],
+  keepValues: string[]
+) {
   const keep = new Set(keepValues);
   const seen = new Set<string>();
-  const terms: Array<{ word: string; definition: string }> = [];
+  const terms: Array<{ word: string; definition: string; alternateDefinition: string }> = [];
   for (let index = 0; index < words.length; index += 1) {
     if (!keep.has(String(index))) continue;
-    const term = cleanVocabDashTerm(words[index] || "", definitions[index] || "");
+    const term = cleanVocabDashTerm(
+      words[index] || "",
+      definitions[index] || "",
+      alternateDefinitions[index] || ""
+    );
     const key = term.word.toLowerCase();
     if (!term.word || !term.definition || seen.has(key)) continue;
     seen.add(key);
@@ -595,6 +605,7 @@ export async function createVocabDashDraft(formData: FormData) {
             schoolId: teacher.schoolId,
             word: term.word,
             definition: term.definition,
+            alternateDefinition: term.alternateDefinition || null,
             sortOrder: index + 1
           }))
         }
@@ -633,8 +644,9 @@ export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
 
   const words = formData.getAll("word").map((value) => String(value));
   const definitions = formData.getAll("definition").map((value) => String(value));
+  const alternateDefinitions = formData.getAll("alternateDefinition").map((value) => String(value));
   const keepValues = formData.getAll("keep").map((value) => String(value));
-  const terms = uniqueReviewedVocabTerms(words, definitions, keepValues);
+  const terms = uniqueReviewedVocabTerms(words, definitions, alternateDefinitions, keepValues);
   if (terms.length < 10) {
     errorRedirect(path, "Keep at least 10 vocabulary words with definitions before opening the lobby.");
   }
@@ -647,6 +659,7 @@ export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
         roomId: room.id,
         word: term.word,
         definition: term.definition,
+        alternateDefinition: term.alternateDefinition || null,
         sortOrder: index + 1
       }))
     });
@@ -675,11 +688,14 @@ export async function startVocabDashRoom(formData: FormData) {
 
   const room = await prisma.gameRoom.findFirst({
     where: { id: roomId, teacherId: teacher.id, schoolId: teacher.schoolId, kind: GameKind.VOCAB_DASH },
-    include: { _count: { select: { vocabTerms: true } } }
+    include: { _count: { select: { vocabTerms: true, participants: true } } }
   });
   if (!room) errorRedirect("/teacher/games", "Game room not found.");
   if (room._count.vocabTerms < 10) {
     errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}/setup`, "Add at least 10 words before starting.");
+  }
+  if (room._count.participants < 2) {
+    errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}`, "At least 2 students must join before the game can start.");
   }
 
   if (room.status !== GameRoomStatus.STARTING) {

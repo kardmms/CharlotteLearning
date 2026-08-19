@@ -88,9 +88,7 @@ export async function POST(
       ? !body.timedOut && answerText.toLowerCase() === question.correctAnswer?.trim().toLowerCase()
       : null;
     const revealedAnswer = Boolean(isMultipleChoice && isCorrect === false && (isAtHome || attemptCount >= 3));
-    const pointsPossible = isAtHome
-      ? 10
-      : questionPointValue(question.sortOrder, session.material.questions.length);
+    const pointsPossible = isAtHome ? 0 : questionPointValue(question.sortOrder, session.material.questions.length);
     const pointsEarned = isCorrect === true && (isAtHome || attemptCount === 1)
       ? pointsPossible
       : 0;

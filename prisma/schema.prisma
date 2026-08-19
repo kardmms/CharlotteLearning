@@ -241,6 +241,10 @@ model StudentAccount {
   displayNameEncrypted String?
   emailEncrypted       String?
   passwordHash         String
+  stars                Int       @default(0)
+  characterColor       String    @default("blue")
+  unlockedAccessories  String    @default("[]")
+  selectedAccessory    String?
   createdAt            DateTime  @default(now())
   enrollments          Student[]
 }
@@ -421,21 +425,26 @@ model GameRoom {
 }
 
 model GameParticipant {
-  id                String    @id @default(cuid())
-  schoolId          String
-  roomId            String
-  studentId         String?
-  displayName       String
-  characterKey      String    @default("rocket")
-  currentStreak     Int       @default(0)
-  totalCorrect      Int       @default(0)
-  totalAttempts     Int       @default(0)
-  streakTermIdsJson String    @default("[]")
-  completedAt       DateTime?
-  finishRank        Int?
-  joinedAt          DateTime  @default(now())
-  school            School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  room              GameRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(cuid())
+  schoolId             String
+  roomId               String
+  studentId            String?
+  displayName          String
+  characterKey         String    @default("rocket")
+  characterColor       String    @default("blue")
+  accessoryKey         String?
+  currentStreak        Int       @default(0)
+  totalCorrect         Int       @default(0)
+  totalAttempts        Int       @default(0)
+  streakTermIdsJson    String    @default("[]")
+  questionOrderJson    String    @default("[]")
+  incorrectAnswersJson String    @default("[]")
+  starsEarned          Int       @default(0)
+  completedAt          DateTime?
+  finishRank           Int?
+  joinedAt             DateTime  @default(now())
+  school               School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  room                 GameRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, joinedAt])
   @@index([roomId, finishRank])
@@ -445,15 +454,16 @@ model GameParticipant {
 }
 
 model GameVocabTerm {
-  id         String   @id @default(cuid())
-  schoolId   String
-  roomId     String
-  word       String
-  definition String
-  sortOrder  Int
-  createdAt  DateTime @default(now())
-  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  room       GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  schoolId            String
+  roomId              String
+  word                String
+  definition          String
+  alternateDefinition String?
+  sortOrder           Int
+  createdAt           DateTime @default(now())
+  school              School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  room                GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, word])
   @@index([roomId, sortOrder])

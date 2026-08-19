@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   BarChart3,
   Bot,
+  BookOpenCheck,
+  Building2,
   CheckCircle2,
   ClipboardList,
   Cloud,
@@ -14,6 +16,7 @@ import {
   Database,
   DollarSign,
   Gauge,
+  Gamepad2,
   Inbox,
   KeyRound,
   LineChart,
@@ -121,7 +124,7 @@ function MetricCard({
       <span>{icon}</span>
       <div>
         <p>{label}</p>
-        <strong>{typeof value === "number" ? formatNumber(value) : value}</strong>
+        <strong className="admin-metric-value" key={String(value)}>{typeof value === "number" ? formatNumber(value) : value}</strong>
         <small>{detail}</small>
       </div>
     </article>
@@ -167,7 +170,7 @@ function MiniBarChart({
 
 function LinePanel({ metrics }: { metrics: AdminMetrics }) {
   const sessions = metrics.charts.sessions;
-  const students = metrics.charts.students;
+  const students = metrics.charts.activeStudents;
   const max = Math.max(1, ...sessions.map((item) => item.value), ...students.map((item) => item.value));
   const width = 640;
   const height = 210;
@@ -185,7 +188,7 @@ function LinePanel({ metrics }: { metrics: AdminMetrics }) {
       <div className="admin-card-head">
         <div>
           <h2>Growth pulse</h2>
-          <p>Student sessions and new student records over the last 14 days.</p>
+          <p>Student participation and completed learning sessions over the last 14 days.</p>
         </div>
         <LineChart size={20} />
       </div>
@@ -217,7 +220,7 @@ function LinePanel({ metrics }: { metrics: AdminMetrics }) {
       </div>
       <div className="admin-chart-legend">
         <span><i className="sessions" /> Sessions</span>
-        <span><i className="students" /> New students</span>
+        <span><i className="students" /> Active students</span>
       </div>
     </section>
   );
@@ -267,7 +270,7 @@ function MonthlyScorePanel({ metrics }: { metrics: AdminMetrics }) {
 
 function DataTables({ metrics }: { metrics: AdminMetrics }) {
   return (
-    <section className="admin-dashboard-grid two">
+    <section className="admin-dashboard-grid">
       <div className="admin-glass-panel">
         <div className="admin-card-head">
           <div>
@@ -308,26 +311,44 @@ function DataTables({ metrics }: { metrics: AdminMetrics }) {
         </div>
       </div>
 
-      <div className="admin-glass-panel">
-        <div className="admin-card-head">
-          <div>
-            <h2>Live activity</h2>
-            <p>New events appear as the dashboard refreshes.</p>
-          </div>
-          <Activity size={20} />
-        </div>
-        <div className="admin-activity-list">
-          {metrics.activityTimeline.map((item) => (
-            <div className="admin-activity-item" key={`${item.label}-${item.timestamp}`}>
-              <i />
-              <div>
-                <strong>{item.label}</strong>
-                <span>{item.time}</span>
-              </div>
-            </div>
-          ))}
-          {metrics.activityTimeline.length === 0 && <p>No recent activity yet.</p>}
-        </div>
+    </section>
+  );
+}
+
+function SchoolAnalyticsPanel({ metrics }: { metrics: AdminMetrics }) {
+  const [schoolId, setSchoolId] = useState("all");
+  const schools = schoolId === "all"
+    ? metrics.schoolAnalytics
+    : metrics.schoolAnalytics.filter((school) => school.id === schoolId);
+  return (
+    <section className="admin-glass-panel admin-school-analytics">
+      <div className="admin-card-head">
+        <div><h2>School analytics</h2><p>Compare adoption, participation, and learning activity by school.</p></div>
+        <label className="admin-school-filter">School
+          <select value={schoolId} onChange={(event) => setSchoolId(event.target.value)}>
+            <option value="all">All schools</option>
+            {metrics.schoolAnalytics.map((school) => <option value={school.id} key={school.id}>{school.name}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="admin-table-wrap">
+        <table className="admin-table admin-school-table">
+          <thead><tr><th>School</th><th>Teachers</th><th>Classes</th><th>Active students</th><th>Participation</th><th>Completed</th><th>Accuracy</th></tr></thead>
+          <tbody>
+            {schools.map((school) => (
+              <tr key={school.id}>
+                <td><strong>{school.name}</strong><span>{school.districtName || school.classroomNames.join(", ") || "No classes yet"}</span></td>
+                <td>{school.teachers}</td>
+                <td>{school.classes}</td>
+                <td>{school.activeStudents} / {school.enrolledStudents}</td>
+                <td>{school.enrolledStudents ? Math.round((school.activeStudents / school.enrolledStudents) * 100) : 0}%</td>
+                <td>{school.homeActivitiesCompleted} practice - {school.gamesCompleted} games</td>
+                <td>{school.averageAccuracy}%</td>
+              </tr>
+            ))}
+            {!schools.length && <tr><td colSpan={7}>No schools have been onboarded yet.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -503,16 +524,35 @@ function FeedbackPanel({ metrics }: { metrics: AdminMetrics }) {
 }
 
 function LeadsPanel({ metrics }: { metrics: AdminMetrics }) {
-  const newLeads = metrics.leads.filter((lead) => lead.status === "NEW").length;
-  const activeLeads = metrics.leads.filter((lead) => (
+  const [leads, setLeads] = useState(metrics.leads);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  useEffect(() => setLeads(metrics.leads), [metrics.generatedAt, metrics.leads]);
+  const newLeads = leads.filter((lead) => lead.status === "NEW").length;
+  const activeLeads = leads.filter((lead) => (
     lead.status === "CONTACTED" || lead.status === "QUALIFIED"
   )).length;
-  const convertedLeads = metrics.leads.filter((lead) => lead.status === "CONVERTED").length;
+  const convertedLeads = leads.filter((lead) => lead.status === "CONVERTED").length;
+
+  async function changeStatus(leadId: string, status: typeof leadStatusOptions[number]["value"]) {
+    const previous = leads;
+    setUpdatingId(leadId);
+    setLeads((items) => items.map((lead) => lead.id === leadId ? { ...lead, status } : lead));
+    const formData = new FormData();
+    formData.set("leadId", leadId);
+    formData.set("status", status);
+    try {
+      await updateLeadStatus(formData);
+    } catch {
+      setLeads(previous);
+    } finally {
+      setUpdatingId(null);
+    }
+  }
 
   return (
     <>
       <section className="admin-stat-grid compact">
-        <MetricCard icon={<Inbox size={22} />} label="Total leads" value={metrics.headline.contactLeads} detail="Requests currently retained" />
+        <MetricCard icon={<Inbox size={22} />} label="Total leads" value={leads.length} detail="Requests currently retained" />
         <MetricCard icon={<MailPlus size={22} />} label="New" value={newLeads} detail="Waiting for first contact" tone="orange" />
         <MetricCard icon={<Activity size={22} />} label="In progress" value={activeLeads} detail="Contacted or qualified" tone="blue" />
         <MetricCard icon={<CheckCircle2 size={22} />} label="Converted" value={convertedLeads} detail="Moved forward successfully" tone="green" />
@@ -538,7 +578,7 @@ function LeadsPanel({ metrics }: { metrics: AdminMetrics }) {
               </tr>
             </thead>
             <tbody>
-              {metrics.leads.map((lead) => (
+              {leads.map((lead) => (
                 <tr key={lead.id}>
                   <td>
                     <div className="admin-lead-contact">
@@ -554,24 +594,23 @@ function LeadsPanel({ metrics }: { metrics: AdminMetrics }) {
                     <span>{formatDateTime(lead.createdAt)}</span>
                   </td>
                   <td>
-                    <form className="admin-lead-status-form" action={updateLeadStatus}>
-                      <input type="hidden" name="leadId" value={lead.id} />
+                    <div className="admin-lead-status-form">
                       <select
                         aria-label={`Status for ${lead.name}`}
                         className={`admin-lead-status ${lead.status.toLowerCase()}`}
-                        defaultValue={lead.status}
-                        name="status"
-                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                        value={lead.status}
+                        disabled={updatingId === lead.id}
+                        onChange={(event) => void changeStatus(lead.id, event.target.value as typeof leadStatusOptions[number]["value"])}
                       >
                         {leadStatusOptions.map((status) => (
                           <option key={status.value} value={status.value}>{status.label}</option>
                         ))}
                       </select>
-                    </form>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {metrics.leads.length === 0 && (
+              {leads.length === 0 && (
                 <tr><td colSpan={5}>No contact requests have been submitted yet.</td></tr>
               )}
             </tbody>
@@ -739,88 +778,34 @@ function ProviderAlert({ message }: { message?: string }) {
   );
 }
 
-function ServerPanel({ metrics }: { metrics?: VercelServerMetrics }) {
-  if (!metrics?.configured) {
-    return (
-      <ProviderSetupCard
-        title="Connect Vercel"
-        message={metrics?.message}
-        variables={["VERCEL_API_TOKEN", "CHARLOTTE_VERCEL_PROJECT_ID", "CHARLOTTE_VERCEL_TEAM_ID"]}
-      />
-    );
-  }
-
+function ServerPanel({
+  metrics,
+  platform,
+  aiMetrics
+}: {
+  metrics?: VercelServerMetrics;
+  platform: AdminMetrics;
+  aiMetrics?: OpenAiUsageMetrics;
+}) {
+  const failedDeployments = metrics?.headline.failedDeployments || 0;
+  const systemTone = failedDeployments > 0 ? "warning" : "operational";
+  const lastCheck = metrics?.generatedAt || platform.generatedAt;
   return (
     <>
-      <ProviderAlert message={metrics.message} />
-      <section className="admin-stat-grid">
-        <MetricCard icon={<Activity size={22} />} label="Vercel events" value={metrics.headline.events} detail="Recent account and project activity" tone="green" />
-        <MetricCard icon={<Cloud size={22} />} label="Deployments" value={metrics.headline.deployments} detail={`${metrics.headline.productionDeployments} production deploys`} />
-        <MetricCard icon={<CheckCircle2 size={22} />} label="Ready builds" value={metrics.headline.readyDeployments} detail="Recent deployments marked ready" tone="violet" />
-        <MetricCard icon={<AlertTriangle size={22} />} label="Failed builds" value={metrics.headline.failedDeployments} detail="Errors or canceled deploys" tone="orange" />
+      <section className="admin-system-status-grid">
+        <article className={`admin-system-status ${systemTone}`}><span><Server size={22} /></span><div><small>Current system status</small><strong>{systemTone === "operational" ? "Operational" : "Warning"}</strong><p>{failedDeployments ? `${failedDeployments} recent deployment issue${failedDeployments === 1 ? "" : "s"}` : "Charlotte is serving normally."}</p></div></article>
+        <article className="admin-system-status operational"><span><Database size={22} /></span><div><small>Database</small><strong>Operational</strong><p>Classroom and account data loaded successfully.</p></div></article>
+        <article className={`admin-system-status ${aiMetrics?.configured ? "operational" : "warning"}`}><span><Bot size={22} /></span><div><small>AI service</small><strong>{aiMetrics?.configured ? "Operational" : "Warning"}</strong><p>{aiMetrics?.configured ? "AI usage reporting is connected." : "AI usage reporting is not connected."}</p></div></article>
+        <article className="admin-system-status operational"><span><UsersRound size={22} /></span><div><small>Active users</small><strong>{formatNumber(platform.headline.totalActiveUsers)}</strong><p>{platform.headline.activeStudents} students and {platform.headline.activeTeachers} teachers in 7 days.</p></div></article>
       </section>
-
-      <section className="admin-dashboard-grid two">
-        <div className="admin-glass-panel">
-          <div className="admin-card-head">
-            <div>
-              <h2>Vercel activity</h2>
-              <p>Live events from the Vercel account or configured team.</p>
-            </div>
-            <Server size={20} />
-          </div>
-          <div className="admin-provider-list">
-            {metrics.events.map((event) => (
-              <article className="admin-provider-item" key={event.id}>
-                <i />
-                <div>
-                  <strong>{event.text}</strong>
-                  <span>{event.category} - {event.actor}</span>
-                </div>
-                <time>{formatDateTime(event.createdAt)}</time>
-              </article>
-            ))}
-            {metrics.events.length === 0 && <p>No Vercel events returned yet.</p>}
-          </div>
-        </div>
-
-        <div className="admin-glass-panel">
-          <div className="admin-card-head">
-            <div>
-              <h2>Recent deployments</h2>
-              <p>Production and preview builds from Vercel.</p>
-            </div>
-            <Cloud size={20} />
-          </div>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Deployment</th>
-                  <th>State</th>
-                  <th>Target</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.deployments.map((deployment) => (
-                  <tr key={deployment.id}>
-                    <td>
-                      <strong>{deployment.url}</strong>
-                      <span>{deployment.source} - {deployment.creator}</span>
-                    </td>
-                    <td>{deployment.readyState}</td>
-                    <td>{deployment.target}</td>
-                    <td>{formatDateTime(deployment.createdAt)}</td>
-                  </tr>
-                ))}
-                {metrics.deployments.length === 0 && (
-                  <tr><td colSpan={4}>No deployments returned yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <section className="admin-glass-panel admin-issues-panel">
+        <div className="admin-card-head"><div><h2>Recent issues</h2><p>Only items that may need attention are shown here.</p></div><AlertTriangle size={20} /></div>
+        {metrics?.message && <div className="admin-provider-alert"><AlertTriangle size={17} /><span>{metrics.message}</span></div>}
+        {metrics?.deployments.filter((deployment) => /error|fail|cancel/i.test(`${deployment.state} ${deployment.readyState}`)).map((deployment) => (
+          <article className="admin-issue-row" key={deployment.id}><i /><div><strong>Deployment issue</strong><span>{deployment.url}</span></div><time>{formatDateTime(deployment.createdAt)}</time></article>
+        ))}
+        {!metrics?.message && !failedDeployments && <div className="admin-empty-operational"><CheckCircle2 size={22} /><span>No recent system issues.</span></div>}
+        <footer>Last system check: {formatDateTime(lastCheck)}</footer>
       </section>
     </>
   );
@@ -1020,13 +1005,13 @@ export function AdminDashboardClient({
     "ai-usage": "AI Usage"
   }[view];
   const subtitle = {
-    dashboard: "Live product, classroom, learning, and feedback metrics for Charlotte AI.",
-    analytics: "Trends, learning quality, grade mix, and classroom traction.",
+    dashboard: "A current view of adoption, participation, and completed learning across Charlotte AI.",
+    analytics: "School-level adoption, student participation, learning quality, and platform usage.",
     leads: "Contact requests, follow-up status, and classroom sales opportunities.",
     people: "Admin access, owner controls, and invite history.",
     feedback: "Weekly teacher feedback and product notes.",
     settings: "Feedback passcode and operational controls.",
-    server: "Vercel deployments, account activity, and production health signals.",
+    server: "Plain-language health checks for Charlotte's database, AI service, and production app.",
     "ai-usage": "OpenAI token usage, request volume, and cost trends."
   }[view];
 
@@ -1075,14 +1060,13 @@ export function AdminDashboardClient({
         {view === "dashboard" && (
           <>
             <section className="admin-stat-grid">
-              <MetricCard icon={<UsersRound size={24} />} label="Active users" value={metrics.headline.totalActiveUsers} detail={`${metrics.headline.activeTeachers} teachers - ${metrics.headline.activeStudents} students in 7d`} tone="green" />
-              <MetricCard icon={<ClipboardList size={24} />} label="Classes created" value={metrics.headline.totalClasses} detail={`${metrics.headline.archivedClasses} archived`} />
-              <MetricCard icon={<Sparkles size={24} />} label="Assignments" value={metrics.headline.totalMaterials} detail={`${metrics.headline.publishedMaterials} published - ${metrics.headline.homeMaterials} home`} tone="violet" />
-              <MetricCard icon={<Activity size={24} />} label="Sessions today" value={metrics.headline.todaySessions} detail={`${metrics.headline.todayAnswers} answers submitted today`} tone="orange" />
+              <MetricCard icon={<UsersRound size={24} />} label="Total Active Users" value={metrics.headline.totalActiveUsers} detail={`${metrics.headline.activeTeachers} teachers - ${metrics.headline.activeStudents} students in 7 days`} tone="green" />
+              <MetricCard icon={<ClipboardList size={24} />} label="Total Classes Created" value={metrics.headline.totalClasses} detail={`${metrics.headline.totalClasses - metrics.headline.archivedClasses} currently active`} />
+              <MetricCard icon={<UsersRound size={24} />} label="Active Students" value={metrics.headline.activeStudents} detail={`${metrics.headline.participationRate}% of enrolled students active in 7 days`} tone="violet" />
+              <MetricCard icon={<BookOpenCheck size={24} />} label="Assignments Completed" value={metrics.headline.assignmentsCompleted} detail="Completed student assignment sessions" tone="orange" />
             </section>
-            <section className="admin-dashboard-grid main">
+            <section className="admin-dashboard-grid">
               <LinePanel metrics={metrics} />
-              <MonthlyScorePanel metrics={metrics} />
             </section>
             <DataTables metrics={metrics} />
           </>
@@ -1090,20 +1074,24 @@ export function AdminDashboardClient({
 
         {view === "analytics" && (
           <>
-            <section className="admin-dashboard-grid main">
-              <LinePanel metrics={metrics} />
-              <MonthlyScorePanel metrics={metrics} />
+            <section className="admin-stat-grid">
+              <MetricCard icon={<Building2 size={22} />} label="Schools Onboarded" value={metrics.headline.totalSchools} detail="Schools with a Charlotte workspace" />
+              <MetricCard icon={<UsersRound size={22} />} label="Total Teachers" value={metrics.headline.totalTeachers} detail="Non-showcase teacher accounts" tone="green" />
+              <MetricCard icon={<ClipboardList size={22} />} label="Total Classes" value={metrics.headline.totalClasses} detail={`${metrics.headline.archivedClasses} archived`} tone="violet" />
+              <MetricCard icon={<UsersRound size={22} />} label="Active Students" value={metrics.headline.activeStudents} detail={`${metrics.headline.participationRate}% participation in 7 days`} tone="orange" />
             </section>
+            <SchoolAnalyticsPanel metrics={metrics} />
+            <section className="admin-dashboard-grid" style={{ marginTop: 12 }}><LinePanel metrics={metrics} /></section>
             <section className="admin-dashboard-grid three">
               <MiniBarChart title="New teachers" subtitle="Last 14 days" items={metrics.charts.teachers} tone="blue" />
               <MiniBarChart title="New classes" subtitle="Last 14 days" items={metrics.charts.classes} tone="green" />
               <MiniBarChart title="Grade mix" subtitle="Active classrooms" items={gradeBars} tone="orange" />
             </section>
             <section className="admin-stat-grid compact">
-              <MetricCard icon={<UsersRound size={22} />} label="Teachers" value={metrics.headline.totalTeachers} detail="Accounts created" />
-              <MetricCard icon={<UsersRound size={22} />} label="Student accounts" value={metrics.headline.totalStudentAccounts} detail={`${metrics.headline.totalStudents} active roster rows`} tone="green" />
-              <MetricCard icon={<CheckCircle2 size={22} />} label="Completed sessions" value={metrics.headline.completedSessions} detail={`${metrics.headline.completionRate}% completion rate`} tone="violet" />
-              <MetricCard icon={<MessageSquareText size={22} />} label="Feedback notes" value={metrics.headline.feedbackCount} detail={`${metrics.headline.contactLeads} contact leads`} tone="orange" />
+              <MetricCard icon={<Gamepad2 size={22} />} label="Games Completed" value={metrics.headline.completedGames} detail="Finished classroom game rooms" />
+              <MetricCard icon={<BookOpenCheck size={22} />} label="Practice Completed" value={metrics.headline.completedHomeActivities} detail="Optional at-home activities completed" tone="green" />
+              <MetricCard icon={<CheckCircle2 size={22} />} label="Average Accuracy" value={`${metrics.headline.correctRate}%`} detail={`${metrics.headline.totalAnswers} graded answers`} tone="violet" />
+              <MetricCard icon={<Activity size={22} />} label="Platform Participation" value={`${metrics.headline.participationRate}%`} detail={`${metrics.headline.activeStudents} active students`} tone="orange" />
             </section>
           </>
         )}
@@ -1137,7 +1125,7 @@ export function AdminDashboardClient({
           </>
         )}
 
-        {view === "server" && <ServerPanel metrics={serverSnapshot} />}
+        {view === "server" && <ServerPanel metrics={serverSnapshot} platform={metrics} aiMetrics={aiUsageSnapshot} />}
 
         {view === "ai-usage" && <AiUsagePanel metrics={aiUsageSnapshot} />}
       </section>

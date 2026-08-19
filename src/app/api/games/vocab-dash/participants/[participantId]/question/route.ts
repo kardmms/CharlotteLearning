@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { GameRoomStatus } from "@prisma/client";
+import { getStudentSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { buildVocabDashQuestion, progressPercent, streakTermIds } from "@/lib/vocab-dash";
+import { buildVocabDashQuestion, incorrectAnswers, progressPercent, streakTermIds } from "@/lib/vocab-dash";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ participantId: string }> }
 ) {
   const { participantId } = await params;
+  const student = await getStudentSession();
+  if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const participant = await prisma.gameParticipant.findUnique({
     where: { id: participantId },
     include: {
@@ -19,7 +22,7 @@ export async function GET(
     }
   });
 
-  if (!participant || participant.room.kind !== "VOCAB_DASH") {
+  if (!participant || participant.room.kind !== "VOCAB_DASH" || participant.studentId !== student.studentId) {
     return NextResponse.json({ error: "Participant not found." }, { status: 404 });
   }
 
@@ -30,7 +33,12 @@ export async function GET(
       streak: participant.currentStreak,
       termCount,
       finishRank: participant.finishRank,
-      accuracy: participant.totalAttempts ? Math.round((participant.totalCorrect / participant.totalAttempts) * 100) : 0
+      accuracy: participant.totalAttempts ? Math.round((participant.totalCorrect / participant.totalAttempts) * 100) : 0,
+      totalAttempts: participant.totalAttempts,
+      totalCorrect: participant.totalCorrect,
+      starsEarned: participant.starsEarned,
+      incorrectAnswers: incorrectAnswers(participant.incorrectAnswersJson),
+      roomId: participant.roomId
     });
   }
 
@@ -54,7 +62,8 @@ export async function GET(
     progress: progressPercent(participant.currentStreak, termCount),
     question: buildVocabDashQuestion({
       terms: participant.room.vocabTerms,
-      streakTermIds: streakTermIds(participant.streakTermIdsJson)
+      answeredTermIds: streakTermIds(participant.streakTermIdsJson),
+      questionOrderIds: streakTermIds(participant.questionOrderJson)
     })
   });
 }

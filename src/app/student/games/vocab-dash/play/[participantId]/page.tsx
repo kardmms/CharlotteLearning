@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { VocabDashPlayer } from "@/components/VocabDashPlayer";
+import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export default async function VocabDashPlayPage({
   params: Promise<{ participantId: string }>;
 }) {
   const { participantId } = await params;
+  const student = await requireStudent();
   const participant = await prisma.gameParticipant.findUnique({
     where: { id: participantId },
     include: {
@@ -20,7 +22,7 @@ export default async function VocabDashPlayPage({
       }
     }
   });
-  if (!participant || participant.room.kind !== "VOCAB_DASH") notFound();
+  if (!participant || participant.room.kind !== "VOCAB_DASH" || participant.studentId !== student.id) notFound();
 
   return (
     <VocabDashPlayer
