@@ -1,0 +1,13 @@
+.git/
+.next/
+node_modules/
+outputs/
+uploads/
+.codex-spreadsheet-work/
+.env
+.env.*
+*.log
+*.err
+*.tsbuildinfo
+dev.db
+dev.db-journal
