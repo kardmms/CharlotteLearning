@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   BookOpen,
   FileQuestion,
+  Gamepad2,
   GraduationCap,
   LogOut,
   Archive,
@@ -12,6 +13,7 @@ import {
 import { logoutTeacher } from "@/app/teacher/actions";
 import { logoutStudent } from "@/app/student/actions";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { gamesFeatureEnabled } from "@/lib/features";
 
 export function PublicTopbar() {
   return (
@@ -42,6 +44,7 @@ export function PublicTopbar() {
 }
 
 export function TeacherTopbar({ name, classroomId }: { name: string; classroomId?: string }) {
+  const gamesEnabled = gamesFeatureEnabled();
   const assignmentsHref = classroomId
     ? `/teacher/classes/${classroomId}/materials`
     : "/teacher/assignments";
@@ -54,6 +57,7 @@ export function TeacherTopbar({ name, classroomId }: { name: string; classroomId
       <nav className="teacher-topbar-nav" aria-label="Teacher navigation">
         <Link href="/teacher/classes"><UsersRound size={17} /> Classes</Link>
         <Link href={assignmentsHref}><FileQuestion size={17} /> Assignments</Link>
+        {gamesEnabled && <Link href={classroomId ? `/teacher/games?classroomId=${classroomId}` : "/teacher/games"}><Gamepad2 size={17} /> Games</Link>}
       </nav>
       <details className="teacher-account-menu teacher-topbar-account">
         <summary>
@@ -74,6 +78,7 @@ export function TeacherTopbar({ name, classroomId }: { name: string; classroomId
 }
 
 export function StudentTopbar({ name }: { name: string }) {
+  const gamesEnabled = gamesFeatureEnabled();
   return (
     <header className="topbar">
       <Link className="brand" href="/student">
@@ -82,6 +87,12 @@ export function StudentTopbar({ name }: { name: string }) {
       </Link>
       <nav className="nav-links">
         <span className="muted">{name}</span>
+        {gamesEnabled && (
+          <Link className="ghost-button" href="/play">
+            <Gamepad2 size={18} />
+            Games
+          </Link>
+        )}
         <Link className="ghost-button" href="/student/classes">
           <GraduationCap size={18} />
           My classes

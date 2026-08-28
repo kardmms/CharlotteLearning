@@ -7,6 +7,7 @@ import { VocabWordCountSlider } from "@/components/VocabWordCountSlider";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gradeLabel } from "@/lib/grade";
+import { gamesFeatureEnabled } from "@/lib/features";
 import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function NewVocabDashPage({
 }: {
   searchParams: Promise<{ classroomId?: string; error?: string }>;
 }) {
+  if (!gamesFeatureEnabled()) notFound();
   const params = await searchParams;
   const classroomId = params.classroomId?.split("?")[0];
   const teacher = await requireTeacher();

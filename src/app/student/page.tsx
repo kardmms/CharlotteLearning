@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, CheckCircle2, Clock3, Home, LockKeyhole, School, Star, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, CheckCircle2, Clock3, Gamepad2, Home, LockKeyhole, School, Star, Trophy } from "lucide-react";
 import { StudentTopbar } from "@/components/AppTopbar";
 import { StartActivityButton } from "@/components/StartActivityButton";
 import { getStudentCompletionLock, requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { studentBandClass } from "@/lib/grade";
+import { gamesFeatureEnabled } from "@/lib/features";
 import { classroomHasHomeLearningSources, ensureDailyHomePractice, homeLearningDayKey } from "@/lib/home-learning";
 import { redirect } from "next/navigation";
 
@@ -46,6 +47,7 @@ export default async function StudentHomePage({
   searchParams: Promise<{ view?: string }>;
 }) {
   const query = await searchParams;
+  const gamesEnabled = gamesFeatureEnabled();
   const student = await requireStudent();
   const completionLock = await getStudentCompletionLock();
   if (completionLock) redirect(`/student/results/${completionLock}`);
@@ -185,7 +187,7 @@ export default async function StudentHomePage({
               <div><span>Hi, {student.displayName.split(" ")[0]}!</span><h1>What are you working on?</h1></div>
               <div className="student-points-total"><Trophy size={23} /><strong>{totalPoints}</strong><span>total stars</span></div>
             </section>
-            <section className="student-mode-grid">
+            <section className={`student-mode-grid ${gamesEnabled ? "with-games" : ""}`}>
               <Link className={`student-mode-card class ${inClassActivity ? "available" : "unavailable"}`} href="/student?view=class">
                 <div className="student-mode-symbol class"><School size={36} /></div>
                 <div>
@@ -213,6 +215,17 @@ export default async function StudentHomePage({
                 </div>
                 {practiceSetCount ? <ArrowRight size={28} /> : <LockKeyhole size={25} />}
               </Link>
+              {gamesEnabled && (
+                <Link className="student-mode-card game available" href="/play">
+                  <div className="student-mode-symbol game"><Gamepad2 size={36} /></div>
+                  <div>
+                    <span>Live classroom play</span>
+                    <h2>Games</h2>
+                    <p>Enter your teacher&apos;s code, customize your runner, and earn stars.</p>
+                  </div>
+                  <ArrowRight size={28} />
+                </Link>
+              )}
             </section>
           </>
         )}

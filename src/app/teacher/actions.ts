@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { ActivityKind, GameKind, GameRoomStatus, IdentityMode, MaterialStatus, QuestionType } from "@prisma/client";
+import { ActivityKind, GameKind, GameRoomStatus, IdentityMode, MaterialStatus, Prisma, QuestionType } from "@prisma/client";
 import { readSheet } from "read-excel-file/node";
 import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -19,6 +19,7 @@ import { normalizeStudentEmail } from "@/lib/codes";
 import { extractStudentRosterWithAI, generateQuestionsFromText, generateVocabDashTerms } from "@/lib/ai";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
+import { gamesFeatureEnabled } from "@/lib/features";
 import {
   sendContactRequestConfirmation,
   sendStudentEnrollmentEmail,
@@ -27,6 +28,7 @@ import {
 import { normalizeGrade } from "@/lib/grade";
 import { excerptForQuestion } from "@/lib/text-context";
 import { createDefaultSchoolForTeacher, ensureTeacherSchool, type DefaultSchoolOptions } from "@/lib/tenancy";
+import { starsForPlacement } from "@/lib/vocab-dash";
 import {
   deleteShowcaseWorkspace,
   runShowcaseTick,
@@ -530,11 +532,13 @@ export async function unarchiveClassroom(formData: FormData) {
 
 export async function openVocabDashRoom() {
   await requireTeacher();
+  if (!gamesFeatureEnabled()) redirect("/teacher/classes");
   redirect("/teacher/games/vocab-dash/new");
 }
 
 export async function createVocabDashDraft(formData: FormData) {
   const teacher = await requireTeacher();
+  if (!gamesFeatureEnabled()) redirect("/teacher/classes");
   const classroomId = formText(formData, "classroomId");
   const path = classroomId
     ? `/teacher/games/vocab-dash/new?classroomId=${encodeURIComponent(classroomId)}`
@@ -630,6 +634,7 @@ export async function createVocabDashDraft(formData: FormData) {
 
 export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
   const teacher = await requireTeacher();
+  if (!gamesFeatureEnabled()) redirect("/teacher/classes");
   const roomId = formText(formData, "roomId");
   const path = `/teacher/games/vocab-dash/rooms/${roomId}/setup`;
   await enforceOrRedirect(path, async () => {
@@ -637,7 +642,13 @@ export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
   });
 
   const room = await prisma.gameRoom.findFirst({
-    where: { id: roomId, teacherId: teacher.id, schoolId: teacher.schoolId, kind: GameKind.VOCAB_DASH },
+    where: {
+      id: roomId,
+      teacherId: teacher.id,
+      schoolId: teacher.schoolId,
+      kind: GameKind.VOCAB_DASH,
+      status: GameRoomStatus.WAITING
+    },
     select: { id: true, schoolId: true }
   });
   if (!room) errorRedirect("/teacher/games", "Game room not found.");
@@ -681,6 +692,7 @@ export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
 
 export async function startVocabDashRoom(formData: FormData) {
   const teacher = await requireTeacher();
+  if (!gamesFeatureEnabled()) redirect("/teacher/classes");
   const roomId = formText(formData, "roomId");
   await enforceOrRedirect("/teacher/games", async () => {
     await enforceRateLimit({ scope: "teacher-start-game-room", limit: 80, windowSeconds: 60 * 60, identifier: teacher.id });
@@ -691,6 +703,12 @@ export async function startVocabDashRoom(formData: FormData) {
     include: { _count: { select: { vocabTerms: true, participants: true } } }
   });
   if (!room) errorRedirect("/teacher/games", "Game room not found.");
+  if (room.status === GameRoomStatus.COMPLETED) {
+    redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
+  }
+  if (room.status !== GameRoomStatus.WAITING) {
+    redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
+  }
   if (room._count.vocabTerms < 10) {
     errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}/setup`, "Add at least 10 words before starting.");
   }
@@ -698,30 +716,111 @@ export async function startVocabDashRoom(formData: FormData) {
     errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}`, "At least 2 students must join before the game can start.");
   }
 
-  if (room.status !== GameRoomStatus.STARTING) {
-    await prisma.$transaction([
-      prisma.gameRoom.update({
-        where: { id: room.id },
-        data: {
-          status: GameRoomStatus.STARTING,
-          startedAt: room.startedAt ?? new Date()
-        }
-      }),
-      prisma.auditEvent.create({
-        data: auditEventData({
-          schoolId: room.schoolId,
-          actorType: "teacher",
-          actorId: teacher.id,
-          action: "game_room.started",
-          targetType: "game_room",
-          targetId: room.id,
-          metadata: { kind: "VOCAB_DASH" }
-        })
+  await prisma.$transaction([
+    prisma.gameRoom.update({
+      where: { id: room.id },
+      data: {
+        status: GameRoomStatus.STARTING,
+        startedAt: room.startedAt ?? new Date()
+      }
+    }),
+    prisma.auditEvent.create({
+      data: auditEventData({
+        schoolId: room.schoolId,
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "game_room.started",
+        targetType: "game_room",
+        targetId: room.id,
+        metadata: { kind: "VOCAB_DASH" }
       })
-    ]);
-  }
+    })
+  ]);
 
   redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
+}
+
+export async function endVocabDashRoom(formData: FormData) {
+  const teacher = await requireTeacher();
+  if (!gamesFeatureEnabled()) redirect("/teacher/classes");
+  const roomId = formText(formData, "roomId");
+  const leaderboardPath = `/teacher/games/vocab-dash/rooms/${roomId}/leaderboard`;
+  await enforceOrRedirect(leaderboardPath, async () => {
+    await enforceRateLimit({ scope: "teacher-end-game-room", limit: 80, windowSeconds: 60 * 60, identifier: teacher.id });
+  });
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT "id" FROM "GameRoom" WHERE "id" = ${roomId} FOR UPDATE`
+    );
+    const room = await transaction.gameRoom.findFirst({
+      where: {
+        id: roomId,
+        teacherId: teacher.id,
+        schoolId: teacher.schoolId,
+        kind: GameKind.VOCAB_DASH
+      },
+      include: { participants: { where: { schoolId: teacher.schoolId }, orderBy: { joinedAt: "asc" } } }
+    });
+    if (!room) errorRedirect("/teacher/games", "Game room not found.");
+    if (room.status === GameRoomStatus.COMPLETED) return;
+    if (room.status !== GameRoomStatus.STARTING) {
+      errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}`, "Start the game before ending it.");
+    }
+
+    const rankedUnfinished = room.participants
+      .filter((participant) => !participant.completedAt)
+      .sort((a, b) => {
+        if (b.currentStreak !== a.currentStreak) return b.currentStreak - a.currentStreak;
+        if (b.totalCorrect !== a.totalCorrect) return b.totalCorrect - a.totalCorrect;
+        const aAccuracy = a.totalAttempts ? a.totalCorrect / a.totalAttempts : 0;
+        const bAccuracy = b.totalAttempts ? b.totalCorrect / b.totalAttempts : 0;
+        if (bAccuracy !== aAccuracy) return bAccuracy - aAccuracy;
+        return a.joinedAt.getTime() - b.joinedAt.getTime();
+      });
+    let nextRank = room.participants.reduce((rank, participant) => Math.max(rank, participant.finishRank || 0), 0) + 1;
+    const endedAt = new Date();
+
+    for (const participant of rankedUnfinished) {
+      const finishRank = nextRank;
+      const starsEarned = starsForPlacement(finishRank);
+      nextRank += 1;
+      await transaction.gameParticipant.update({
+        where: { id: participant.id },
+        data: { completedAt: endedAt, finishRank, starsEarned }
+      });
+      if (participant.studentId) {
+        const enrollment = await transaction.student.findFirst({
+          where: { id: participant.studentId, schoolId: teacher.schoolId },
+          select: { accountId: true }
+        });
+        if (enrollment?.accountId) {
+          await transaction.studentAccount.update({
+            where: { id: enrollment.accountId },
+            data: { stars: { increment: starsEarned } }
+          });
+        }
+      }
+    }
+
+    await transaction.gameRoom.update({
+      where: { id: room.id },
+      data: { status: GameRoomStatus.COMPLETED, endedAt }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        schoolId: room.schoolId,
+        actorType: "teacher",
+        actorId: teacher.id,
+        action: "game_room.ended",
+        targetType: "game_room",
+        targetId: room.id,
+        metadata: { kind: "VOCAB_DASH", participantCount: room.participants.length }
+      })
+    });
+  });
+
+  redirect(leaderboardPath);
 }
 
 function isValidStudentEmail(email: string) {

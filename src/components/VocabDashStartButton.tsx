@@ -12,7 +12,6 @@ export function VocabDashStartButton({ participantCount }: { participantCount: n
       className="button vocab-dash-start-button"
       type="submit"
       disabled={disabled}
-      onClick={() => window.dispatchEvent(new Event("vocabdash:start"))}
       title={participantCount < 2 ? "At least 2 students must join" : "Start Vocab Dash"}
     >
       <Play size={18} />

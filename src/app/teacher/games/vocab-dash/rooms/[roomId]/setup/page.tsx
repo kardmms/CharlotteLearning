@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { GameRoomStatus } from "@prisma/client";
 import { ArrowLeft, CheckCircle2, Rocket } from "lucide-react";
 import { saveVocabDashTermsAndOpenRoom } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { gamesFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,7 @@ export default async function VocabDashTermsSetupPage({
   params: Promise<{ roomId: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  if (!gamesFeatureEnabled()) notFound();
   const [{ roomId }, query] = await Promise.all([params, searchParams]);
   const teacher = await requireTeacher();
   const room = await prisma.gameRoom.findFirst({
@@ -23,12 +26,15 @@ export default async function VocabDashTermsSetupPage({
     include: { vocabTerms: { where: { schoolId: teacher.schoolId }, orderBy: { sortOrder: "asc" } } }
   });
   if (!room) notFound();
+  if (room.status !== GameRoomStatus.WAITING) {
+    redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
+  }
 
   return (
     <>
       <TeacherTopbar name={teacher.name} />
       <main className="page vocab-dash-setup-page">
-        <Link className="student-back-link" href="/teacher/games/vocab-dash/new"><ArrowLeft size={18} /> Back to setup</Link>
+        <Link className="student-back-link" href={`/teacher/games?classroomId=${room.classroomId || ""}`}><ArrowLeft size={18} /> Back to games</Link>
         <section className="vocab-dash-setup-hero">
           <div>
             <div className="eyebrow">Review word list</div>
@@ -69,7 +75,7 @@ export default async function VocabDashTermsSetupPage({
             ))}
           </div>
           <div className="vocab-dash-form-actions">
-            <Link className="ghost-button" href="/teacher/games/vocab-dash/new">Start over</Link>
+            <Link className="ghost-button" href={`/teacher/games/vocab-dash/new?classroomId=${room.classroomId || ""}`}>Start over</Link>
             <button className="button vocab-dash-start-button" type="submit">
               Open lobby
             </button>

@@ -122,3 +122,9 @@ The app is configured for Vercel with managed Postgres.
 The removed presentation-reset utility must not be restored or executed against production. Use a separately provisioned development database for disposable demos and tests.
 
 Production cookies are HTTPS-only. Uploaded lesson plans and roster spreadsheets are processed in memory and limited to 4 MB to remain within Vercel's request limit; only extracted text or confirmed roster data is stored.
+
+## Local winter preview
+
+Vocab Dash and the Games navigation are enabled automatically when running locally against a non-production database. Set `GAMES_FEATURE_ENABLED=false` to hide them locally. Hosted environments keep the routes and navigation disabled unless `GAMES_FEATURE_ENABLED=true` is deliberately configured for a future release.
+
+Temporary hosted tests can set `GAMES_FEATURE_EXPIRES_AT` to an ISO timestamp. At that instant, Games navigation, routes, and game actions are disabled server-side; local development remains enabled. Use deployment-specific environment overrides so restoring a prior deployment also restores its original configuration.

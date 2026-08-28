@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { normalizeStudentEmail } from "@/lib/codes";
+import { gamesFeatureEnabled } from "@/lib/features";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { privacyAccountEmail, studentEmailLookupHash } from "@/lib/school-privacy";
 import {
@@ -199,6 +200,7 @@ export async function logoutStudent() {
 
 export async function joinVocabDashRoom(formData: FormData) {
   const account = await requireStudentAccount();
+  if (!gamesFeatureEnabled()) redirect("/student");
   const code = joinCode(formText(formData, "code"));
   await enforceOrRedirect("/play", async () => {
     await enforceRateLimit({ scope: "vocab-dash-join-ip", limit: 80, windowSeconds: 60 * 60 });
@@ -240,6 +242,9 @@ export async function joinVocabDashRoom(formData: FormData) {
     await setStudentSession(account, enrollment);
     redirect(`/student/games/vocab-dash/play/${existing.id}`);
   }
+  if (room.status !== "WAITING") {
+    errorRedirect("/play", "That game has already started.");
+  }
 
   const participant = await prisma.gameParticipant.create({
     data: {
@@ -272,6 +277,7 @@ export async function joinVocabDashRoom(formData: FormData) {
 
 export async function updateStudentCharacter(formData: FormData) {
   const account = await requireStudentAccount();
+  if (!gamesFeatureEnabled()) redirect("/student");
   const color = formText(formData, "characterColor");
   const requestedAccessory = formText(formData, "accessoryKey");
   const path = "/play";

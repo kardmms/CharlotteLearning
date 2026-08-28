@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "test:games": "node --experimental-strip-types --test tests/*.test.ts",
     "school-directory:import": "node scripts/import-school-directory.mjs",
     "verify:production": "node scripts/verify-production-readiness.mjs",
     "lint": "next lint"

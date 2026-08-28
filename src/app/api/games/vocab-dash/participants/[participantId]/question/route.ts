@@ -3,11 +3,13 @@ import { GameRoomStatus } from "@prisma/client";
 import { getStudentSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { buildVocabDashQuestion, incorrectAnswers, progressPercent, streakTermIds } from "@/lib/vocab-dash";
+import { gamesFeatureEnabled } from "@/lib/features";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ participantId: string }> }
 ) {
+  if (!gamesFeatureEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { participantId } = await params;
   const student = await getStudentSession();
   if (!student?.studentId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

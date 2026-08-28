@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GameRoomStatus } from "@prisma/client";
+import { GameRoomStatus, Prisma } from "@prisma/client";
 import { getStudentSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
@@ -7,15 +7,18 @@ import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 import {
   buildVocabDashQuestion,
   incorrectAnswers,
+  nextVocabDashTerm,
   progressPercent,
   starsForPlacement,
   streakTermIds
 } from "@/lib/vocab-dash";
+import { gamesFeatureEnabled } from "@/lib/features";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ participantId: string }> }
 ) {
+  if (!gamesFeatureEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     assertSameOrigin(request);
     const { participantId } = await params;
@@ -33,6 +36,17 @@ export async function POST(
     const answerText = String(body.answerText || "").trim().slice(0, 500);
 
     const result = await prisma.$transaction(async (transaction) => {
+      const participantRoom = await transaction.gameParticipant.findFirst({
+        where: { id: participantId, studentId: student.studentId },
+        select: { roomId: true }
+      });
+      if (!participantRoom) {
+        return { status: 404 as const, payload: { error: "Participant not found." } };
+      }
+      // Take the room lock first, matching the teacher's end-game transaction.
+      await transaction.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "GameRoom" WHERE "id" = ${participantRoom.roomId} FOR UPDATE`
+      );
       const participant = await transaction.gameParticipant.findUnique({
         where: { id: participantId },
         include: {
@@ -60,6 +74,7 @@ export async function POST(
             incorrectAnswers: incorrectAnswers(participant.incorrectAnswersJson),
             totalAttempts: participant.totalAttempts,
             totalCorrect: participant.totalCorrect,
+            accuracy: participant.totalAttempts ? Math.round((participant.totalCorrect / participant.totalAttempts) * 100) : 0,
             roomId: participant.roomId
           }
         };
@@ -69,14 +84,14 @@ export async function POST(
       }
 
       const terms = participant.room.vocabTerms;
-      const term = terms.find((item) => item.id === termId);
-      if (!term) return { status: 400 as const, payload: { error: "Question not found." } };
+      const previousIds = streakTermIds(participant.streakTermIdsJson);
+      const questionOrderIds = streakTermIds(participant.questionOrderJson);
+      const term = nextVocabDashTerm({ terms, answeredTermIds: previousIds, questionOrderIds });
+      if (!term || term.id !== termId) {
+        return { status: 409 as const, payload: { error: "That question is no longer active. Loading the current question." } };
+      }
 
       const correct = term.word.trim().toLowerCase() === answerText.toLowerCase();
-      const previousIds = streakTermIds(participant.streakTermIdsJson);
-      if (previousIds.includes(term.id)) {
-        return { status: 409 as const, payload: { error: "That question was already answered." } };
-      }
       const nextIds = [...previousIds, term.id];
       const nextStreak = nextIds.length;
       const termCount = terms.length;
@@ -151,7 +166,7 @@ export async function POST(
           question: completed ? null : buildVocabDashQuestion({
             terms,
             answeredTermIds: nextIds,
-            questionOrderIds: streakTermIds(participant.questionOrderJson)
+            questionOrderIds
           })
         }
       };

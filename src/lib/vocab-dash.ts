@@ -77,10 +77,10 @@ export function rankedParticipants<T extends VocabDashParticipant>(participants:
   });
 }
 
-export function shuffle<T>(values: T[]) {
+export function shuffle<T>(values: T[], random = Math.random) {
   const output = [...values];
   for (let index = output.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const swapIndex = Math.floor(random() * (index + 1));
     [output[index], output[swapIndex]] = [output[swapIndex], output[index]];
   }
   return output;
@@ -115,25 +115,45 @@ export function starsForPlacement(rank: number) {
   return 1;
 }
 
+function questionRandom(seed: string) {
+  let state = 2166136261;
+  for (const character of seed) state = Math.imul(state ^ character.charCodeAt(0), 16777619);
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
 export function buildVocabDashQuestion(input: {
   terms: VocabDashTerm[];
   answeredTermIds: string[];
   questionOrderIds?: string[];
 }) {
-  const orderedTerms = (input.questionOrderIds?.length
-    ? input.questionOrderIds.map((id) => input.terms.find((term) => term.id === id)).filter(Boolean)
-    : shuffle(input.terms)) as VocabDashTerm[];
-  const term = orderedTerms.find((item) => !input.answeredTermIds.includes(item.id)) || orderedTerms[0];
-  const distractors = shuffle(input.terms.filter((item) => item.id !== term.id))
+  const term = nextVocabDashTerm(input);
+  if (!term) return null;
+  // Repeated polling must not move answer buttons beneath a student's cursor.
+  const random = questionRandom(`${input.questionOrderIds?.join(",") || ""}:${term.id}`);
+  const distractors = shuffle(input.terms.filter((item) => item.id !== term.id), random)
     .slice(0, 3)
     .map((item) => item.word);
-  const choices = shuffle([term.word, ...distractors]);
+  const choices = shuffle([term.word, ...distractors], random);
 
   return {
     termId: term.id,
     definition: term.definition,
     choices
   };
+}
+
+export function nextVocabDashTerm(input: {
+  terms: VocabDashTerm[];
+  answeredTermIds: string[];
+  questionOrderIds?: string[];
+}) {
+  const orderedTerms = (input.questionOrderIds?.length
+    ? input.questionOrderIds.map((id) => input.terms.find((term) => term.id === id)).filter(Boolean)
+    : input.terms) as VocabDashTerm[];
+  return orderedTerms.find((item) => !input.answeredTermIds.includes(item.id)) || null;
 }
 
 export function joinCode(value: string) {

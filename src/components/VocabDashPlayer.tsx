@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock3, Rocket, Star, XCircle } from "lucide-react";
 
@@ -54,45 +54,72 @@ export function VocabDashPlayer({
   });
   const [selected, setSelected] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const answering = useRef(false);
 
-  async function loadQuestion() {
-    const response = await fetch(`/api/games/vocab-dash/participants/${participantId}/question`, { cache: "no-store" });
-    if (!response.ok) return;
-    const next = await response.json() as GamePayload;
-    setPayload(next);
-    setSelected("");
-  }
+  const loadQuestion = useCallback(async () => {
+    if (answering.current) return;
+    try {
+      const response = await fetch(`/api/games/vocab-dash/participants/${participantId}/question`, { cache: "no-store" });
+      if (answering.current) return;
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setLoadError(response.status === 404
+          ? "This game entry is no longer active or belongs to another signed-in student."
+          : body.error || "The game could not be loaded.");
+        return;
+      }
+      const next = await response.json() as GamePayload;
+      if (answering.current) return;
+      setPayload((current) => next.streak < current.streak ? current : next);
+      setLoadError("");
+      setSelected("");
+    } catch {
+      setLoadError("The game connection was interrupted. Retrying...");
+    }
+  }, [participantId]);
 
   useEffect(() => {
     void loadQuestion();
     const timer = window.setInterval(() => {
-      if (payload.status === "WAITING") void loadQuestion();
+      if (payload.status !== "COMPLETED") void loadQuestion();
     }, 2200);
     return () => window.clearInterval(timer);
-  }, [participantId, payload.status]);
+  }, [loadQuestion, payload.status]);
 
   async function submitAnswer(answerText: string) {
-    if (!payload.question || submitting) return;
+    if (!payload.question || answering.current) return;
+    answering.current = true;
+    setSubmitError("");
     setSelected(answerText);
     setSubmitting(true);
-    const response = await fetch(`/api/games/vocab-dash/participants/${participantId}/answer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ termId: payload.question.termId, answerText })
-    });
-    setSubmitting(false);
-    if (!response.ok) {
-      setFeedback("That did not submit. Try again.");
-      return;
-    }
-    const next = await response.json() as GamePayload;
-    setFeedback(next.correct ? "Correct." : "Incorrect.");
-    window.setTimeout(() => {
+    try {
+      const response = await fetch(`/api/games/vocab-dash/participants/${participantId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ termId: payload.question.termId, answerText })
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setSubmitError(body.error || "That did not submit. Try again.");
+        answering.current = false;
+        if (response.status === 409) await loadQuestion();
+        return;
+      }
+      const next = await response.json() as GamePayload;
+      setFeedback(next.correct ? "Correct." : `Incorrect. The answer was ${next.correctAnswer}.`);
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
       setFeedback("");
       setPayload(next);
       setSelected("");
-    }, 750);
+    } catch {
+      setSubmitError("That did not submit. Check your connection and try again.");
+    } finally {
+      answering.current = false;
+      setSubmitting(false);
+    }
   }
 
   const progress = payload.termCount ? Math.round((payload.streak / payload.termCount) * 100) : 0;
@@ -114,6 +141,14 @@ export function VocabDashPlayer({
           <div><i style={{ width: `${progress}%` }} /></div>
         </div>
 
+        {(loadError || submitError) && (
+          <div className="vocab-player-load-error" role="alert">
+            <XCircle size={19} />
+            <span>{loadError || submitError}</span>
+            <Link href="/play">Return to Games</Link>
+          </div>
+        )}
+
         {payload.status === "WAITING" && (
           <div className="vocab-player-waiting">
             <Clock3 size={34} />
@@ -129,7 +164,8 @@ export function VocabDashPlayer({
               <div><span>Game complete</span><h2>You finished Vocab Dash.</h2></div>
             </div>
             <div className="vocab-results-grid">
-              <div><strong>{payload.totalCorrect ?? 0}/{payload.totalAttempts ?? 0}</strong><span>Correct answers</span></div>
+              <div><strong>{payload.totalAttempts ?? 0}</strong><span>Questions answered</span></div>
+              <div><strong>{payload.totalCorrect ?? 0}</strong><span>Correct answers</span></div>
               <div><strong>{payload.accuracy ?? 0}%</strong><span>Accuracy</span></div>
               <div><strong>#{payload.finishRank || "-"}</strong><span>Final place</span></div>
               <div className="stars"><strong>{payload.starsEarned || 0}</strong><span><Star size={15} fill="currentColor" /> Stars earned</span></div>
@@ -146,7 +182,10 @@ export function VocabDashPlayer({
                 ))}
               </section>
             )}
-            {payload.roomId && <Link className="button" href={`/student/practice/vocab/${payload.roomId}`}>More practice</Link>}
+            <div className="result-practice-actions">
+              <Link className="ghost-button" href="/play">Back to Games</Link>
+              {payload.roomId && <Link className="button" href={`/student/practice/vocab/${payload.roomId}`}>More practice</Link>}
+            </div>
           </div>
         )}
 

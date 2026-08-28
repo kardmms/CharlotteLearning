@@ -1,10 +1,11 @@
 import { Gamepad2, LockKeyhole, Sparkles, Star } from "lucide-react";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { joinVocabDashRoom, updateStudentCharacter } from "@/app/student/actions";
 import { StudentTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { getStudentSession, requireStudentAccount } from "@/lib/auth";
 import { vocabDashAccessories, vocabDashColors } from "@/lib/vocab-dash";
+import { gamesFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function PlayPage({
 }: {
   searchParams: Promise<{ error?: string; code?: string; saved?: string }>;
 }) {
+  if (!gamesFeatureEnabled()) notFound();
   if (!(await getStudentSession())) redirect("/student/login?next=%2Fplay");
   const [account, query] = await Promise.all([requireStudentAccount(), searchParams]);
   const unlocked = unlockedAccessories(account.unlockedAccessories);
