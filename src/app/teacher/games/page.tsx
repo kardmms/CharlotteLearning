@@ -62,7 +62,7 @@ export default async function TeacherGamesPage({
             <h1>Games</h1>
             <p>Launch live, class-connected practice and follow every student&apos;s progress from one screen.</p>
           </div>
-          <span className="local-preview-badge"><Gamepad2 size={17} /> Local only</span>
+          <span className="local-preview-badge"><Gamepad2 size={17} /> Playtest</span>
         </section>
 
         {classrooms.length > 0 && (
