@@ -70,7 +70,7 @@ export default async function VocabDashRoomPage({
           <div className="room-code-panel" aria-label="Student room code">
             <span>Student code</span>
             <strong>{room.code}</strong>
-            <small>Open /play on this local build</small>
+            <small>Join at /play</small>
           </div>
           <div className="room-hero-actions">
             <form action={startVocabDashRoom}>
