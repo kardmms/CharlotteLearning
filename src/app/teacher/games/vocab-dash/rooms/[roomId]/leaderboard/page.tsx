@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GameRoomStatus } from "@prisma/client";
-import { ArrowLeft, Square, Trophy, UsersRound } from "lucide-react";
+import { ArrowLeft, Crown, Medal, Sparkles, Square, Trophy, UsersRound } from "lucide-react";
 import { endVocabDashRoom } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { VocabDashFullscreenButton } from "@/components/VocabDashFullscreenButton";
@@ -36,6 +36,16 @@ export default async function VocabDashLeaderboardPage({
   const termCount = room.vocabTerms.length;
   const ranked = rankedParticipants(room.participants);
   const leaders = ranked.slice(0, 5);
+  const showPodium = ranked.some((participant) => participant.finishRank === 1);
+  const podiumSlots = [
+    { place: 2, participant: leaders[1], tone: "silver" },
+    { place: 1, participant: leaders[0], tone: "gold" },
+    { place: 3, participant: leaders[2], tone: "bronze" }
+  ];
+  const lowerSlots = [
+    { place: 4, participant: leaders[3] },
+    { place: 5, participant: leaders[4] }
+  ];
 
   return (
     <>
@@ -56,11 +66,13 @@ export default async function VocabDashLeaderboardPage({
         </div>
         <section className="vocab-leaderboard-top">
           <div>
-            <div className="eyebrow">{room.status === GameRoomStatus.COMPLETED ? "Final results" : "Live game"}</div>
+            <div className="eyebrow">{room.status === GameRoomStatus.COMPLETED ? "Final results" : showPodium ? "Podium reveal" : "Live game"}</div>
             <h1>Vocab Dash</h1>
             <p>{room.status === GameRoomStatus.COMPLETED
               ? "The race is complete. Final placement and star rewards are saved for every student."
-              : "Every answer advances the race. Accuracy breaks ties and shapes each student&apos;s results."}</p>
+              : showPodium
+                ? "The first perfect run is in. Top five standings are on the stage."
+                : "Only correct answers advance the race. One miss sends the score back to the starting line."}</p>
           </div>
           <div className="vocab-leaderboard-code">
             <span>Join code</span>
@@ -68,52 +80,99 @@ export default async function VocabDashLeaderboardPage({
           </div>
         </section>
 
-        <section className="vocab-race-board">
-          <div className="vocab-race-timer">
-            <span>Progress</span>
-            <div><i style={{ width: `${leaders[0] ? progressPercent(leaders[0].currentStreak, termCount) : 0}%` }} /></div>
-          </div>
-          <div className="vocab-race-layout">
-            <div className="vocab-racer-list">
-              {ranked.length ? ranked.map((participant, index) => {
-                const character = characterForKey(participant.characterKey);
-                const progress = progressPercent(participant.currentStreak, termCount);
+        {showPodium ? (
+          <section className="vocab-podium-stage" aria-label="Vocab Dash podium">
+            <div className="vocab-podium-head">
+              <div>
+                <div className="eyebrow">Podium reveal</div>
+                <h2>Top Five</h2>
+              </div>
+              <div className="vocab-reveal-chip">
+                <Sparkles size={18} />
+                Revealing #1
+              </div>
+            </div>
+
+            <div className="vocab-podium-grid">
+              {podiumSlots.map(({ place, participant, tone }) => {
+                const character = participant ? characterForKey(participant.characterKey) : null;
                 return (
-                  <div className="vocab-racer-row" key={participant.id}>
-                    <div className="vocab-racer-avatar">{character.glyph}</div>
-                    <div className="vocab-racer-track">
-                      <span
-                        className={`vocab-racer-fill color-${index % 5}`}
-                        style={{ width: `${Math.max(4, progress)}%` }}
-                      />
-                      <strong style={{ left: `${progress}%` }}>{participant.displayName}</strong>
+                  <div className={`vocab-podium-slot place-${place} tone-${tone} ${participant ? "" : "empty"}`} key={place}>
+                    <div className="vocab-podium-avatar">
+                      {place === 1 ? <Crown size={30} fill="currentColor" /> : <Medal size={26} />}
+                      <span>{character?.glyph || "?"}</span>
                     </div>
-                    <div className="vocab-racer-meta">
-                      <span>{participant.currentStreak}/{termCount}</span>
-                      <small>{accuracyPercent(participant.totalCorrect, participant.totalAttempts)}%</small>
+                    <div className="vocab-podium-name">
+                      <span>#{place}</span>
+                      <strong>{participant?.displayName || "Still racing"}</strong>
+                      <small>{participant ? `${participant.currentStreak}/${termCount} score` : "Waiting"}</small>
+                    </div>
+                    <div className="vocab-podium-step">
+                      <span>{place}</span>
                     </div>
                   </div>
                 );
-              }) : (
-                <div className="vocab-leaderboard-empty">
-                  <UsersRound size={34} />
-                  <h2>Waiting for students</h2>
-                  <p>Students who join with code {room.code} will appear here.</p>
-                </div>
-              )}
+              })}
             </div>
-            <aside className="vocab-rank-panel">
-              <Trophy size={28} />
-              <h2>Rank</h2>
-              {ranked.slice(0, 5).map((participant, index) => (
-                <div className="vocab-rank-row" key={participant.id}>
-                  <strong>{participant.finishRank || index + 1}</strong>
-                  <span>{participant.displayName}</span>
+
+            <div className="vocab-lower-ranks">
+              {lowerSlots.map(({ place, participant }) => (
+                <div className={`vocab-lower-rank-box ${participant ? "" : "empty"}`} key={place}>
+                  <strong>#{place}</strong>
+                  <span>{participant?.displayName || "Still racing"}</span>
+                  <small>{participant ? `${participant.currentStreak}/${termCount} score` : "Waiting"}</small>
                 </div>
               ))}
-            </aside>
-          </div>
-        </section>
+            </div>
+          </section>
+        ) : (
+          <section className="vocab-race-board">
+            <div className="vocab-race-timer">
+              <span>Progress</span>
+              <div><i style={{ width: `${leaders[0] ? progressPercent(leaders[0].currentStreak, termCount) : 0}%` }} /></div>
+            </div>
+            <div className="vocab-race-layout">
+              <div className="vocab-racer-list">
+                {ranked.length ? ranked.map((participant, index) => {
+                  const character = characterForKey(participant.characterKey);
+                  const progress = progressPercent(participant.currentStreak, termCount);
+                  return (
+                    <div className="vocab-racer-row" key={participant.id}>
+                      <div className="vocab-racer-avatar">{character.glyph}</div>
+                      <div className="vocab-racer-track">
+                        <span
+                          className={`vocab-racer-fill color-${index % 5}`}
+                          style={{ width: `${Math.max(4, progress)}%` }}
+                        />
+                        <strong style={{ left: `${progress}%` }}>{participant.displayName}</strong>
+                      </div>
+                      <div className="vocab-racer-meta">
+                        <span>{participant.currentStreak}/{termCount}</span>
+                        <small>{accuracyPercent(participant.totalCorrect, participant.totalAttempts)}%</small>
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <div className="vocab-leaderboard-empty">
+                    <UsersRound size={34} />
+                    <h2>Waiting for students</h2>
+                    <p>Students who join with code {room.code} will appear here.</p>
+                  </div>
+                )}
+              </div>
+              <aside className="vocab-rank-panel">
+                <Trophy size={28} />
+                <h2>Rank</h2>
+                {ranked.slice(0, 5).map((participant, index) => (
+                  <div className="vocab-rank-row" key={participant.id}>
+                    <strong>{participant.finishRank || index + 1}</strong>
+                    <span>{participant.displayName}</span>
+                  </div>
+                ))}
+              </aside>
+            </div>
+          </section>
+        )}
       </main>
     </>
   );

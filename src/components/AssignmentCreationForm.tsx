@@ -1,16 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FilePenLine, FileUp, Sparkles } from "lucide-react";
+import { FilePenLine, FileUp, ShieldCheck, Sparkles } from "lucide-react";
 import { createMaterial } from "@/app/teacher/actions";
+import {
+  DEFAULT_IN_CLASS_QUESTION_COUNT,
+  MAX_IN_CLASS_QUESTION_COUNT,
+  MIN_IN_CLASS_QUESTION_COUNT,
+  clampMultipleChoiceCount,
+  clampQuestionCount,
+  defaultMultipleChoiceCount
+} from "@/lib/quiz-plan";
 
 const generationSteps = [
   "Looking through the material…",
   "Finding the most important ideas…",
   "Generating student-friendly questions…",
   "Choosing the correct answers…",
+  "Checking for repeated question ideas…",
   "Checking grade-level fit…",
-  "Getting your editable draft ready…"
+  "Getting your editable activity ready…"
 ];
 
 export function AssignmentCreationForm({
@@ -23,6 +32,11 @@ export function AssignmentCreationForm({
   const [creationMode, setCreationMode] = useState<"ai" | "manual">("ai");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
+  const [questionCount, setQuestionCount] = useState(DEFAULT_IN_CLASS_QUESTION_COUNT);
+  const [multipleChoiceCount, setMultipleChoiceCount] = useState(
+    defaultMultipleChoiceCount(DEFAULT_IN_CLASS_QUESTION_COUNT)
+  );
+  const freeResponseCount = questionCount - multipleChoiceCount;
 
   useEffect(() => {
     if (!isGenerating) return;
@@ -31,6 +45,13 @@ export function AssignmentCreationForm({
     }, 1800);
     return () => window.clearInterval(interval);
   }, [isGenerating]);
+
+  function updateQuestionCount(value: number) {
+    const nextQuestionCount = clampQuestionCount(value);
+    const currentRatio = questionCount > 0 ? multipleChoiceCount / questionCount : 0.75;
+    setQuestionCount(nextQuestionCount);
+    setMultipleChoiceCount(clampMultipleChoiceCount(Math.round(nextQuestionCount * currentRatio), nextQuestionCount));
+  }
 
   return (
     <form
@@ -47,6 +68,10 @@ export function AssignmentCreationForm({
 
       <fieldset className="creation-mode-fieldset">
         <legend>How would you like to create it?</legend>
+        <div className="assignment-ai-disclaimer">
+          <ShieldCheck size={17} />
+          <span>AI does not interact directly with students in any way.</span>
+        </div>
         <div className="choice-card-grid">
           <label className={`choice-card ${creationMode === "ai" ? "selected" : ""}`}>
             <input
@@ -57,8 +82,8 @@ export function AssignmentCreationForm({
               onChange={() => setCreationMode("ai")}
             />
             <span>
-              <strong><Sparkles size={18} /> AI-assisted assignment</strong>
-              <small>Upload a lesson, chapter, or reading and Charlotte will build an editable in-class quiz.</small>
+              <strong><Sparkles size={18} /> Charlotte generates an activity</strong>
+              <small>Charlotte is an AI that can create activities by analyzing the material you give it.</small>
             </span>
           </label>
           <label className={`choice-card ${creationMode === "manual" ? "selected" : ""}`}>
@@ -70,16 +95,16 @@ export function AssignmentCreationForm({
               onChange={() => setCreationMode("manual")}
             />
             <span>
-              <strong><FilePenLine size={18} /> Create manually</strong>
-              <small>Start with a blank five-question assignment and write it yourself.</small>
+              <strong><FilePenLine size={18} /> Create your own activity</strong>
+              <small>Start with a blank five-question activity and write it yourself.</small>
             </span>
           </label>
         </div>
       </fieldset>
 
       <label>
-        Assignment title
-        <input name="title" placeholder="Chapter 4 quiz" maxLength={180} required />
+        Activity title
+        <input name="title" placeholder="Chapter 4 activity" maxLength={180} required />
       </label>
 
       <div className="grid two">
@@ -106,11 +131,60 @@ export function AssignmentCreationForm({
       </label>
 
       {creationMode === "ai" && (
-        <label>
-          In-class source file
-          <input name="sourceFile" type="file" accept=".pdf,.docx,.txt,application/pdf" required />
-          <span className="help-text">Use this upload when Charlotte should create the in-class assignment. PDF, DOCX, or TXT, up to 4 MB.</span>
-        </label>
+        <>
+          <section className="quiz-plan-controls" aria-label="Question plan">
+            <label className="quiz-question-count-slider">
+              <span>
+                <strong>Number of questions</strong>
+                <output>{questionCount}</output>
+              </span>
+              <input
+                name="questionCount"
+                type="range"
+                min={MIN_IN_CLASS_QUESTION_COUNT}
+                max={MAX_IN_CLASS_QUESTION_COUNT}
+                step={1}
+                value={questionCount}
+                onChange={(event) => updateQuestionCount(Number(event.target.value))}
+              />
+              <small>{MIN_IN_CLASS_QUESTION_COUNT} minimum - {MAX_IN_CLASS_QUESTION_COUNT} maximum</small>
+            </label>
+
+            <div className="quiz-mix-slider">
+              <input type="hidden" name="freeResponseCount" value={freeResponseCount} />
+              <div className="quiz-mix-readout">
+                <span>
+                  <strong>Free response</strong>
+                  <output>{freeResponseCount}</output>
+                </span>
+                <span>
+                  <strong>Multiple choice</strong>
+                  <output>{multipleChoiceCount}</output>
+                </span>
+              </div>
+              <input
+                name="multipleChoiceCount"
+                type="range"
+                min={0}
+                max={questionCount}
+                step={1}
+                value={multipleChoiceCount}
+                onChange={(event) => setMultipleChoiceCount(clampMultipleChoiceCount(Number(event.target.value), questionCount))}
+                aria-label="Question format mix"
+              />
+              <div className="quiz-mix-scale" aria-hidden="true">
+                <span>More free response</span>
+                <span>More multiple choice</span>
+              </div>
+            </div>
+          </section>
+
+          <label>
+            In-class source file
+            <input name="sourceFile" type="file" accept=".pdf,.docx,.txt,application/pdf" required />
+            <span className="help-text">Use this upload when Charlotte should create the in-class activity. PDF, DOCX, or TXT, up to 4 MB.</span>
+          </label>
+        </>
       )}
 
       <button
@@ -119,7 +193,7 @@ export function AssignmentCreationForm({
         data-showcase-target={isShowcase ? "create-assignment" : undefined}
       >
         {creationMode === "ai" ? <FileUp size={18} /> : <FilePenLine size={18} />}
-        {creationMode === "ai" ? "Create draft with Charlotte" : "Create blank assignment"}
+        {creationMode === "ai" ? "Create activity with Charlotte" : "Create blank activity"}
       </button>
 
       {isGenerating && (
@@ -128,7 +202,7 @@ export function AssignmentCreationForm({
             <div className="loading-orbit" aria-hidden="true">
               <Sparkles size={28} />
             </div>
-            <span>Charlotte is building your assignment</span>
+            <span>Charlotte is building your activity</span>
             <h2>{generationSteps[generationStep]}</h2>
             <p>This usually takes a few moments. You’ll land on an editable draft as soon as the questions are ready.</p>
             <div className="loading-step-list" aria-hidden="true">

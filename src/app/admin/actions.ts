@@ -97,7 +97,7 @@ export async function revealAdminRosterIdentities(
       privacyKeyVerifier: true,
       students: {
         where: { active: true },
-        orderBy: { displayName: "asc" },
+        orderBy: { createdAt: "asc" },
         select: {
           id: true,
           displayName: true,
@@ -120,9 +120,9 @@ export async function revealAdminRosterIdentities(
   const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);
   let rows: AdminRosterRevealState["rows"];
   try {
-    rows = classroom.students.map((student) => ({
+    rows = classroom.students.map((student, index) => ({
       id: student.id,
-      protectedLabel: student.displayName,
+      protectedLabel: `Protected student ${index + 1}`,
       displayName: student.displayNameEncrypted
         ? decryptIdentityValue(student.displayNameEncrypted, derivedKey)
         : student.displayName,

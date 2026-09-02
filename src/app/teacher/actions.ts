@@ -26,6 +26,7 @@ import {
   sendTeacherWelcomeEmail
 } from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
+import { normalizeQuizQuestionPlan } from "@/lib/quiz-plan";
 import { excerptForQuestion } from "@/lib/text-context";
 import { createDefaultSchoolForTeacher, ensureTeacherSchool, type DefaultSchoolOptions } from "@/lib/tenancy";
 import { starsForPlacement } from "@/lib/vocab-dash";
@@ -846,7 +847,10 @@ async function createStudentsFromRows(
 ) {
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, teacherId, schoolId },
-    include: { teacher: { select: { name: true, isShowcase: true } } }
+    include: {
+      teacher: { select: { name: true, isShowcase: true } },
+      _count: { select: { students: true } }
+    }
   });
   if (!classroom) errorRedirect("/teacher", "Class not found.");
 
@@ -862,10 +866,27 @@ async function createStudentsFromRows(
   const privacyKey = cleanPrivacyKey(rawPrivacyKey);
 
   if (classroom.teacher.isShowcase) {
-    if (!verifyClassPrivacyKey(privacyKey, classroom.privacyKeySalt, classroom.privacyKeyVerifier)) {
-      errorRedirect(errorPath, "Enter the classroom recovery key shown when you created this showcase class.");
+    const keyMatchesClass = verifyClassPrivacyKey(
+      privacyKey,
+      classroom.privacyKeySalt,
+      classroom.privacyKeyVerifier
+    );
+    let showcaseRecoveryKeyToSave: string | null = null;
+    let showcasePrivacySalt = classroom.privacyKeySalt || "";
+    let showcasePrivacyVerifier = classroom.privacyKeyVerifier || "";
+    let derivedKey: Buffer;
+
+    if (keyMatchesClass && classroom.privacyKeySalt) {
+      derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt);
+    } else if (classroom._count.students === 0) {
+      showcaseRecoveryKeyToSave = createClassPrivacyRecoveryKey();
+      showcasePrivacySalt = createPrivacyKeySalt();
+      derivedKey = deriveClassPrivacyKey(showcaseRecoveryKeyToSave, showcasePrivacySalt);
+      showcasePrivacyVerifier = privacyKeyVerifierFromDerivedKey(derivedKey);
+    } else {
+      errorRedirect(errorPath, "Enter the classroom recovery key before adding more students to this showcase roster.");
     }
-    const derivedKey = deriveClassPrivacyKey(privacyKey, classroom.privacyKeySalt as string);
+
     const rowsWithHashes = cleaned.map((row) => ({
       ...row,
       emailKeyHash: studentEmailLookupHash(row.email)
@@ -883,6 +904,8 @@ async function createStudentsFromRows(
             data: {
               displayName: row.displayName,
               email: `showcase-${classroomId}-${index + 1}-${crypto.randomUUID()}@demo.charlottelearning.ai`,
+              displayNameEncrypted: encryptIdentityValue(row.displayName, derivedKey),
+              emailEncrypted: encryptIdentityValue(row.email, derivedKey),
               passwordHash
             }
           });
@@ -892,7 +915,7 @@ async function createStudentsFromRows(
               classroomId,
               accountId: account.id,
               displayName: row.displayName,
-              email: row.email,
+              email: null,
               displayNameEncrypted: encryptIdentityValue(row.displayName, derivedKey),
               emailEncrypted: encryptIdentityValue(row.email, derivedKey),
               emailKeyHash: row.emailKeyHash,
@@ -901,6 +924,16 @@ async function createStudentsFromRows(
             select: { id: true }
           });
           created.push({ studentId: student.id });
+        }
+        if (showcaseRecoveryKeyToSave || classroom.identityMode !== IdentityMode.SCHOOL_KEY) {
+          await transaction.classroom.update({
+            where: { id: classroomId },
+            data: {
+              identityMode: IdentityMode.SCHOOL_KEY,
+              privacyKeySalt: showcasePrivacySalt,
+              privacyKeyVerifier: showcasePrivacyVerifier
+            }
+          });
         }
         await transaction.auditEvent.create({
           data: auditEventData({
@@ -919,13 +952,16 @@ async function createStudentsFromRows(
         });
         return created;
       });
+      if (showcaseRecoveryKeyToSave) {
+        await setClassRecoveryKeyFlash(classroom.id, classroom.name, showcaseRecoveryKeyToSave);
+      }
       return cleaned.map((row, index) => ({
         studentId: enrolled[index].studentId,
         studentName: row.displayName,
-	        studentEmail: row.email,
-	        classroomId,
-	        schoolId: classroom.schoolId,
-	        classroomName: classroom.name,
+        studentEmail: row.email,
+        classroomId,
+        schoolId: classroom.schoolId,
+        classroomName: classroom.name,
         teacherId,
         teacherName: classroom.teacher.name,
         hasAccount: true
@@ -982,7 +1018,7 @@ async function createStudentsFromRows(
       classroomId,
       accountId: accountByEmailHash.get(row.emailKeyHash) || null,
       displayName: row.displayName,
-      email: row.email,
+      email: null,
       displayNameEncrypted: encryptIdentityValue(row.displayName, derivedKey),
       emailEncrypted: encryptIdentityValue(row.email, derivedKey),
       emailKeyHash: row.emailKeyHash
@@ -1203,14 +1239,6 @@ export async function revealRosterIdentities(
         ? decryptIdentityValue(student.emailEncrypted, derivedKey)
         : student.email || ""
     }));
-    await prisma.$transaction(
-      rows.map((row) =>
-        prisma.student.update({
-          where: { id: row.id },
-          data: { displayName: row.displayName, email: row.email || null }
-        })
-      )
-    );
     return {
       keyAccepted: true,
       rows
@@ -1336,6 +1364,11 @@ export async function createMaterial(formData: FormData) {
   const creationMode = formText(formData, "creationMode") === "manual" ? "manual" : "ai";
   const dueAt = optionalDate(formText(formData, "dueAt"));
   const readingScope = formText(formData, "readingScope").slice(0, 160) || null;
+  const questionPlan = normalizeQuizQuestionPlan({
+    questionCount: formData.get("questionCount"),
+    multipleChoiceCount: formData.get("multipleChoiceCount"),
+    freeResponseCount: formData.get("freeResponseCount")
+  });
   const estimatedMinutes = Math.min(
     30,
     Math.max(10, Number(formData.get("estimatedMinutes") || 15))
@@ -1395,6 +1428,9 @@ export async function createMaterial(formData: FormData) {
       gradeLevel: classroom.gradeLevel,
       estimatedMinutes,
       text: extracted.text,
+      questionCount: questionPlan.questionCount,
+      multipleChoiceCount: questionPlan.multipleChoiceCount,
+      freeResponseCount: questionPlan.freeResponseCount,
       activityLabel: "In-class activity",
       activityFocus: ""
     });

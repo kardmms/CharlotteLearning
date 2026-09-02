@@ -7,6 +7,8 @@ import {
   nextVocabDashTerm,
   progressPercent,
   rankedParticipants,
+  reshuffledTermIds,
+  resolveVocabDashAnswer,
   starsForPlacement,
   type VocabDashTerm
 } from "../src/lib/vocab-dash.ts";
@@ -56,6 +58,54 @@ test("polling and reconnects keep the same choices in the same positions", () =>
 test("legacy rooms without a saved order have a stable current question", () => {
   assert.equal(nextVocabDashTerm({ terms, answeredTermIds: [] })?.id, "one");
   assert.equal(nextVocabDashTerm({ terms, answeredTermIds: ["one"] })?.id, "two");
+});
+
+test("correct vocab dash answers advance the current streak", () => {
+  const order = terms.map((term) => term.id);
+  const result = resolveVocabDashAnswer({
+    terms,
+    answeredTermIds: [],
+    questionOrderIds: order,
+    termId: "one",
+    answerText: " habitat "
+  });
+
+  assert.ok(result);
+  assert.equal(result.correct, true);
+  assert.equal(result.currentStreak, 1);
+  assert.deepEqual(result.answeredTermIds, ["one"]);
+  assert.deepEqual(result.questionOrderIds, order);
+  assert.equal(result.completed, false);
+});
+
+test("wrong vocab dash answers reset progress and reshuffle the next run", () => {
+  const order = terms.map((term) => term.id);
+  const result = resolveVocabDashAnswer({
+    terms,
+    answeredTermIds: ["one", "two"],
+    questionOrderIds: order,
+    termId: "three",
+    answerText: "producer",
+    random: () => 0.99
+  });
+
+  assert.ok(result);
+  assert.equal(result.correct, false);
+  assert.equal(result.currentStreak, 0);
+  assert.deepEqual(result.answeredTermIds, []);
+  assert.notDeepEqual(result.questionOrderIds, order);
+  assert.equal(result.questionOrderIds.length, terms.length);
+  assert.notEqual(result.questionOrderIds[0], order[0]);
+  assert.equal(result.completed, false);
+});
+
+test("reshuffled retry orders keep every term but avoid the previous sequence", () => {
+  const order = ["three", "one", "five", "two", "four"];
+  const reshuffled = reshuffledTermIds(terms, order, () => 0.99);
+
+  assert.notDeepEqual(reshuffled, order);
+  assert.deepEqual([...reshuffled].sort(), [...order].sort());
+  assert.notEqual(reshuffled[0], order[0]);
 });
 
 test("ranks finishers first and active players by progress", () => {

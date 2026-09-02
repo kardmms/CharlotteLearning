@@ -1,8 +1,11 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { restrictedFetch } from "@/lib/outbound";
+import { normalizeQuizQuestionPlan, type QuizQuestionPlan } from "@/lib/quiz-plan";
 import { standardsReferenceForGrade } from "@/lib/standards";
 import { excerptForQuestion, sourceExcerptWindows } from "@/lib/text-context";
+
+const MAX_GENERATED_QUESTION_CANDIDATES = 16;
 
 function textField(maxLength: number, minLength = 0) {
   return z.preprocess(
@@ -27,7 +30,7 @@ const GeneratedQuestionSchema = z.object({
 
 const GeneratedMaterialSchema = z.object({
   notes: textField(1000).optional(),
-  questions: z.array(GeneratedQuestionSchema).min(5).max(10)
+  questions: z.array(GeneratedQuestionSchema).min(1).max(MAX_GENERATED_QUESTION_CANDIDATES)
 });
 
 const StudentRosterSchema = z.object({
@@ -153,6 +156,152 @@ function normalizeGeneratedQuestion(question: GeneratedQuestion, fallbackContext
     choices,
     correctAnswer: exactChoice || letterChoice || caseChoice || containedChoice || choices[0]
   };
+}
+
+function candidatePlanForQuizPlan(plan: QuizQuestionPlan): QuizQuestionPlan {
+  const extraQuestions = Math.min(4, MAX_GENERATED_QUESTION_CANDIDATES - plan.questionCount);
+  let multipleChoiceExtra = plan.freeResponseCount === 0
+    ? extraQuestions
+    : plan.multipleChoiceCount === 0
+      ? 0
+      : Math.min(extraQuestions, Math.max(1, Math.round(extraQuestions * (plan.multipleChoiceCount / plan.questionCount))));
+  let freeResponseExtra = extraQuestions - multipleChoiceExtra;
+  if (extraQuestions >= 2 && plan.multipleChoiceCount > 0 && plan.freeResponseCount > 0 && freeResponseExtra === 0) {
+    multipleChoiceExtra -= 1;
+    freeResponseExtra = 1;
+  }
+  return {
+    questionCount: plan.questionCount + extraQuestions,
+    multipleChoiceCount: plan.multipleChoiceCount + multipleChoiceExtra,
+    freeResponseCount: plan.freeResponseCount + freeResponseExtra
+  };
+}
+
+const QUESTION_SIMILARITY_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "answer", "because", "before", "best", "choice",
+  "could", "detail", "does", "each", "evidence", "explain", "from", "have", "important",
+  "make", "might", "more", "most", "next", "passage", "question", "reader", "reading",
+  "should", "show", "shows", "student", "text", "that", "their", "there", "these",
+  "thing", "this", "through", "what", "when", "where", "which", "while", "with", "would"
+]);
+
+function similarityTokens(value?: string | null) {
+  return new Set(
+    (value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s'-]/g, " ")
+      .split(/\s+/)
+      .map((word) => word.replace(/'s$/, ""))
+      .filter((word) => word.length > 2 && !QUESTION_SIMILARITY_STOP_WORDS.has(word))
+      .map((word) => word.replace(/s$/, ""))
+      .filter((word) => word.length > 2 && !QUESTION_SIMILARITY_STOP_WORDS.has(word))
+  );
+}
+
+function jaccardScore(left: Set<string>, right: Set<string>) {
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  left.forEach((word) => {
+    if (right.has(word)) intersection += 1;
+  });
+  return intersection / (left.size + right.size - intersection);
+}
+
+function areQuestionsTooSimilar(left: GeneratedQuestion, right: GeneratedQuestion) {
+  const promptScore = jaccardScore(similarityTokens(left.prompt), similarityTokens(right.prompt));
+  if (promptScore >= 0.58) return true;
+
+  const contextScore = jaccardScore(similarityTokens(left.contextExcerpt), similarityTokens(right.contextExcerpt));
+  if (contextScore >= 0.82 && promptScore >= 0.24) return true;
+
+  const sameSkill = Boolean(
+    left.skillTag &&
+    right.skillTag &&
+    left.skillTag.trim().toLowerCase() === right.skillTag.trim().toLowerCase()
+  );
+  if (sameSkill && promptScore >= 0.45) return true;
+
+  const sameAnswer = Boolean(
+    left.correctAnswer &&
+    right.correctAnswer &&
+    left.correctAnswer.trim().toLowerCase() === right.correctAnswer.trim().toLowerCase()
+  );
+  return sameAnswer && (left.type === "VOCAB" || right.type === "VOCAB");
+}
+
+type IndexedGeneratedQuestion = {
+  index: number;
+  question: GeneratedQuestion;
+};
+
+function isMultipleChoiceQuestion(question: GeneratedQuestion) {
+  return (
+    (question.type === "VOCAB" || question.type === "COMPREHENSION") &&
+    Boolean(question.correctAnswer) &&
+    (question.choices?.length || 0) >= 4
+  );
+}
+
+function isWrittenQuestion(question: GeneratedQuestion) {
+  return question.type === "PREDICTION" || question.type === "SHORT_RESPONSE";
+}
+
+function questionForMode(question: GeneratedQuestion, mode: "multiple-choice" | "free-response"): GeneratedQuestion {
+  if (mode === "multiple-choice") {
+    const choices = question.choices?.slice(0, 4) || [];
+    return {
+      ...question,
+      type: question.type === "VOCAB" || question.type === "COMPREHENSION" ? question.type : "COMPREHENSION",
+      choices,
+      correctAnswer: question.correctAnswer || choices[0] || "",
+      rubric: question.rubric || ""
+    };
+  }
+
+  return {
+    ...question,
+    type: question.type === "PREDICTION" || question.type === "SHORT_RESPONSE" ? question.type : "SHORT_RESPONSE",
+    choices: [],
+    correctAnswer: "",
+    rubric: question.rubric || "Strong answers use accurate details from the reading to support the response."
+  };
+}
+
+function selectDiverseQuestions(
+  candidates: IndexedGeneratedQuestion[],
+  count: number,
+  alreadySelected: GeneratedQuestion[]
+) {
+  if (count <= 0) return [];
+  const selected: IndexedGeneratedQuestion[] = [];
+  for (const candidate of candidates) {
+    const comparisonPool = [...alreadySelected, ...selected.map((item) => item.question)];
+    if (comparisonPool.some((question) => areQuestionsTooSimilar(question, candidate.question))) continue;
+    selected.push(candidate);
+    if (selected.length === count) return selected;
+  }
+  throw new Error("Charlotte could not generate enough distinct questions for that mix. Try fewer questions or a more balanced format split.");
+}
+
+function selectQuestionsForPlan(questions: GeneratedQuestion[], plan: QuizQuestionPlan) {
+  const indexed = questions.map((question, index) => ({ index, question }));
+  const multipleChoiceCandidates = indexed
+    .filter(({ question }) => isMultipleChoiceQuestion(question))
+    .map(({ index, question }) => ({ index, question: questionForMode(question, "multiple-choice") }));
+  const writtenCandidates = indexed
+    .filter(({ question }) => isWrittenQuestion(question))
+    .map(({ index, question }) => ({ index, question: questionForMode(question, "free-response") }));
+
+  const selectedMultipleChoice = selectDiverseQuestions(multipleChoiceCandidates, plan.multipleChoiceCount, []);
+  const selectedWritten = selectDiverseQuestions(
+    writtenCandidates,
+    plan.freeResponseCount,
+    selectedMultipleChoice.map((item) => item.question)
+  );
+
+  return [...selectedMultipleChoice, ...selectedWritten]
+    .sort((left, right) => left.index - right.index)
+    .map((item) => item.question);
 }
 
 function normalizeHomePracticeQuestion(
@@ -366,9 +515,18 @@ export async function generateQuestionsFromText(input: {
   gradeLevel: string;
   estimatedMinutes: number;
   text: string;
+  questionCount?: number;
+  multipleChoiceCount?: number;
+  freeResponseCount?: number;
   activityFocus?: string;
   activityLabel?: string;
 }) {
+  const questionPlan = normalizeQuizQuestionPlan({
+    questionCount: input.questionCount,
+    multipleChoiceCount: input.multipleChoiceCount,
+    freeResponseCount: input.freeResponseCount
+  });
+  const candidatePlan = candidatePlanForQuizPlan(questionPlan);
   const apiKey = openAiApiKey();
   if (!apiKey) return demoQuestions(input);
 
@@ -396,6 +554,9 @@ export async function generateQuestionsFromText(input: {
           gradePromptExample(input.gradeLevel),
           "The questions must reward close attention, inference, vocabulary-in-context, and evidence from the uploaded text.",
           "Avoid easy yes/no questions. Avoid questions answerable without reading.",
+          "Choose the strongest questions from the uploaded text, then make sure the final set is varied.",
+          "Do not create questions that are too similar to one another. Avoid repeating the same prompt pattern, target skill, vocabulary word, answer idea, source sentence, or reasoning move.",
+          "Each question should test a distinct moment, concept, word, inference, or evidence decision from the material.",
           "Keep the support wording simple and student-friendly. Challenge may live in the target vocabulary word, inference, evidence, or idea—not in accidental extra words in the question or answer choices.",
           "If a hard word is not the target vocabulary word or the actual skill being assessed, replace it with a clear grade-level synonym.",
           "Avoid answer choices such as 'not just or equitable' unless the question is directly teaching those words. Prefer clearer support wording such as 'not fair.'",
@@ -406,7 +567,10 @@ export async function generateQuestionsFromText(input: {
           "Every question must be genuinely aligned to one California Common Core ELA/Literacy standard for the target grade.",
           "Use exactly this JSON shape:",
           '{"notes":"short teacher note","questions":[{"type":"VOCAB|COMPREHENSION|PREDICTION|SHORT_RESPONSE","prompt":"...","contextExcerpt":"the 1-2 source sentences needed for this question","sourcePage":"book page 12 or PDF page 3","choices":["A","B","C","D"],"correctAnswer":"...","rubric":"...","skillTag":"...","standardCode":"RL.3.1","difficulty":1}]}',
-          "Create 8 questions: 3 VOCAB multiple-choice, 3 COMPREHENSION multiple-choice, 1 PREDICTION written response, and 1 SHORT_RESPONSE evidence question.",
+          `Create a candidate bank of exactly ${candidatePlan.questionCount} questions: ${candidatePlan.multipleChoiceCount} multiple-choice questions and ${candidatePlan.freeResponseCount} free-response questions.`,
+          `The saved activity will use exactly ${questionPlan.questionCount} questions: ${questionPlan.multipleChoiceCount} multiple choice and ${questionPlan.freeResponseCount} free response. Put the strongest, least-overlapping candidates first.`,
+          "Multiple-choice questions must use only VOCAB or COMPREHENSION types. Free-response questions must use only PREDICTION or SHORT_RESPONSE types.",
+          "Use a balanced mix of VOCAB and COMPREHENSION within the multiple-choice questions whenever both are useful. Use a mix of PREDICTION and SHORT_RESPONSE within the free-response questions whenever both are useful.",
           "For multiple-choice questions, include 4 choices and a correctAnswer exactly matching one choice.",
           "For written questions, include a concise teacher rubric instead of a correctAnswer.",
           "California standards reference:",
@@ -421,14 +585,15 @@ export async function generateQuestionsFromText(input: {
   if (!raw) throw new Error("OpenAI did not return question content.");
 
   const parsed = GeneratedMaterialSchema.parse(JSON.parse(raw));
+  const normalizedQuestions = parsed.questions.map((question) =>
+    normalizeGeneratedQuestion(
+      question,
+      excerptForQuestion(input.text, [question.prompt, question.correctAnswer, ...(question.choices || [])].join(" "))
+    )
+  );
   return {
     ...parsed,
-    questions: parsed.questions.map((question) =>
-      normalizeGeneratedQuestion(
-        question,
-        excerptForQuestion(input.text, [question.prompt, question.correctAnswer, ...(question.choices || [])].join(" "))
-      )
-    )
+    questions: selectQuestionsForPlan(normalizedQuestions, questionPlan)
   };
 }
 
@@ -595,9 +760,17 @@ function demoQuestions(input: {
   gradeLevel: string;
   estimatedMinutes: number;
   text: string;
+  questionCount?: number;
+  multipleChoiceCount?: number;
+  freeResponseCount?: number;
   activityFocus?: string;
   activityLabel?: string;
 }) {
+  const questionPlan = normalizeQuizQuestionPlan({
+    questionCount: input.questionCount,
+    multipleChoiceCount: input.multipleChoiceCount,
+    freeResponseCount: input.freeResponseCount
+  });
   const gradeCode =
     input.gradeLevel.toUpperCase() === "K"
       ? "K"
@@ -606,120 +779,314 @@ function demoQuestions(input: {
         : Number(input.gradeLevel) >= 9
           ? "9-10"
           : input.gradeLevel;
+  const multipleChoiceTemplates: GeneratedQuestion[] = [
+    {
+      type: "VOCAB",
+      prompt: "Which word from this part changes the meaning most?",
+      choices: ["setting", "conflict", "detail", "transition"],
+      correctAnswer: "detail",
+      rubric: "",
+      skillTag: "Vocabulary in context",
+      standardCode: `RL.${gradeCode}.4`,
+      difficulty: 3
+    },
+    {
+      type: "VOCAB",
+      prompt: "Which choice best explains why authors repeat descriptive words in a scene?",
+      choices: [
+        "To make the page longer",
+        "To signal what the reader should notice",
+        "To replace character dialogue",
+        "To avoid giving evidence"
+      ],
+      correctAnswer: "To signal what the reader should notice",
+      rubric: "",
+      skillTag: "Author's craft",
+      standardCode: `RL.${gradeCode}.4`,
+      difficulty: 3
+    },
+    {
+      type: "VOCAB",
+      prompt: "When a word has more than one meaning, what should a careful reader use first?",
+      choices: [
+        "The longest sentence on the page",
+        "The first dictionary definition",
+        "Nearby clues in the passage",
+        "The title only"
+      ],
+      correctAnswer: "Nearby clues in the passage",
+      rubric: "",
+      skillTag: "Context clues",
+      standardCode: `L.${gradeCode}.4`,
+      difficulty: 2
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "What important change happens in this part?",
+      choices: [
+        "A character is facing a new problem",
+        "The setting is no longer important",
+        "The narrator stops the story",
+        "The conflict has already ended"
+      ],
+      correctAnswer: "A character is facing a new problem",
+      rubric: "",
+      skillTag: "Close reading",
+      standardCode: `RL.${gradeCode}.1`,
+      difficulty: 4
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "Which answer would need the strongest evidence from the text?",
+      choices: [
+        "Naming a character",
+        "Explaining why a character made a choice",
+        "Finding the title",
+        "Counting sentences"
+      ],
+      correctAnswer: "Explaining why a character made a choice",
+      rubric: "",
+      skillTag: "Evidence",
+      standardCode: `RL.${gradeCode}.1`,
+      difficulty: 4
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "What should a student do when two answer choices both seem partly true?",
+      choices: [
+        "Pick the shorter one",
+        "Choose the one with the clearest text evidence",
+        "Skip the question",
+        "Pick the first one"
+      ],
+      correctAnswer: "Choose the one with the clearest text evidence",
+      rubric: "",
+      skillTag: "Reasoning",
+      standardCode: `RL.${gradeCode}.1`,
+      difficulty: 3
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "Which detail would best show a character's point of view?",
+      choices: [
+        "What the character says or thinks",
+        "How many pages are in the chapter",
+        "The color of the book cover",
+        "The date the book was printed"
+      ],
+      correctAnswer: "What the character says or thinks",
+      rubric: "",
+      skillTag: "Point of view",
+      standardCode: `RL.${gradeCode}.6`,
+      difficulty: 3
+    },
+    {
+      type: "VOCAB",
+      prompt: "What does a transition word usually help a reader understand?",
+      choices: [
+        "The order of ideas",
+        "The author's last name",
+        "The number of paragraphs",
+        "The size of the font"
+      ],
+      correctAnswer: "The order of ideas",
+      rubric: "",
+      skillTag: "Text structure",
+      standardCode: `RI.${gradeCode}.5`,
+      difficulty: 2
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "Which sentence would best support the main idea?",
+      choices: [
+        "A sentence with a key fact",
+        "A sentence from an unrelated topic",
+        "A sentence that only names the title",
+        "A sentence that repeats one word"
+      ],
+      correctAnswer: "A sentence with a key fact",
+      rubric: "",
+      skillTag: "Main idea",
+      standardCode: `RI.${gradeCode}.2`,
+      difficulty: 4
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "Why might an author include dialogue in this part?",
+      choices: [
+        "To show what a character wants or feels",
+        "To hide every important event",
+        "To stop the reader from making inferences",
+        "To replace the setting"
+      ],
+      correctAnswer: "To show what a character wants or feels",
+      rubric: "",
+      skillTag: "Character analysis",
+      standardCode: `RL.${gradeCode}.3`,
+      difficulty: 3
+    },
+    {
+      type: "COMPREHENSION",
+      prompt: "How can the setting affect the problem in a story?",
+      choices: [
+        "It can make the problem harder or easier",
+        "It always removes the problem",
+        "It only tells the reader the title",
+        "It changes the page numbers"
+      ],
+      correctAnswer: "It can make the problem harder or easier",
+      rubric: "",
+      skillTag: "Setting and plot",
+      standardCode: `RL.${gradeCode}.3`,
+      difficulty: 4
+    },
+    {
+      type: "VOCAB",
+      prompt: "Which clue can help a reader figure out an unfamiliar word?",
+      choices: [
+        "A nearby sentence with related meaning",
+        "The longest word in the book",
+        "The page margin",
+        "A random answer choice"
+      ],
+      correctAnswer: "A nearby sentence with related meaning",
+      rubric: "",
+      skillTag: "Context clues",
+      standardCode: `L.${gradeCode}.4`,
+      difficulty: 2
+    }
+  ];
+  const writtenTemplates: GeneratedQuestion[] = [
+    {
+      type: "PREDICTION",
+      prompt: `What might happen next? Use one detail from ${input.activityFocus || "the reading"}.`,
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers make a plausible prediction and cite one concrete detail from the material.",
+      skillTag: "Prediction with evidence",
+      standardCode: `RL.${gradeCode}.1`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "What is one detail a reader might miss? Why does it matter?",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers identify a meaningful detail, explain its importance, and connect it to the larger passage.",
+      skillTag: "Written response",
+      standardCode: `W.${gradeCode}.9`,
+      difficulty: 5
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "Explain how one choice affects what happens later.",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers name one choice, describe its effect, and support the explanation with text evidence.",
+      skillTag: "Cause and effect",
+      standardCode: `RL.${gradeCode}.3`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "What lesson or idea is starting to develop? Use a detail.",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers state a developing theme or central idea and connect it to a relevant detail.",
+      skillTag: "Theme or central idea",
+      standardCode: `RL.${gradeCode}.2`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "How does the setting shape the problem in this part?",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers describe the setting, explain its connection to the problem, and use evidence.",
+      skillTag: "Setting and problem",
+      standardCode: `RL.${gradeCode}.3`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "What question would you ask after reading this part? Explain why.",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers ask a text-based question and explain what detail made the student wonder.",
+      skillTag: "Inquiry",
+      standardCode: `RL.${gradeCode}.1`,
+      difficulty: 3
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "How is the end of this part different from the beginning?",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers compare two moments and explain the change using accurate details.",
+      skillTag: "Story structure",
+      standardCode: `RL.${gradeCode}.5`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "Choose an important phrase and explain what it helps the reader understand.",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers identify a phrase, explain its meaning or effect, and connect it to the passage.",
+      skillTag: "Word meaning",
+      standardCode: `RL.${gradeCode}.4`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "How does the author help the reader understand a character or topic?",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers identify an author's move and support it with a detail from the text.",
+      skillTag: "Author's craft",
+      standardCode: `RL.${gradeCode}.6`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "What is the central idea so far? Include one piece of evidence.",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers state a central idea and cite evidence that directly supports it.",
+      skillTag: "Central idea",
+      standardCode: `RI.${gradeCode}.2`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "Which detail creates the strongest mood? Explain your thinking.",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers name a detail, identify the mood, and explain how the words create that feeling.",
+      skillTag: "Mood",
+      standardCode: `RL.${gradeCode}.4`,
+      difficulty: 4
+    },
+    {
+      type: "SHORT_RESPONSE",
+      prompt: "What is one inference you can make from this part?",
+      choices: [],
+      correctAnswer: "",
+      rubric: "Strong answers state an inference and support it with a specific detail from the reading.",
+      skillTag: "Inference",
+      standardCode: `RL.${gradeCode}.1`,
+      difficulty: 4
+    }
+  ];
+  const questions = [
+    ...multipleChoiceTemplates.slice(0, questionPlan.multipleChoiceCount),
+    ...writtenTemplates.slice(0, questionPlan.freeResponseCount)
+  ];
+
   return {
     notes:
       `Demo draft created locally${input.activityLabel ? ` for ${input.activityLabel}` : ""} because OPENAI_API_KEY is not set. Add the key to .env for source-based drafting.`,
-    questions: [
-      {
-        type: "VOCAB" as const,
-        prompt: "Which word from this part changes the meaning most?",
-        choices: ["setting", "conflict", "detail", "transition"],
-        correctAnswer: "detail",
-        rubric: "",
-        skillTag: "Vocabulary in context",
-        standardCode: `RL.${gradeCode}.4`,
-        difficulty: 3
-      },
-      {
-        type: "VOCAB" as const,
-        prompt: "Which choice best explains why authors repeat important descriptive words in a scene?",
-        choices: [
-          "To make the page longer",
-          "To signal what the reader should notice",
-          "To replace character dialogue",
-          "To avoid giving evidence"
-        ],
-        correctAnswer: "To signal what the reader should notice",
-        rubric: "",
-        skillTag: "Author's craft",
-        standardCode: `RL.${gradeCode}.4`,
-        difficulty: 3
-      },
-      {
-        type: "VOCAB" as const,
-        prompt: "When a word has more than one meaning, what should a careful reader use first?",
-        choices: [
-          "The longest sentence on the page",
-          "The first dictionary definition",
-          "Nearby clues in the passage",
-          "The title only"
-        ],
-        correctAnswer: "Nearby clues in the passage",
-        rubric: "",
-        skillTag: "Context clues",
-        standardCode: `L.${gradeCode}.4`,
-        difficulty: 2
-      },
-      {
-        type: "COMPREHENSION" as const,
-        prompt: "What important change happens in this part?",
-        choices: [
-          "A character is facing a new problem",
-          "The setting is no longer important",
-          "The narrator stops the story",
-          "The conflict has already ended"
-        ],
-        correctAnswer: "A character is facing a new problem",
-        rubric: "",
-        skillTag: "Close reading",
-        standardCode: `RL.${gradeCode}.1`,
-        difficulty: 4
-      },
-      {
-        type: "COMPREHENSION" as const,
-        prompt: "Which answer would need the strongest evidence from the text?",
-        choices: [
-          "Naming a character",
-          "Explaining why a character made a choice",
-          "Finding the title",
-          "Counting sentences"
-        ],
-        correctAnswer: "Explaining why a character made a choice",
-        rubric: "",
-        skillTag: "Evidence",
-        standardCode: `RL.${gradeCode}.1`,
-        difficulty: 4
-      },
-      {
-        type: "COMPREHENSION" as const,
-        prompt: "What should a student do when two answer choices both seem partly true?",
-        choices: [
-          "Pick the shorter one",
-          "Choose the one with the clearest text evidence",
-          "Skip the question",
-          "Pick the first one"
-        ],
-        correctAnswer: "Choose the one with the clearest text evidence",
-        rubric: "",
-        skillTag: "Reasoning",
-        standardCode: `RL.${gradeCode}.1`,
-        difficulty: 3
-      },
-      {
-        type: "PREDICTION" as const,
-        prompt:
-          `What might happen next? Use one detail from ${input.activityFocus || "the reading"}.`,
-        choices: [],
-        correctAnswer: "",
-        rubric:
-          "Strong answers make a plausible prediction and cite one concrete detail from the material.",
-        skillTag: "Prediction with evidence",
-        standardCode: `RL.${gradeCode}.1`,
-        difficulty: 4
-      },
-      {
-        type: "SHORT_RESPONSE" as const,
-        prompt:
-          "What is one detail a reader might miss? Why does it matter?",
-        choices: [],
-        correctAnswer: "",
-        rubric:
-          "Strong answers identify a meaningful detail, explain its importance, and connect it to the larger passage.",
-        skillTag: "Written response",
-        standardCode: `W.${gradeCode}.9`,
-        difficulty: 5
-      }
-    ].map((question) =>
+    questions: questions.map((question) =>
       normalizeGeneratedQuestion(
         question,
         excerptForQuestion(input.text, [question.prompt, question.correctAnswer, ...(question.choices || [])].join(" "))

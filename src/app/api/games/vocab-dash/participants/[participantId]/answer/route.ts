@@ -7,8 +7,8 @@ import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 import {
   buildVocabDashQuestion,
   incorrectAnswers,
-  nextVocabDashTerm,
   progressPercent,
+  resolveVocabDashAnswer,
   starsForPlacement,
   streakTermIds
 } from "@/lib/vocab-dash";
@@ -86,16 +86,23 @@ export async function POST(
       const terms = participant.room.vocabTerms;
       const previousIds = streakTermIds(participant.streakTermIdsJson);
       const questionOrderIds = streakTermIds(participant.questionOrderJson);
-      const term = nextVocabDashTerm({ terms, answeredTermIds: previousIds, questionOrderIds });
-      if (!term || term.id !== termId) {
+      const answerResult = resolveVocabDashAnswer({
+        terms,
+        answeredTermIds: previousIds,
+        questionOrderIds,
+        termId,
+        answerText
+      });
+      if (!answerResult) {
         return { status: 409 as const, payload: { error: "That question is no longer active. Loading the current question." } };
       }
 
-      const correct = term.word.trim().toLowerCase() === answerText.toLowerCase();
-      const nextIds = [...previousIds, term.id];
-      const nextStreak = nextIds.length;
+      const { correct, term } = answerResult;
+      const nextIds = answerResult.answeredTermIds;
+      const nextQuestionOrderIds = answerResult.questionOrderIds;
+      const nextStreak = answerResult.currentStreak;
       const termCount = terms.length;
-      const completed = nextStreak >= termCount;
+      const completed = answerResult.completed;
       const finishRank = completed
         ? await transaction.gameParticipant.count({
           where: { roomId: participant.roomId, schoolId: participant.schoolId, completedAt: { not: null } }
@@ -117,6 +124,7 @@ export async function POST(
           totalCorrect: correct ? { increment: 1 } : undefined,
           currentStreak: nextStreak,
           streakTermIdsJson: JSON.stringify(nextIds),
+          questionOrderJson: correct ? undefined : JSON.stringify(nextQuestionOrderIds),
           incorrectAnswersJson: JSON.stringify(nextIncorrect),
           starsEarned: completed ? starsEarned : undefined,
           completedAt: completed ? new Date() : undefined,
@@ -166,7 +174,7 @@ export async function POST(
           question: completed ? null : buildVocabDashQuestion({
             terms,
             answeredTermIds: nextIds,
-            questionOrderIds
+            questionOrderIds: nextQuestionOrderIds
           })
         }
       };

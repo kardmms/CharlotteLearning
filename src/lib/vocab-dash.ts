@@ -90,6 +90,68 @@ export function shuffledTermIds(terms: VocabDashTerm[]) {
   return shuffle(terms.map((term) => term.id));
 }
 
+function sameStringArray(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function normalizedPreviousOrder(terms: VocabDashTerm[], previousOrderIds: string[]) {
+  const termIds = terms.map((term) => term.id);
+  if (!previousOrderIds.length) return termIds;
+
+  const validPreviousIds = previousOrderIds.filter((id, index) =>
+    termIds.includes(id) && previousOrderIds.indexOf(id) === index
+  );
+  const missingIds = termIds.filter((id) => !validPreviousIds.includes(id));
+  return [...validPreviousIds, ...missingIds];
+}
+
+export function reshuffledTermIds(
+  terms: VocabDashTerm[],
+  previousOrderIds: string[] = [],
+  random = Math.random
+) {
+  const termIds = terms.map((term) => term.id);
+  if (termIds.length <= 1) return termIds;
+
+  const previous = normalizedPreviousOrder(terms, previousOrderIds);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const nextOrder = shuffle(termIds, random);
+    if (!sameStringArray(nextOrder, previous) && nextOrder[0] !== previous[0]) {
+      return nextOrder;
+    }
+  }
+
+  const shift = 1 + Math.floor(random() * (termIds.length - 1));
+  return [...previous.slice(shift), ...previous.slice(0, shift)];
+}
+
+export function resolveVocabDashAnswer(input: {
+  terms: VocabDashTerm[];
+  answeredTermIds: string[];
+  questionOrderIds: string[];
+  termId: string;
+  answerText: string;
+  random?: () => number;
+}) {
+  const term = nextVocabDashTerm(input);
+  if (!term || term.id !== input.termId) return null;
+
+  const correct = term.word.trim().toLowerCase() === input.answerText.trim().toLowerCase();
+  const nextAnsweredTermIds = correct ? [...input.answeredTermIds, term.id] : [];
+  const nextQuestionOrderIds = correct
+    ? input.questionOrderIds
+    : reshuffledTermIds(input.terms, input.questionOrderIds, input.random);
+
+  return {
+    term,
+    correct,
+    answeredTermIds: nextAnsweredTermIds,
+    questionOrderIds: nextQuestionOrderIds,
+    currentStreak: nextAnsweredTermIds.length,
+    completed: correct && nextAnsweredTermIds.length >= input.terms.length
+  };
+}
+
 export function incorrectAnswers(value: string) {
   try {
     const parsed = JSON.parse(value);

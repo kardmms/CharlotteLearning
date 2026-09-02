@@ -73,7 +73,7 @@ export function VocabDashPlayer({
       }
       const next = await response.json() as GamePayload;
       if (answering.current) return;
-      setPayload((current) => next.streak < current.streak ? current : next);
+      setPayload(next);
       setLoadError("");
       setSelected("");
     } catch {
@@ -109,7 +109,7 @@ export function VocabDashPlayer({
         return;
       }
       const next = await response.json() as GamePayload;
-      setFeedback(next.correct ? "Correct." : `Incorrect. The answer was ${next.correctAnswer}.`);
+      setFeedback(next.correct ? "Correct." : `Incorrect. The answer was ${next.correctAnswer}. Score reset to 0.`);
       await new Promise((resolve) => window.setTimeout(resolve, 750));
       setFeedback("");
       setPayload(next);
@@ -137,7 +137,7 @@ export function VocabDashPlayer({
         </div>
 
         <div className="vocab-player-progress">
-          <span>Answered: {payload.streak}/{payload.termCount}</span>
+          <span>Score: {payload.streak}/{payload.termCount}</span>
           <div><i style={{ width: `${progress}%` }} /></div>
         </div>
 

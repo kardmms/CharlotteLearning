@@ -143,8 +143,8 @@ export async function getClassroomMonthlyPerformance(classroomId: string, school
       teacher: { select: { name: true } },
       students: {
         where: { ...(schoolId ? { schoolId } : {}), active: true },
-        orderBy: { displayName: "asc" },
-        select: { id: true, displayName: true }
+        orderBy: { createdAt: "asc" },
+        select: { id: true }
       },
       materials: {
         where: {
@@ -194,7 +194,7 @@ export async function getClassroomMonthlyPerformance(classroomId: string, school
     months,
     students: classroom.students.map((student, index) => ({
       id: student.id,
-      label: classroom.identityMode === "SCHOOL_KEY" ? student.displayName : `Student ${index + 1}`,
+      label: classroom.identityMode === "SCHOOL_KEY" ? `Protected student ${index + 1}` : `Student ${index + 1}`,
       months: scoreByStudent.get(student.id) ?? []
     }))
   };

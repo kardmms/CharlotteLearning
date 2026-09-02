@@ -79,7 +79,7 @@ function guideStep(pathname: string, props: ShowcaseGuideProps): GuideStep {
       tasks: [
         "Open Create assignment",
         "Add a title and source file",
-        "Click Create draft with Charlotte"
+        "Click Create activity with Charlotte"
       ],
       target: onNewMaterialPage ? "create-assignment" : undefined,
       action: onNewMaterialPage
