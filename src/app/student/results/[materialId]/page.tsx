@@ -5,6 +5,7 @@ import { logoutStudent } from "@/app/student/actions";
 import { CompletionCelebration } from "@/components/CompletionCelebration";
 import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { studentBandClass } from "@/lib/grade";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export default async function StudentResultPage({
   const rank = leaderboard.findIndex((entry) => entry.id === student.id) + 1;
 
   return (
-    <div className="student-result-shell">
+    <div className={`student-result-shell ${studentBandClass(student.classroom.gradeLevel)}`}>
       {query.ended !== "focus" && !session.endedByFocusLoss && (
         <CompletionCelebration points={session.pointsEarned} unit={material.activityKind === "AT_HOME" ? "stars" : "points"} />
       )}
@@ -90,7 +91,7 @@ export default async function StudentResultPage({
         </section>
 
         <section className="result-score-grid">
-          <div className="result-score-card"><strong>{score}%</strong><span>Score</span></div>
+          <div className={`result-score-card ${pending ? "pending" : ""}`}><strong>{pending ? "Pending" : `${score}%`}</strong><span>{pending ? "Final score" : "Score"}</span></div>
           <div className="result-score-card points"><strong>{session.pointsEarned}</strong><span>{material.activityKind === "AT_HOME" ? "Stars earned" : "Points earned"}</span></div>
           <div className="result-score-card"><strong>{durationMinutes}m</strong><span>Time</span></div>
         </section>

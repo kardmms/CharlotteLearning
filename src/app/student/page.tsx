@@ -147,7 +147,7 @@ export default async function StudentHomePage({
                 <>
                   <div className="student-start-meta">
                     <span><Clock3 size={17} /> {selectedActivity.estimatedMinutes} minutes</span>
-                    {activityView === "class" && <span>{selectedActivity._count.questions} questions</span>}
+                    {activityView === "class" && <span>{selectedActivity.adaptiveQuestionSet ? 10 : selectedActivity._count.questions} questions</span>}
                     <span><Star size={17} /> {activityView === "home" ? "5 stars on your first completion" : "Up to 100 points"}</span>
                     <span>{formatDue(selectedActivity.dueAt)}</span>
                   </div>

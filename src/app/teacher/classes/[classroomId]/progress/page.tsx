@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Mail } from "lucide-react";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { BubbleState, StatusBubble } from "@/components/StatusBubble";
@@ -6,7 +7,11 @@ import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gradeLabel } from "@/lib/grade";
 import { buildStudentMonthlyScores, recentMonthStarts } from "@/lib/monthly-performance";
+import { latestScoredSession, performanceAlertsFromMaterials } from "@/lib/performance-trends";
+import { suggestTrendFollowUps } from "@/lib/ai";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { notFound } from "next/navigation";
+import { CATEGORY_LABELS, QUESTION_CATEGORIES, selectedQuestions } from "@/lib/adaptive-assessment";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +76,7 @@ export default async function ProgressPage({
     include: {
       students: {
         where: { schoolId: teacher.schoolId, active: true },
-        orderBy: { displayName: "asc" }
+        orderBy: { displayName: "asc" },
       },
       materials: {
         where: {
@@ -90,7 +95,10 @@ export default async function ProgressPage({
   });
   if (!classroom) notFound();
   const material = classroom.materials[0];
-  const [sessions, monthlyMaterials] = await Promise.all([
+  const progressHeaders = material?.adaptiveQuestionSet
+    ? Array.from({ length: 10 }, (_, index) => ({ label: `${CATEGORY_LABELS[QUESTION_CATEGORIES[Math.floor(index / 2)]]} ${index % 2 + 1}`, questionId: null as string | null }))
+    : (material?.questions || []).map((question, index) => ({ label: String(index + 1), questionId: question.id }));
+  const [sessions, monthlyMaterials, trendMaterials] = await Promise.all([
     material
       ? prisma.studentSession.findMany({
         where: {
@@ -128,8 +136,84 @@ export default async function ProgressPage({
           }
         }
       }
+    }),
+    prisma.material.findMany({
+      where: {
+        schoolId: teacher.schoolId,
+        classroomId: classroom.id,
+        teacherId: teacher.id,
+        status: "PUBLISHED",
+        activityKind: "IN_CLASS",
+        isAdaptiveHome: false
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        sessions: {
+          where: { schoolId: teacher.schoolId, status: "COMPLETED" },
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+            pointsEarned: true,
+            signInAt: true,
+            completedAt: true,
+            answers: { select: {
+              isCorrect: true,
+              answerText: true,
+              question: { select: { prompt: true, skillTag: true, correctAnswer: true } }
+            } }
+          }
+        }
+      }
     })
   ]);
+  const trendAlerts = performanceAlertsFromMaterials(trendMaterials, classroom.students);
+  const classAverages = new Map(trendMaterials.map((assignment) => {
+    const scores = classroom.students.flatMap((student) => {
+      const session = latestScoredSession(assignment.sessions, student.id);
+      return session ? [Math.max(0, Math.min(100, session.pointsEarned))] : [];
+    });
+    return [assignment.id, scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0];
+  }));
+  const trendEvidence = new Map(trendAlerts.map((alert) => [alert.studentId, trendMaterials.flatMap((assignment) => {
+    const session = latestScoredSession(assignment.sessions, alert.studentId);
+    if (!session) return [];
+    return [{
+      materialId: assignment.id,
+      sessionId: session.id,
+      title: assignment.title,
+      date: assignment.createdAt,
+      score: Math.max(0, Math.min(100, session.pointsEarned)),
+      classAverage: classAverages.get(assignment.id) || 0,
+      missed: session.answers.filter((answer) => answer.isCorrect === false).map((answer) => ({
+        prompt: answer.question.prompt,
+        skill: answer.question.skillTag || "Reading comprehension",
+        answer: answer.answerText,
+        correctAnswer: answer.question.correctAnswer
+      }))
+    }];
+  }).reverse()]));
+  let trendAdvice = new Map<string, { analysis: string; nextStep: string }>();
+  if (trendAlerts.length && (process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY)) {
+    try {
+      await enforceRateLimit({ scope: "teacher-trend-advice", limit: 12, windowSeconds: 60 * 60, identifier: `${teacher.id}:${classroomId}` });
+      trendAdvice = await suggestTrendFollowUps(
+        trendAlerts.map((alert, index) => {
+          const evidence = trendEvidence.get(alert.studentId) || [];
+          return {
+            label: `S${index + 1}`,
+            trend: alert.message,
+            gradeLevel: classroom.gradeLevel,
+            scores: evidence.slice(-8).map(({ score, classAverage }) => ({ score, classAverage })),
+            missedQuestions: evidence.flatMap(({ missed }) => missed).slice(-12).map(({ prompt, skill }) => ({ prompt: prompt.slice(0, 300), skill }))
+          };
+        })
+      );
+    } catch { /* Show numeric trends when AI advice is unavailable. */ }
+  }
   const studentMonthlyScores = buildStudentMonthlyScores(
     monthlyMaterials,
     classroom.students.map((student) => student.id),
@@ -151,7 +235,15 @@ export default async function ProgressPage({
       latestFinalizedSessionByStudent.set(session.studentId, session);
     }
   }
-  const colSpan = 7 + (material?.questions.length ?? 0);
+  const alerts = classroom.students.flatMap((student) => {
+    const session = latestSessionByStudent.get(student.id);
+    if (!session) return [];
+    const safetyFlags = session.answers.filter((answer) => answer.safetyFlaggedAt).length;
+    return safetyFlags || session.focusViolationCount
+      ? [{ student, session, safetyFlags }]
+      : [];
+  });
+  const colSpan = 7 + progressHeaders.length;
 
   return (
     <>
@@ -178,6 +270,80 @@ export default async function ProgressPage({
           </div>
         </section>
 
+        <section className="panel progress-attention-panel" id="notifications" aria-labelledby="notifications-title">
+          <div className="panel-header">
+            <div><div className="eyebrow">Student trends</div><h2 id="notifications-title">Notifications</h2></div>
+            {trendAlerts.length > 0 && <span className="trend-alert-count">{trendAlerts.length}</span>}
+          </div>
+          {trendAlerts.length ? (
+            <div className="charlotte-message-list">
+              {trendAlerts.map((alert, index) => {
+                const evidence = trendEvidence.get(alert.studentId) || [];
+                const insight = trendAdvice.get(`S${index + 1}`);
+                const declining = alert.message.startsWith("Scores fell");
+                const persistentlyLow = alert.message.startsWith("Scored below 60%");
+                return <article className="charlotte-message" key={alert.studentId}>
+                  <header className="charlotte-message-header">
+                    <span className="charlotte-message-avatar"><Mail size={21} /></span>
+                    <div><strong>Charlotte</strong><span>To: Your class dashboard</span></div>
+                    <span className="status-pill status-yellow">Student trend</span>
+                  </header>
+                  <div className="charlotte-message-body">
+                    <h3>{declining ? `Looks like ${alert.studentName}’s scores have been going down` : persistentlyLow ? `Looks like ${alert.studentName} has been struggling across recent assignments` : `Looks like ${alert.studentName} has been scoring below the class average`}</h3>
+                    <p>Take a look at their assignments and trends below. {alert.message}</p>
+                    <section className="trend-score-chart" aria-label={`${alert.studentName}'s assignment score chart`}>
+                      <div className="trend-section-heading"><h4>Previous assignments</h4><span>Blue: student · Marker: class average</span></div>
+                      <div className="trend-chart-axis" aria-hidden="true"><span>0</span><span>25</span><span>50</span><span>75</span><span>100%</span></div>
+                      <ol>
+                        {evidence.map((assignment) => <li key={assignment.materialId}>
+                          <div className="trend-assignment-heading"><strong>{assignment.title}</strong><span>{formatDate(assignment.date)}</span></div>
+                          <div className="trend-score-row" aria-label={`${assignment.score}% score; class average ${assignment.classAverage}%`}>
+                            <div className="trend-score-track"><span style={{ width: `${assignment.score}%` }} /><i style={{ left: `${assignment.classAverage}%` }} /></div>
+                            <strong>{assignment.score}%</strong>
+                          </div>
+                          <div className="trend-missed-questions">
+                            <strong>Questions missed ({assignment.missed.length})</strong>
+                            {assignment.missed.length ? <ul>{assignment.missed.map((missed, questionIndex) => <li key={questionIndex}>
+                              <span>{missed.skill}</span>
+                              <p>{missed.prompt}</p>
+                              <small>Student answer: {missed.answer || "No answer recorded"}{missed.correctAnswer ? ` · Correct answer: ${missed.correctAnswer}` : ""}</small>
+                            </li>)}</ul> : <p>No missed graded questions on this assignment.</p>}
+                            <Link href={`/teacher/classes/${classroom.id}/materials/${assignment.materialId}/responses/${assignment.sessionId}`}>View full response</Link>
+                          </div>
+                        </li>)}
+                      </ol>
+                    </section>
+                    <section className="trend-ai-analysis" aria-label="Charlotte's analysis">
+                      <h4>Charlotte’s analysis</h4>
+                      {insight ? <><p>{insight.analysis}</p><p><strong>How to help:</strong> {insight.nextStep}</p></> : <p>AI analysis is unavailable right now. Review the missed questions above for patterns.</p>}
+                    </section>
+                  </div>
+                </article>;
+              })}
+            </div>
+          ) : <p>No repeated declines or below-class scores across each student&apos;s latest three scored assignments.</p>}
+        </section>
+
+        <section className="panel progress-attention-panel" id="alerts" aria-labelledby="alerts-title">
+          <div className="panel-header">
+            <div><div className="eyebrow">Current assignment</div><h2 id="alerts-title">Alerts</h2></div>
+            {alerts.length > 0 && <span className="trend-alert-count alert-count">{alerts.length}</span>}
+          </div>
+          {alerts.length ? (
+            <ul className="trend-alert-list">
+              {alerts.map(({ student, session, safetyFlags }) => (
+                <li key={student.id}>
+                  <strong>{student.displayName}</strong>
+                  <span>{[
+                    safetyFlags ? `${safetyFlags} safety flag${safetyFlags === 1 ? "" : "s"}` : "",
+                    session.focusViolationCount ? `${session.focusViolationCount} focus violation${session.focusViolationCount === 1 ? "" : "s"}` : ""
+                  ].filter(Boolean).join(" · ")}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p>No safety or focus alerts for this assignment.</p>}
+        </section>
+
         <section style={{ marginTop: 18 }}>
           <p className="progress-material-name">
             Assignment: <strong>{material?.title ?? "No published assignment"}</strong>
@@ -187,14 +353,9 @@ export default async function ProgressPage({
               <thead>
                 <tr>
                   <th>Student</th>
-                  {material?.questions.map((question, index) => (
-                    <th key={question.id}>
-                      <Link
-                        className="question-number-link"
-                        href={`/teacher/classes/${classroom.id}/materials/${material.id}/questions/${question.id}/responses`}
-                      >
-                        {index + 1}
-                      </Link>
+                  {progressHeaders.map((header, index) => (
+                    <th key={index}>
+                      {header.questionId && material ? <Link className="question-number-link" href={`/teacher/classes/${classroom.id}/materials/${material.id}/questions/${header.questionId}/responses`}>{header.label}</Link> : header.label}
                     </th>
                   ))}
                   <th>Answers</th>
@@ -211,6 +372,9 @@ export default async function ProgressPage({
                   const latestFinalized = latestFinalizedSessionByStudent.get(student.id);
                   const monthly = monthlyScoreByStudent.get(student.id);
                   const safetyFlagCount = latest?.answers.filter((answer) => answer.safetyFlaggedAt).length ?? 0;
+                  const rowQuestions = material?.adaptiveQuestionSet
+                    ? latest ? selectedQuestions(material.questions, latest.assignedQuestionIdsJson) : []
+                    : material?.questions || [];
                   return (
                     <tr key={student.id}>
                       <td>
@@ -224,7 +388,9 @@ export default async function ProgressPage({
                           </span>
                         </div>
                       </td>
-                      {material?.questions.map((question, index) => {
+                      {progressHeaders.map((_, index) => {
+                        const question = rowQuestions[index];
+                        if (!question) return <td key={index}><StatusBubble state="not-started" label={`Question ${index + 1}`} /></td>;
                         const answer = latest?.answers.find((item) => item.questionId === question.id);
                         const state = questionState(question, answer);
                         return (

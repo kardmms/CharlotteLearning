@@ -31,8 +31,9 @@ export function gradeIndex(value?: string | null) {
 export function studentBandClass(value?: string | null) {
   const index = gradeIndex(value);
   if (index <= 4) return "student-k4";
-  if (index <= 7) return "student-5-7";
-  return "student-8plus";
+  if (index === 5) return "student-5-7";
+  if (index <= 7) return "student-5-7 student-secondary";
+  return "student-8plus student-secondary";
 }
 
 export function studentBandLabel(value?: string | null) {

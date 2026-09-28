@@ -30,6 +30,8 @@ export default async function VocabDashPlayPage({
     <VocabDashPlayer
       participantId={participant.id}
       displayName={participant.displayName}
+      characterColor={participant.characterColor}
+      accessoryKey={participant.accessoryKey}
       roomCode={participant.room.code}
       initialStatus={participant.room.status}
       termCount={participant.room.vocabTerms.length}

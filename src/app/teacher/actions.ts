@@ -16,7 +16,10 @@ import {
   verifyPassword
 } from "@/lib/auth";
 import { normalizeStudentEmail } from "@/lib/codes";
-import { extractStudentRosterWithAI, generateQuestionsFromText, generateVocabDashTerms } from "@/lib/ai";
+import { extractStudentRosterWithAI, generateAdaptiveTestsFromText, generateQuestionsFromText, generateReadingFromTopic, reviseReadingFromFeedback, generateVocabDashTerms, type GeneratedAdaptiveQuestion } from "@/lib/ai";
+import { selectedQuestions, validatePublishedQuestionBank, validateQuestionBank } from "@/lib/adaptive-assessment";
+import { refreshStudentCategoryRanks } from "@/lib/student-category-ranks";
+import { selectReadingScope } from "@/lib/reading-scope";
 import { BotProtectionError, enforceTurnstile } from "@/lib/bot-protection";
 import { extractTextFromUpload } from "@/lib/extract-text";
 import { gamesFeatureEnabled } from "@/lib/features";
@@ -26,7 +29,6 @@ import {
   sendTeacherWelcomeEmail
 } from "@/lib/email";
 import { normalizeGrade } from "@/lib/grade";
-import { normalizeQuizQuestionPlan } from "@/lib/quiz-plan";
 import { excerptForQuestion } from "@/lib/text-context";
 import { createDefaultSchoolForTeacher, ensureTeacherSchool, type DefaultSchoolOptions } from "@/lib/tenancy";
 import { starsForPlacement } from "@/lib/vocab-dash";
@@ -565,10 +567,10 @@ export async function createVocabDashDraft(formData: FormData) {
   if (file instanceof File && file.size > 0) {
     try {
       const extracted = await extractTextFromUpload(file, {
-        maxBytes: 90 * 1024 * 1024,
+        maxBytes: 4 * 1024 * 1024,
         minChars: 100,
         maxChars: 180_000,
-        uploadLabel: "90 MB"
+        uploadLabel: "4 MB"
       });
       sourceText = [manualText, extracted.text].filter(Boolean).join("\n\n");
       sourceLabel = extracted.sourceName;
@@ -593,7 +595,7 @@ export async function createVocabDashDraft(formData: FormData) {
     errorRedirect(path, "Charlotte found fewer than 10 vocabulary words. Add more words or edit the source.");
   }
   if (terms.some((term) => !term.definition.trim())) {
-    errorRedirect(path, "Charlotte could not generate definitions yet. Add an OpenAI API key, or include definitions with the words.");
+    errorRedirect(path, "Charlotte could not generate definitions right now. Try again, or include a definition beside each word.");
   }
 
   const code = await createUniqueGameRoomCode();
@@ -664,6 +666,11 @@ export async function saveVocabDashTermsAndOpenRoom(formData: FormData) {
   }
 
   await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT "id" FROM "GameRoom" WHERE "id" = ${room.id} FOR UPDATE`;
+    const current = await transaction.gameRoom.findUnique({ where: { id: room.id } });
+    if (current?.status !== GameRoomStatus.WAITING) {
+      errorRedirect("/teacher/games", "This game has already started. Its words cannot be changed.");
+    }
     await transaction.gameVocabTerm.deleteMany({ where: { roomId: room.id, schoolId: room.schoolId } });
     await transaction.gameVocabTerm.createMany({
       data: terms.map((term, index) => ({
@@ -699,46 +706,33 @@ export async function startVocabDashRoom(formData: FormData) {
     await enforceRateLimit({ scope: "teacher-start-game-room", limit: 80, windowSeconds: 60 * 60, identifier: teacher.id });
   });
 
-  const room = await prisma.gameRoom.findFirst({
-    where: { id: roomId, teacherId: teacher.id, schoolId: teacher.schoolId, kind: GameKind.VOCAB_DASH },
-    include: { _count: { select: { vocabTerms: true, participants: true } } }
-  });
-  if (!room) errorRedirect("/teacher/games", "Game room not found.");
-  if (room.status === GameRoomStatus.COMPLETED) {
-    redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
-  }
-  if (room.status !== GameRoomStatus.WAITING) {
-    redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
-  }
-  if (room._count.vocabTerms < 10) {
-    errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}/setup`, "Add at least 10 words before starting.");
-  }
-  if (room._count.participants < 2) {
-    errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}`, "At least 2 students must join before the game can start.");
-  }
-
-  await prisma.$transaction([
-    prisma.gameRoom.update({
+  await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT "id" FROM "GameRoom" WHERE "id" = ${roomId} FOR UPDATE`;
+    const room = await transaction.gameRoom.findFirst({
+      where: { id: roomId, teacherId: teacher.id, schoolId: teacher.schoolId, kind: GameKind.VOCAB_DASH },
+      include: { _count: { select: { vocabTerms: true, participants: true } } }
+    });
+    if (!room) errorRedirect("/teacher/games", "Game room not found.");
+    if (room.status !== GameRoomStatus.WAITING) return;
+    if (room._count.vocabTerms < 10) {
+      errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}/setup`, "Add at least 10 words before starting.");
+    }
+    if (room._count.participants < 2) {
+      errorRedirect(`/teacher/games/vocab-dash/rooms/${room.id}`, "At least 2 students must join before the game can start.");
+    }
+    await transaction.gameRoom.update({
       where: { id: room.id },
-      data: {
-        status: GameRoomStatus.STARTING,
-        startedAt: room.startedAt ?? new Date()
-      }
-    }),
-    prisma.auditEvent.create({
+      data: { status: GameRoomStatus.STARTING, startedAt: new Date() }
+    });
+    await transaction.auditEvent.create({
       data: auditEventData({
-        schoolId: room.schoolId,
-        actorType: "teacher",
-        actorId: teacher.id,
-        action: "game_room.started",
-        targetType: "game_room",
-        targetId: room.id,
+        schoolId: room.schoolId, actorType: "teacher", actorId: teacher.id,
+        action: "game_room.started", targetType: "game_room", targetId: room.id,
         metadata: { kind: "VOCAB_DASH" }
       })
-    })
-  ]);
-
-  redirect(`/teacher/games/vocab-dash/rooms/${room.id}/leaderboard`);
+    });
+  });
+  redirect(`/teacher/games/vocab-dash/rooms/${roomId}/leaderboard`);
 }
 
 export async function endVocabDashRoom(formData: FormData) {
@@ -1357,6 +1351,63 @@ export async function prepareStudentImport(
   }
 }
 
+function readingTargetWords(gradeLevel: string, requested: number) {
+  const grade = Number.parseInt(gradeLevel, 10) || 7;
+  const maxWords = grade <= 6 ? 350 : grade <= 8 ? 500 : grade <= 9 ? 600 : 750;
+  return Math.min(maxWords, Math.max(200, Number.isFinite(requested) ? requested : 350));
+}
+
+async function authorizedReadingClassroom(classroomId: string) {
+  const teacher = await requireTeacher();
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
+    select: { gradeLevel: true }
+  });
+  if (!classroom) throw new Error("Class not found.");
+  await enforceRateLimit({ scope: "teacher-ai-reading", limit: 30, windowSeconds: 60 * 60, identifier: teacher.id });
+  return classroom;
+}
+
+export async function draftTopicReading(input: {
+  classroomId: string;
+  topic: string;
+  genre: "fiction" | "nonfiction";
+  focus: string;
+  targetWords: number;
+}) {
+  const classroom = await authorizedReadingClassroom(input.classroomId);
+  const topic = input.topic.trim().slice(0, 160);
+  if (topic.length < 3) throw new Error("Enter a topic with at least three characters.");
+  return generateReadingFromTopic({
+    topic,
+    genre: input.genre === "fiction" ? "fiction" : "nonfiction",
+    focus: input.focus.trim().slice(0, 240),
+    targetWords: readingTargetWords(classroom.gradeLevel, input.targetWords),
+    gradeLevel: classroom.gradeLevel
+  });
+}
+
+export async function reviseTopicReading(input: {
+  classroomId: string;
+  text: string;
+  feedback: string;
+  genre: "fiction" | "nonfiction";
+  targetWords: number;
+}) {
+  const classroom = await authorizedReadingClassroom(input.classroomId);
+  const text = input.text.trim().slice(0, 12_000);
+  const feedback = input.feedback.trim().slice(0, 1_200);
+  if (text.length < 500) throw new Error("Generate a reading before asking Charlotte to revise it.");
+  if (feedback.length < 4) throw new Error("Tell Charlotte what you want changed.");
+  return reviseReadingFromFeedback({
+    text,
+    feedback,
+    genre: input.genre === "fiction" ? "fiction" : "nonfiction",
+    targetWords: readingTargetWords(classroom.gradeLevel, input.targetWords),
+    gradeLevel: classroom.gradeLevel
+  });
+}
+
 export async function createMaterial(formData: FormData) {
   const teacher = await requireTeacher();
   const classroomId = formText(formData, "classroomId");
@@ -1364,11 +1415,6 @@ export async function createMaterial(formData: FormData) {
   const creationMode = formText(formData, "creationMode") === "manual" ? "manual" : "ai";
   const dueAt = optionalDate(formText(formData, "dueAt"));
   const readingScope = formText(formData, "readingScope").slice(0, 160) || null;
-  const questionPlan = normalizeQuizQuestionPlan({
-    questionCount: formData.get("questionCount"),
-    multipleChoiceCount: formData.get("multipleChoiceCount"),
-    freeResponseCount: formData.get("freeResponseCount")
-  });
   const estimatedMinutes = Math.min(
     30,
     Math.max(10, Number(formData.get("estimatedMinutes") || 15))
@@ -1415,25 +1461,49 @@ export async function createMaterial(formData: FormData) {
     redirect(`/teacher/classes/${classroomId}/materials/${material.id}/review`);
   }
 
+  const sourceMode = formText(formData, "sourceMode") === "topic" ? "topic" : "book";
   const file = formData.get("sourceFile");
-  if (!(file instanceof File) || file.size === 0) {
+  if (sourceMode === "book" && (!(file instanceof File) || file.size === 0)) {
     errorRedirect(path, "Please upload a PDF, DOCX, or TXT lesson plan.");
   }
 
   let materialId = "";
   try {
-    const extracted = await extractTextFromUpload(file);
-    const generated = await generateQuestionsFromText({
-      title,
-      gradeLevel: classroom.gradeLevel,
-      estimatedMinutes,
-      text: extracted.text,
-      questionCount: questionPlan.questionCount,
-      multipleChoiceCount: questionPlan.multipleChoiceCount,
-      freeResponseCount: questionPlan.freeResponseCount,
-      activityLabel: "In-class activity",
-      activityFocus: ""
-    });
+    let extracted: { sourceName: string; sourceHash: string; sourcePreview: string; text: string };
+    if (sourceMode === "topic") {
+      const approvedText = formText(formData, "approvedReading").slice(0, 12_000).trim();
+      if (approvedText.length < 500) throw new Error("Review and approve Charlotte's reading before generating questions.");
+      const readingTitle = approvedText.split(/\r?\n/, 1)[0].trim().slice(0, 120) || title;
+      extracted = {
+        sourceName: `Charlotte-generated: ${readingTitle}`.slice(0, 180),
+        sourceHash: crypto.createHash("sha256").update(approvedText).digest("hex"),
+        sourcePreview: approvedText.slice(0, 1800),
+        text: approvedText
+      };
+    } else {
+      extracted = await extractTextFromUpload(file as File);
+    }
+    const scopedText = sourceMode === "book" ? selectReadingScope(extracted.text, readingScope || "") : extracted.text;
+    const adaptive = formText(formData, "assessmentMode") === "adaptive";
+    if (adaptive && scopedText.length > 50_000) {
+      throw new Error("Choose a shorter chapter or page range so Charlotte can build five accurate tests.");
+    }
+    const generated = adaptive
+      ? await generateAdaptiveTestsFromText({ title, gradeLevel: classroom.gradeLevel, text: scopedText })
+      : await generateQuestionsFromText({
+          title,
+          gradeLevel: classroom.gradeLevel,
+          estimatedMinutes,
+          text: scopedText,
+          activityLabel: "In-class activity",
+          activityFocus: ""
+        });
+    if (adaptive && !validateQuestionBank(generated.questions.map((question, index) => ({
+      id: String(index),
+      category: adaptive ? (question as GeneratedAdaptiveQuestion).category : null,
+      difficulty: question.difficulty,
+      prompt: question.prompt
+    })))) throw new Error("Charlotte could not complete all five tests. Please try again.");
 
     const material = await prisma.material.create({
       data: {
@@ -1448,8 +1518,9 @@ export async function createMaterial(formData: FormData) {
         availableAt: new Date(),
         sourceName: extracted.sourceName,
         sourceHash: extracted.sourceHash,
-        sourcePreview: extracted.sourcePreview,
-        sourceText: extracted.text,
+        sourcePreview: scopedText.slice(0, 1800),
+        sourceText: scopedText,
+        adaptiveQuestionSet: adaptive,
         atHomeScope: readingScope,
         generationNotes: generated.notes,
         questions: {
@@ -1465,6 +1536,7 @@ export async function createMaterial(formData: FormData) {
             contextExcerpt: question.contextExcerpt || null,
             sourcePage: question.sourcePage || null,
             difficulty: question.difficulty,
+            category: adaptive ? (question as GeneratedAdaptiveQuestion).category : null,
             sortOrder: questionIndex + 1
           }))
         }
@@ -1485,6 +1557,7 @@ export async function saveMaterialDraft(formData: FormData) {
   const materialId = formText(formData, "materialId");
   const path = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
   const returnTab = formText(formData, "returnTab");
+  const returnLevel = Math.min(5, Math.max(1, Number.parseInt(formText(formData, "returnLevel"), 10) || 3));
   await enforceOrRedirect(path, async () => {
     await enforceRateLimit({ scope: "teacher-save-material", limit: 120, windowSeconds: 60 * 60, identifier: teacher.id });
   });
@@ -1563,7 +1636,7 @@ export async function saveMaterialDraft(formData: FormData) {
     })
   );
 
-  redirect(`${path}?${returnTab ? `tab=${encodeURIComponent(returnTab)}&` : ""}saved=1`);
+  redirect(`${path}?${returnTab ? `tab=${encodeURIComponent(returnTab)}&` : ""}${material.adaptiveQuestionSet && returnTab === "questions" ? `level=${returnLevel}&` : ""}saved=1`);
 }
 
 export async function deleteMaterial(formData: FormData) {
@@ -1688,6 +1761,12 @@ export async function publishMaterial(formData: FormData) {
       "Add at least 5 questions before publishing."
     );
   }
+  if (material.adaptiveQuestionSet && !validatePublishedQuestionBank(material.questions)) {
+    errorRedirect(
+      `/teacher/classes/${classroomId}/materials/${materialId}/review`,
+      "Each test needs two complete questions per category, including answer keys and written scoring guides."
+    );
+  }
 
   await prisma.material.update({
     where: { id: materialId },
@@ -1703,6 +1782,12 @@ export async function startShowcaseSimulation(formData: FormData) {
   const materialId = formText(formData, "materialId");
   const path = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
   if (!teacher.isShowcase) errorRedirect(path, "Simulation is available only in Showcase Mode.");
+  const material = await prisma.material.findFirst({
+    where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
+    select: { adaptiveQuestionSet: true }
+  });
+  if (!material) errorRedirect(path, "Assignment not found.");
+  if (material.adaptiveQuestionSet) errorRedirect(path, "Showcase simulation is not available for five-test assessments.");
   await enforceOrRedirect(path, async () => {
     await enforceRateLimit({
       scope: "showcase-start-simulation",
@@ -1785,14 +1870,23 @@ export async function gradeStudentAnswer(formData: FormData) {
       }
     },
     include: {
-      question: { include: { material: { include: { questions: true } } } }
+      question: { include: { material: { include: { questions: true } } } },
+      session: { select: { assignedQuestionIdsJson: true, studentId: true, schoolId: true } }
     }
   });
   if (!answer) errorRedirect(path, "Student response not found.");
 
-  const maxPoints = questionPointValue(answer.question.sortOrder, answer.question.material.questions.length);
+  const material = answer.question.material;
+  const assigned = material.adaptiveQuestionSet
+    ? selectedQuestions(material.questions, answer.session.assignedQuestionIdsJson)
+    : material.questions;
+  const position = assigned.findIndex((question) => question.id === questionId);
+  if (position < 0) errorRedirect(path, "That question was not assigned to this student.");
+  const maxPoints = questionPointValue(position + 1, assigned.length);
   const pointsEarned = Math.min(maxPoints, Math.max(0, Math.round(requestedPoints)));
-  const isCorrect = pointsEarned === maxPoints;
+  const isCorrect = material.adaptiveQuestionSet
+    ? pointsEarned >= Math.ceil(maxPoints * 0.75)
+    : pointsEarned === maxPoints;
 
   await prisma.studentAnswer.update({
     where: { id: answer.id },
@@ -1813,6 +1907,9 @@ export async function gradeStudentAnswer(formData: FormData) {
     where: { id: answer.sessionId, schoolId: teacher.schoolId },
     data: { pointsEarned: total._sum.pointsEarned || 0 }
   });
+  if (material.adaptiveQuestionSet) {
+    await prisma.$transaction((tx) => refreshStudentCategoryRanks(tx, answer.session.studentId, answer.session.schoolId));
+  }
 
   redirect(`${path}?graded=1`);
 }

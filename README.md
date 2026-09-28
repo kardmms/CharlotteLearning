@@ -52,7 +52,7 @@ analytics, roster, appearance, and account screens are the same pages used by si
 
 Each visitor starts with a separate blank fictional teacher workspace and creates a classroom through
 the real teacher flow. Charlotte then attaches 12 linked fictional student accounts to that class. A
-showcase-only guide leads the visitor through classroom and assignment creation. On any assignment
+showcase-only guide leads the visitor through classroom and assignment creation. On a standard assignment
 review page, **Start Simulation** resets that assignment and has every active student complete it;
 the status popup then opens the real progress page automatically.
 
@@ -64,9 +64,26 @@ weekly-summary email. Sign-out deletes them immediately; closing the tab schedul
 short reload grace period, and a protected five-minute cron removes closed or expired workspaces.
 The browser returns to the showcase start screen when the one-hour limit is reached.
 
-Question generation selects the one or two source sentences most relevant to each question. The
+Question generation selects the relevant source sentences for each question; grades 6–12 receive
+longer passages and comprehension prompts. The
 teacher review screen presents those sentences in a student-preview card while keeping an optional
 manual adjustment control.
+
+## Five-test assignments
+
+Teachers can generate a grade-level reading from a topic or upload a PDF, DOCX, or TXT reading and
+limit it to a chapter or page range. With an OpenAI key configured, Charlotte calls the model to
+draft five tests. Each test has two questions in each of Understanding, Evidence, Thinking deeper,
+Language, and Written analysis. Teachers can review all 50 prompts, multiple-choice answers,
+correct keys, and written scoring guides before publishing.
+
+Every student starts at difficulty 3 in each category. A completed assignment selects two
+questions from each category's current difficulty and saves that ten-question selection on the
+session. Two correct answers move a category up one level; zero move it down one; one keeps it
+steady. Written analysis waits for teacher grading. The private category levels are not rendered
+for teachers or students. Teachers receive Notifications for repeated declines, repeated scores
+below the class average, or three scores under 60%. The admin Student Growth page shows only
+keyed, protected student identifiers, recent averages, and growth status.
 
 ## Security baseline
 
@@ -123,8 +140,12 @@ The removed presentation-reset utility must not be restored or executed against 
 
 Production cookies are HTTPS-only. Uploaded lesson plans and roster spreadsheets are processed in memory and limited to 4 MB to remain within Vercel's request limit; only extracted text or confirmed roster data is stored.
 
+## Student seat subscriptions (disabled by default)
+
+Teacher billing is behind `SUBSCRIPTIONS_ENABLED=false`. To prepare it, apply the license migration, create a recurring USD Stripe Price for **$10 per month**, and set `STRIPE_SECRET_KEY`, `STRIPE_STUDENT_PRICE_ID`, and `STRIPE_WEBHOOK_SECRET`. Register `/api/stripe/webhook` for `checkout.session.completed` and `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Configure the Stripe customer portal if teachers should change seat quantities or cancel there. Review and update the published subscription, cancellation, and refund terms; production readiness requires `BILLING_TERMS_REVIEWED=true` when billing is enabled. The teacher creates a license key in Account, chooses the seat quantity at Checkout, and students enter that key to activate their class. Stripe webhooks control the active seat count.
+
 ## Local winter preview
 
-Vocab Dash and the Games navigation are enabled automatically when running locally against a non-production database. Set `GAMES_FEATURE_ENABLED=false` to hide them locally. Hosted environments keep the routes and navigation disabled unless `GAMES_FEATURE_ENABLED=true` is deliberately configured for a future release.
+Vocab Dash and the Games navigation are enabled automatically when running locally against a non-production database. Set `GAMES_FEATURE_ENABLED=false` to hide them locally. Hosted environments keep the routes and navigation disabled unless `GAMES_FEATURE_ENABLED=true` is configured. Production Games is enabled for the September 2026 release; leave `GAMES_FEATURE_EXPIRES_AT` unset for ongoing availability.
 
 Temporary hosted tests can set `GAMES_FEATURE_EXPIRES_AT` to an ISO timestamp. At that instant, Games navigation, routes, and game actions are disabled server-side; local development remains enabled. Use deployment-specific environment overrides so restoring a prior deployment also restores its original configuration.

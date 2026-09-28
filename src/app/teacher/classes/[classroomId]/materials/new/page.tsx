@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export default async function NewMaterialPage({
   params,
@@ -41,7 +42,7 @@ export default async function NewMaterialPage({
             you review and publish it.
           </p>
           <Message error={query.error} />
-          <AssignmentCreationForm classroomId={classroom.id} isShowcase={teacher.isShowcase} />
+          <AssignmentCreationForm classroomId={classroom.id} gradeLevel={classroom.gradeLevel} isShowcase={teacher.isShowcase} />
           <div className="actions">
             <Link className="ghost-button" href={`/teacher/classes/${classroom.id}`}>
               Back to class dashboard

@@ -1,3 +1,4 @@
+import { StudentAvatar } from "@/components/StudentAvatar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GameRoomStatus } from "@prisma/client";
@@ -9,7 +10,7 @@ import { VocabDashRoomRefresh } from "@/components/VocabDashRoomRefresh";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gamesFeatureEnabled } from "@/lib/features";
-import { accuracyPercent, characterForKey, progressPercent, rankedParticipants } from "@/lib/vocab-dash";
+import { accuracyPercent, progressPercent, rankedParticipants } from "@/lib/vocab-dash";
 
 export const dynamic = "force-dynamic";
 
@@ -95,12 +96,11 @@ export default async function VocabDashLeaderboardPage({
 
             <div className="vocab-podium-grid">
               {podiumSlots.map(({ place, participant, tone }) => {
-                const character = participant ? characterForKey(participant.characterKey) : null;
                 return (
                   <div className={`vocab-podium-slot place-${place} tone-${tone} ${participant ? "" : "empty"}`} key={place}>
                     <div className="vocab-podium-avatar">
                       {place === 1 ? <Crown size={30} fill="currentColor" /> : <Medal size={26} />}
-                      <span>{character?.glyph || "?"}</span>
+                      {participant ? <StudentAvatar color={participant.characterColor} accessoryKey={participant.accessoryKey} size={100} /> : <span>?</span>}
                     </div>
                     <div className="vocab-podium-name">
                       <span>#{place}</span>
@@ -134,11 +134,10 @@ export default async function VocabDashLeaderboardPage({
             <div className="vocab-race-layout">
               <div className="vocab-racer-list">
                 {ranked.length ? ranked.map((participant, index) => {
-                  const character = characterForKey(participant.characterKey);
                   const progress = progressPercent(participant.currentStreak, termCount);
                   return (
                     <div className="vocab-racer-row" key={participant.id}>
-                      <div className="vocab-racer-avatar">{character.glyph}</div>
+                      <div className="vocab-racer-avatar"><StudentAvatar color={participant.characterColor} accessoryKey={participant.accessoryKey} size={48} /></div>
                       <div className="vocab-racer-track">
                         <span
                           className={`vocab-racer-fill color-${index % 5}`}

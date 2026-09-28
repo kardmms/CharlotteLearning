@@ -92,7 +92,9 @@ export default async function QuestionResponsesPage({
   const correctAnswers = gradedAnswers.filter((answer) => answer.isCorrect).length;
   const percentCorrect = gradedAnswers.length ? Math.round((correctAnswers / gradedAnswers.length) * 100) : 0;
   const safetyFlagCount = sortedAnswers.filter((answer) => answer.safetyFlaggedAt).length;
-  const maxPoints = questionPointValue(question.sortOrder, question.material.questions.length);
+  const maxPoints = question.material.adaptiveQuestionSet
+    ? questionPointValue(1, 10)
+    : questionPointValue(question.sortOrder, question.material.questions.length);
 
   return (
     <>

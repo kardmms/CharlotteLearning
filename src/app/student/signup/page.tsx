@@ -5,6 +5,7 @@ import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
 import { PublicTopbar } from "@/components/AppTopbar";
 import { TurnstileField } from "@/components/TurnstileField";
+import { billingEnabled } from "@/lib/licensing";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function StudentSignupPage({
             <label>Student email<input name="email" type="email" autoComplete="email" maxLength={254} defaultValue={query.email?.slice(0, 254)} required /></label>
             <PasswordField name="password" label="Password" minLength={10} autoComplete="new-password" helpText="Use at least 10 characters." />
             <PasswordField name="confirmPassword" label="Confirm password" minLength={10} autoComplete="new-password" />
+            {billingEnabled() && <label>Teacher license key<input name="licenseKey" maxLength={64} autoComplete="off" required /></label>}
             <TurnstileField action="student_signup" />
             <button className="button" type="submit">Create account</button>
           </form>

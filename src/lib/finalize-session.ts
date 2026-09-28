@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { selectedQuestions } from "@/lib/adaptive-assessment";
+import { refreshStudentCategoryRanks } from "@/lib/student-category-ranks";
 
 export async function finalizeStudentSession({
   sessionId,
@@ -23,8 +25,11 @@ export async function finalizeStudentSession({
     if (!session) throw new Error("Session not found");
     if (session.status !== "IN_PROGRESS") return session;
 
+    const assigned = session.material.adaptiveQuestionSet
+      ? selectedQuestions(session.material.questions, session.assignedQuestionIdsJson)
+      : session.material.questions;
     const answeredQuestionIds = new Set(session.answers.map((answer) => answer.questionId));
-    const unansweredQuestions = session.material.questions.filter(
+    const unansweredQuestions = assigned.filter(
       (question) => !answeredQuestionIds.has(question.id)
     );
 
@@ -82,6 +87,9 @@ export async function finalizeStudentSession({
         where: { id: session.student.accountId },
         data: { stars: { increment: homeStars } }
       });
+    }
+    if (session.material.adaptiveQuestionSet && completed) {
+      await refreshStudentCategoryRanks(transaction, session.studentId, session.schoolId);
     }
     return updated;
   });

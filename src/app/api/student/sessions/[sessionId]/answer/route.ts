@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { assertSameOrigin, isSameOriginError } from "@/lib/security";
 import { evaluateStudentSafety } from "@/lib/student-safety";
+import { selectedQuestions } from "@/lib/adaptive-assessment";
 
 export const runtime = "nodejs";
 
@@ -55,7 +56,10 @@ export async function POST(
       return NextResponse.json({ error: "Session not available" }, { status: 409 });
     }
 
-    const question = session.material.questions.find((item) => item.id === body.questionId);
+    const availableQuestions = session.material.adaptiveQuestionSet
+      ? selectedQuestions(session.material.questions, session.assignedQuestionIdsJson)
+      : session.material.questions;
+    const question = availableQuestions.find((item) => item.id === body.questionId);
     if (!question) return NextResponse.json({ error: "Question not found" }, { status: 404 });
 
     const existing = session.answers[0];
@@ -88,7 +92,10 @@ export async function POST(
       ? !body.timedOut && answerText.toLowerCase() === question.correctAnswer?.trim().toLowerCase()
       : null;
     const revealedAnswer = Boolean(isMultipleChoice && isCorrect === false && (isAtHome || attemptCount >= 3));
-    const pointsPossible = isAtHome ? 0 : questionPointValue(question.sortOrder, session.material.questions.length);
+    const pointsPossible = isAtHome ? 0 : questionPointValue(
+      availableQuestions.findIndex((item) => item.id === question.id) + 1,
+      availableQuestions.length
+    );
     const pointsEarned = isCorrect === true && (isAtHome || attemptCount === 1)
       ? pointsPossible
       : 0;

@@ -4,6 +4,7 @@ import { SoloVocabPractice } from "@/components/SoloVocabPractice";
 import { StudentTopbar } from "@/components/AppTopbar";
 import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { studentBandClass } from "@/lib/grade";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function SoloVocabPage({ params }: { params: Promise<{ room
   });
   if (!room || room.vocabTerms.length < 4) notFound();
   return (
-    <div className="student-shell">
+    <div className={`student-shell ${studentBandClass(student.classroom.gradeLevel)}`}>
       <StudentTopbar name={student.displayName} />
       <main className="page student-practice-page narrow-page">
         <Link className="student-back-link" href={`/student/practice/vocab/${room.id}`}><ArrowLeft size={17} /> Flashcards</Link>

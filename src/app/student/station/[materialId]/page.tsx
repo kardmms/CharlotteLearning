@@ -4,6 +4,8 @@ import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { studentBandClass } from "@/lib/grade";
 import { excerptForIndex } from "@/lib/text-context";
+import { assignedQuestionIds, selectedQuestions } from "@/lib/adaptive-assessment";
+import { currentStudentCategoryRanks } from "@/lib/student-category-ranks";
 
 export const dynamic = "force-dynamic";
 
@@ -70,21 +72,34 @@ export default async function StationPage({
   });
 
   if (!session) {
+    const assignedIds = material.adaptiveQuestionSet
+      ? assignedQuestionIds(material.questions, await prisma.$transaction((tx) => currentStudentCategoryRanks(tx, student.id)))
+      : null;
     session = await prisma.studentSession.create({
       data: {
         schoolId: material.schoolId,
         studentId: student.id,
-        materialId
+        materialId,
+        assignedQuestionIdsJson: assignedIds ? JSON.stringify(assignedIds) : null
       },
       include: { answers: true }
     });
   } else {
+    if (material.adaptiveQuestionSet && !session.assignedQuestionIdsJson) {
+      if (session.answers.length) throw new Error("An in-progress assessment is missing its question set.");
+      const ranks = await prisma.$transaction((tx) => currentStudentCategoryRanks(tx, student.id));
+      const ids = assignedQuestionIds(material.questions, ranks);
+      session.assignedQuestionIdsJson = JSON.stringify(ids);
+    }
     session = await prisma.studentSession.update({
       where: { id: session.id },
-      data: { lastSeenAt: new Date() },
+      data: { lastSeenAt: new Date(), assignedQuestionIdsJson: session.assignedQuestionIdsJson },
       include: { answers: true }
     });
   }
+  const questionsToShow = material.adaptiveQuestionSet
+    ? selectedQuestions(material.questions, session.assignedQuestionIdsJson)
+    : material.questions;
   const sourceText = material.sourceText || material.sourcePreview || "";
 
   return (
@@ -111,7 +126,7 @@ export default async function StationPage({
             pointsEarned: session.pointsEarned,
             focusViolationCount: session.focusViolationCount
           }}
-          questions={material.questions.map((question, index) => {
+          questions={questionsToShow.map((question, index) => {
             const fallbackExcerpt = !question.contextExcerpt && sourceText ? excerptForIndex(sourceText, index) : null;
             return {
               id: question.id,

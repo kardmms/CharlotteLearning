@@ -4,6 +4,7 @@ import { AdminDashboardClient, type AdminView } from "@/components/AdminDashboar
 import { getAdminMetrics, getEmptyAdminMetrics } from "@/lib/admin-metrics";
 import { getAdminSession, requireAdmin } from "@/lib/auth";
 import { getOpenAiUsageMetrics } from "@/lib/openai-usage";
+import { getAdminStudentGrowth } from "@/lib/admin-student-growth";
 import { getVercelServerMetrics } from "@/lib/vercel-monitoring";
 
 export async function AdminViewPage({ view }: { view: AdminView }) {
@@ -11,7 +12,7 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
   if (!session) redirect("/admin/login");
 
   const admin = await requireAdmin();
-  const [metrics, inviteFlash, serverMetrics, aiUsageMetrics] = await Promise.all([
+  const [metrics, inviteFlash, serverMetrics, aiUsageMetrics, studentGrowth] = await Promise.all([
     getAdminMetrics().catch((error) => {
       console.error("Admin metrics failed to load", error);
       return getEmptyAdminMetrics();
@@ -31,7 +32,8 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
           console.error("OpenAI usage metrics failed to load", error);
           return undefined;
         })
-      : Promise.resolve(undefined)
+      : Promise.resolve(undefined),
+    view === "student-growth" ? getAdminStudentGrowth() : Promise.resolve(undefined)
   ]);
 
   return (
@@ -47,6 +49,7 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
       view={view}
       serverMetrics={serverMetrics}
       aiUsageMetrics={aiUsageMetrics}
+      studentGrowth={studentGrowth}
     />
   );
 }

@@ -24,6 +24,14 @@ enum QuestionType {
   SHORT_RESPONSE
 }
 
+enum QuestionCategory {
+  UNDERSTANDING
+  EVIDENCE
+  THINKING_DEEPER
+  LANGUAGE
+  WRITTEN_ANALYSIS
+}
+
 enum SessionStatus {
   IN_PROGRESS
   PARTIAL
@@ -103,6 +111,7 @@ model Teacher {
   homeResources        AtHomeResource[]
   gameRooms            GameRoom[]
   emailDeliveries      EmailDelivery[]
+  license              TeacherLicense?
 
   @@index([isShowcase, showcaseExpiresAt])
   @@index([defaultSchoolId])
@@ -206,7 +215,7 @@ model Classroom {
 }
 
 model Student {
-  id                    String           @id @default(cuid())
+  id                    String                @id @default(cuid())
   schoolId              String
   classroomId           String
   accountId             String?
@@ -215,14 +224,15 @@ model Student {
   displayNameEncrypted  String?
   emailEncrypted        String?
   emailKeyHash          String?
-  active                Boolean          @default(true)
-  createdAt             DateTime         @default(now())
-  school                School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  classroom             Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-  account               StudentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  active                Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  school                School                @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classroom             Classroom             @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  account               StudentAccount?       @relation(fields: [accountId], references: [id], onDelete: SetNull)
   sessions              StudentSession[]
-  adaptiveHomeMaterials Material[]       @relation("AdaptiveHomeTarget")
+  adaptiveHomeMaterials Material[]            @relation("AdaptiveHomeTarget")
   emailDeliveries       EmailDelivery[]
+  categoryRanks         StudentCategoryRank[]
 
   @@unique([classroomId, displayName])
   @@unique([classroomId, email])
@@ -234,19 +244,45 @@ model Student {
 }
 
 model StudentAccount {
-  id                   String    @id @default(cuid())
+  id                   String           @id @default(cuid())
   displayName          String
-  email                String    @unique
-  emailKeyHash         String?   @unique
+  email                String           @unique
+  emailKeyHash         String?          @unique
   displayNameEncrypted String?
   emailEncrypted       String?
   passwordHash         String
-  stars                Int       @default(0)
-  characterColor       String    @default("blue")
-  unlockedAccessories  String    @default("[]")
+  stars                Int              @default(0)
+  characterColor       String           @default("blue")
+  unlockedAccessories  String           @default("[]")
   selectedAccessory    String?
-  createdAt            DateTime  @default(now())
+  createdAt            DateTime         @default(now())
   enrollments          Student[]
+  licenses             StudentLicense[]
+}
+
+model TeacherLicense {
+  teacherId            String           @id
+  keyHash              String?          @unique
+  stripeCustomerId     String?          @unique
+  stripeSubscriptionId String?          @unique
+  checkoutSessionId    String?
+  status               String           @default("inactive")
+  seats                Int              @default(0)
+  updatedAt            DateTime         @updatedAt
+  teacher              Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  redemptions          StudentLicense[]
+}
+
+model StudentLicense {
+  teacherId String
+  accountId String
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  license   TeacherLicense @relation(fields: [teacherId], references: [teacherId], onDelete: Cascade)
+  account   StudentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([teacherId, accountId])
+  @@index([accountId])
 }
 
 model Material {
@@ -270,6 +306,7 @@ model Material {
   status                        MaterialStatus   @default(DRAFT)
   generationNotes               String?
   isAdaptiveHome                Boolean          @default(false)
+  adaptiveQuestionSet           Boolean          @default(false)
   targetStudentId               String?
   showcaseSimulationStartedAt   DateTime?
   showcaseSimulationCompletedAt DateTime?
@@ -293,7 +330,7 @@ model Material {
 }
 
 model Question {
-  id               String          @id @default(cuid())
+  id               String            @id @default(cuid())
   schoolId         String
   materialId       String
   type             QuestionType
@@ -307,14 +344,27 @@ model Question {
   contextExcerpt   String?
   sourcePage       String?
   timeLimitSeconds Int?
-  randomizeChoices Boolean         @default(false)
-  difficulty       Int             @default(3)
+  randomizeChoices Boolean           @default(false)
+  difficulty       Int               @default(3)
+  category         QuestionCategory?
   sortOrder        Int
-  school           School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  material         Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  school           School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  material         Material          @relation(fields: [materialId], references: [id], onDelete: Cascade)
   answers          StudentAnswer[]
 
   @@index([schoolId, materialId, sortOrder])
+  @@index([materialId, category, difficulty])
+}
+
+model StudentCategoryRank {
+  studentId     String
+  category      QuestionCategory
+  level         Int              @default(3)
+  assessedCount Int              @default(0)
+  updatedAt     DateTime         @updatedAt
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, category])
 }
 
 model AtHomeResource {
@@ -339,30 +389,31 @@ model AtHomeResource {
 }
 
 model StudentSession {
-  id                  String          @id @default(cuid())
-  schoolId            String
-  studentId           String
-  materialId          String
-  signInAt            DateTime        @default(now())
-  signedOutAt         DateTime?
-  lastSeenAt          DateTime        @default(now())
-  completedAt         DateTime?
-  status              SessionStatus   @default(IN_PROGRESS)
-  openedBook          Boolean         @default(false)
-  foundChapter        Boolean         @default(false)
-  heardVocabulary     Boolean         @default(false)
-  answeredPrompt      Boolean         @default(false)
-  madePrediction      Boolean         @default(false)
-  completedCharlotte  Boolean         @default(false)
-  understoodStory     Boolean         @default(false)
-  pointsEarned        Int             @default(0)
-  focusViolationCount Int             @default(0)
-  flaggedAt           DateTime?
-  endedByFocusLoss    Boolean         @default(false)
-  school              School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student             Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  material            Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  answers             StudentAnswer[]
+  id                      String          @id @default(cuid())
+  schoolId                String
+  studentId               String
+  materialId              String
+  assignedQuestionIdsJson String?
+  signInAt                DateTime        @default(now())
+  signedOutAt             DateTime?
+  lastSeenAt              DateTime        @default(now())
+  completedAt             DateTime?
+  status                  SessionStatus   @default(IN_PROGRESS)
+  openedBook              Boolean         @default(false)
+  foundChapter            Boolean         @default(false)
+  heardVocabulary         Boolean         @default(false)
+  answeredPrompt          Boolean         @default(false)
+  madePrediction          Boolean         @default(false)
+  completedCharlotte      Boolean         @default(false)
+  understoodStory         Boolean         @default(false)
+  pointsEarned            Int             @default(0)
+  focusViolationCount     Int             @default(0)
+  flaggedAt               DateTime?
+  endedByFocusLoss        Boolean         @default(false)
+  school                  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student                 Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  material                Material        @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  answers                 StudentAnswer[]
 
   @@index([materialId, status, completedAt])
   @@index([studentId, materialId, status])

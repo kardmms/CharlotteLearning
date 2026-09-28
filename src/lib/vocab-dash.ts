@@ -1,18 +1,90 @@
 export const vocabDashCharacters = [
-  { key: "runner", label: "Runner", glyph: "C" }
+  { key: "runner", label: "Alien", glyph: "👽" }
 ];
 
 export const vocabDashColors = [
-  { key: "blue", label: "Blue", hex: "#2563eb" },
-  { key: "pink", label: "Pink", hex: "#db2777" },
-  { key: "green", label: "Green", hex: "#16a34a" },
-  { key: "orange", label: "Orange", hex: "#ea580c" }
+  { key: "blue", label: "Blue", hex: "#64b5ff" },
+  { key: "pink", label: "Pink", hex: "#ff86ca" },
+  { key: "green", label: "Green", hex: "#75ed35" },
+  { key: "orange", label: "Orange", hex: "#ffb35b" }
 ] as const;
 
-export const vocabDashAccessories = [
-  { key: "cap", label: "Cap", cost: 6 },
-  { key: "sunglasses", label: "Sunglasses", cost: 10 }
+export type CosmeticSlot = "hat" | "eyes" | "extra";
+export type AlienCosmetic = {
+  key: string;
+  label: string;
+  cost: number;
+  slot: CosmeticSlot;
+  artwork?: string;
+  hidesEyes?: boolean;
+  image?: string;
+  width?: number;
+  height?: number;
+  viewBox?: string;
+  placement?: { x: number; y: number; width: number; height: number };
+};
+
+export const vocabDashAccessories: readonly AlienCosmetic[] = [
+  { key: "sport-headband", label: "Team Headband", cost: 0, slot: "hat", artwork: "sport-headband" },
+  { key: "star-bow", label: "Starlight Bow", cost: 0, slot: "hat", artwork: "star-bow" },
+  { key: "bandana", label: "Comet Bandana", cost: 0, slot: "extra", artwork: "bandana" },
+  { key: "pixel-shades", label: "Pixel Power", cost: 20, slot: "eyes", artwork: "pixel-shades" },
+  { key: "star-shades", label: "Superstar Shades", cost: 30, slot: "eyes", artwork: "star-shades" },
+  { key: "orbit-visor", label: "Orbit Visor", cost: 35, slot: "eyes", artwork: "orbit-visor" },
+  { key: "explorer-goggles", label: "Explorer Goggles", cost: 25, slot: "eyes", artwork: "explorer-goggles", hidesEyes: false },
+  { key: "space-crown", label: "Galaxy Crown", cost: 60, slot: "hat", artwork: "space-crown" },
+  { key: "headphones", label: "Star Beats", cost: 40, slot: "hat", artwork: "headphones" },
+  { key: "comet-scarf", label: "Comet Scarf", cost: 15, slot: "extra", artwork: "comet-scarf" },
+  { key: "bucket-hat", label: "Sunny Bucket", cost: 8, slot: "hat", image: "/game-avatars/bucket-hat.png", width: 1536, height: 1024, viewBox: "62 116 1412 776", placement: { x: 31, y: 8, width: 178, height: 82 } },
+  { key: "beanie", label: "Cozy Beanie", cost: 8, slot: "hat", image: "/game-avatars/beanie.png", width: 1536, height: 1024, viewBox: "183 13 1163 972", placement: { x: 43, y: 2, width: 154, height: 82 } },
+  { key: "space-cap", label: "Cosmic Cap", cost: 8, slot: "hat", image: "/game-avatars/space-cap.png", width: 1536, height: 1024, viewBox: "57 77 1423 824", placement: { x: 43, y: 9, width: 154, height: 62 } },
+  { key: "cap", label: "Blue Baseball Cap", cost: 6, slot: "hat", image: "/game-avatars/cap.png", width: 1509, height: 1042, viewBox: "88 73 1363 851" },
+  { key: "sunglasses", label: "Classic Shades", cost: 10, slot: "eyes", image: "/game-avatars/sunglasses.png", width: 1918, height: 820, viewBox: "44 115 1829 586" },
+  { key: "sunglasses-pink", label: "Candy Pink", cost: 10, slot: "eyes", image: "/game-avatars/sunglasses-pink.png", width: 1774, height: 887, viewBox: "11 157 1753 562" },
+  { key: "sunglasses-sport", label: "Turbo Cyan", cost: 10, slot: "eyes", image: "/game-avatars/sunglasses-sport.png", width: 1983, height: 793, viewBox: "26 108 1932 584" }
 ] as const;
+
+export const cosmeticSlots: { key: CosmeticSlot; label: string }[] = [
+  { key: "hat", label: "Headwear" }, { key: "eyes", label: "Eyewear" }, { key: "extra", label: "Extras" }
+];
+
+// Legacy accounts store a single key. New looks store a JSON array in that same field.
+export function equippedCosmetics(value?: string | null): string[] {
+  if (!value) return [];
+  let keys: unknown = [value];
+  if (value.startsWith("[")) {
+    try { keys = JSON.parse(value); } catch { return []; }
+  }
+  if (!Array.isArray(keys)) return [];
+  const slots = new Set<CosmeticSlot>();
+  return keys.filter((key): key is string => {
+    const item = vocabDashAccessories.find((item) => item.key === key);
+    if (!item || slots.has(item.slot)) return false;
+    slots.add(item.slot);
+    return true;
+  });
+}
+
+export function ownedCosmetics(value: string): string[] {
+  try {
+    const keys: unknown = JSON.parse(value);
+    return Array.isArray(keys) ? [...new Set(keys.filter((key): key is string => typeof key === "string"))] : [];
+  } catch { return []; }
+}
+
+export function cosmeticPurchase(value: string, owned: string[], stars: number) {
+  let requested: unknown;
+  try { requested = value.startsWith("[") ? JSON.parse(value) : value ? [value] : []; }
+  catch { throw new Error("Choose a valid look."); }
+  if (!Array.isArray(requested) || requested.length > cosmeticSlots.length) throw new Error("Choose one item per category.");
+  const keys = equippedCosmetics(value);
+  if (keys.length !== requested.length) throw new Error("Choose an available item in each category.");
+  const items = keys.map((key) => vocabDashAccessories.find((item) => item.key === key)!);
+  const newItems = items.filter((item) => item.cost > 0 && !owned.includes(item.key));
+  const cost = newItems.reduce((sum, item) => sum + item.cost, 0);
+  if (stars < cost) throw new Error(`You need ${cost - stars} more stars to unlock this look.`);
+  return { keys, cost, owned: [...new Set([...owned, ...newItems.map((item) => item.key)])] };
+}
 
 export type VocabDashTerm = {
   id: string;

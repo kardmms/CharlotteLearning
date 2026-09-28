@@ -1,8 +1,9 @@
 import { BookOpen, GraduationCap, LogOut } from "lucide-react";
-import { logoutStudent, selectStudentClassroom } from "@/app/student/actions";
+import { logoutStudent, redeemStudentClassLicense, selectStudentClassroom } from "@/app/student/actions";
 import { requireStudentAccount } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gradeLabel } from "@/lib/grade";
+import { billingEnabled } from "@/lib/licensing";
 import { Message } from "@/components/Message";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +15,19 @@ export default async function StudentClassesPage({
 }) {
   const account = await requireStudentAccount();
   const query = await searchParams;
+  const showBilling = billingEnabled();
+  const redemptions = showBilling ? await prisma.studentLicense.findMany({
+    where: { accountId: account.id, active: true, license: { status: "active" } },
+    select: { teacherId: true }
+  }) : [];
+  const licensedTeachers = new Set(redemptions.map((row) => row.teacherId));
   const enrollments = await prisma.student.findMany({
     where: { accountId: account.id, active: true, classroom: { archivedAt: null } },
     orderBy: { classroom: { createdAt: "desc" } },
     include: {
       classroom: {
         include: {
-          teacher: { select: { name: true } },
+          teacher: { select: { id: true, name: true, isShowcase: true } },
           _count: { select: { materials: true } }
         }
       }
@@ -40,14 +47,16 @@ export default async function StudentClassesPage({
         </section>
         <Message error={query.error} />
         <section className="student-class-grid">
-          {enrollments.map((enrollment) => (
-            <form className="student-class-card" action={selectStudentClassroom} key={enrollment.id}>
+          {enrollments.map((enrollment) => {
+            const licensed = !showBilling || enrollment.classroom.teacher.isShowcase || licensedTeachers.has(enrollment.classroom.teacher.id);
+            return <form className="student-class-card" action={licensed ? selectStudentClassroom : redeemStudentClassLicense} key={enrollment.id}>
               <input type="hidden" name="enrollmentId" value={enrollment.id} />
               <div className="student-mode-symbol class"><BookOpen size={30} /></div>
               <div><span>{gradeLabel(enrollment.classroom.gradeLevel)}</span><h2>{enrollment.classroom.name}</h2><p>{enrollment.classroom.teacher.name}</p></div>
-              <button className="button" type="submit">Open class</button>
-            </form>
-          ))}
+              {!licensed && <label>Teacher license key<input name="licenseKey" maxLength={64} autoComplete="off" required /></label>}
+              <button className="button" type="submit">{licensed ? "Open class" : "Activate class"}</button>
+            </form>;
+          })}
           {!enrollments.length && (
             <div className="empty-state">
               <h2>No classes yet</h2>

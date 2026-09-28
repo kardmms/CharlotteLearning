@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { saveCosmeticLook } from "@/lib/cosmetic-purchase";
 import { auditEventData } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import {
@@ -15,10 +16,10 @@ import { normalizeStudentEmail } from "@/lib/codes";
 import { gamesFeatureEnabled } from "@/lib/features";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { privacyAccountEmail, studentEmailLookupHash } from "@/lib/school-privacy";
+import { billingEnabled, LicenseError, redeemLicense } from "@/lib/licensing";
 import {
   joinCode,
   shuffledTermIds,
-  vocabDashAccessories,
   vocabDashColors
 } from "@/lib/vocab-dash";
 
@@ -80,6 +81,7 @@ export async function registerStudent(formData: FormData) {
   const email = normalizeStudentEmail(formText(formData, "email")).slice(0, 254);
   const password = boundedText(formData, "password", 1024);
   const confirmPassword = boundedText(formData, "confirmPassword", 1024);
+  const licenseKey = boundedText(formData, "licenseKey", 64);
   await enforceOrRedirect("/student/signup", async () => {
     await enforceRateLimit({ scope: "student-signup-ip", limit: 100, windowSeconds: 60 * 60 });
     await enforceRateLimit({ scope: "student-signup-email", limit: 6, windowSeconds: 24 * 60 * 60, identifier: email });
@@ -89,6 +91,7 @@ export async function registerStudent(formData: FormData) {
   if (!email.includes("@")) errorRedirect("/student/signup", "Enter a valid email.");
   if (password.length < 10) errorRedirect("/student/signup", "Use a password with at least 10 characters.");
   if (password !== confirmPassword) errorRedirect("/student/signup", "The passwords do not match.");
+  if (billingEnabled() && !licenseKey) errorRedirect("/student/signup", "Enter your teacher's license key.");
 
   const emailKeyHash = studentEmailLookupHash(email);
   const matchingPrivateEnrollments = await prisma.student.findMany({
@@ -129,6 +132,7 @@ export async function registerStudent(formData: FormData) {
         where: { emailKeyHash, accountId: null },
         data: { accountId: created.id, displayName, email }
       });
+      if (billingEnabled()) await redeemLicense(transaction, created.id, licenseKey);
       await transaction.auditEvent.create({
         data: auditEventData({
           schoolId: firstEnrollment.schoolId,
@@ -141,6 +145,9 @@ export async function registerStudent(formData: FormData) {
         })
       });
       return created;
+    }, { isolationLevel: "Serializable" }).catch((error) => {
+      if (error instanceof LicenseError) errorRedirect("/student/signup", error.message);
+      throw error;
     });
     await setStudentSession(account);
     redirect("/student/classes");
@@ -162,6 +169,7 @@ export async function registerStudent(formData: FormData) {
       where: { email, accountId: null },
       data: { accountId: created.id }
     });
+    if (billingEnabled()) await redeemLicense(transaction, created.id, licenseKey);
     await transaction.auditEvent.create({
       data: auditEventData({
         actorType: "student",
@@ -173,6 +181,9 @@ export async function registerStudent(formData: FormData) {
       })
     });
     return created;
+  }, { isolationLevel: "Serializable" }).catch((error) => {
+    if (error instanceof LicenseError) errorRedirect("/student/signup", error.message);
+    throw error;
   });
   await setStudentSession(account);
   redirect("/student/classes");
@@ -186,11 +197,42 @@ export async function selectStudentClassroom(formData: FormData) {
   const enrollmentId = formText(formData, "enrollmentId");
   const enrollment = await prisma.student.findFirst({
     where: { id: enrollmentId, accountId: account.id, active: true },
-    select: { id: true, classroomId: true, schoolId: true }
+    select: { id: true, classroomId: true, schoolId: true, classroom: { select: { teacherId: true, teacher: { select: { isShowcase: true } } } } }
   });
   if (!enrollment) errorRedirect("/student/classes", "That class enrollment is not available.");
+  if (billingEnabled() && !enrollment.classroom.teacher.isShowcase) {
+    const licensed = await prisma.studentLicense.findUnique({
+      where: { teacherId_accountId: { teacherId: enrollment.classroom.teacherId, accountId: account.id } },
+      include: { license: { select: { status: true } } }
+    });
+    if (licensed?.license.status !== "active" || !licensed.active) errorRedirect("/student/classes", "Your teacher needs an active student seat for this class.");
+  }
   await setStudentSession(account, enrollment);
   redirect("/student");
+}
+
+export async function redeemStudentClassLicense(formData: FormData) {
+  const account = await requireStudentAccount();
+  if (!billingEnabled()) redirect("/student/classes");
+  const enrollmentId = formText(formData, "enrollmentId");
+  const key = boundedText(formData, "licenseKey", 64);
+  await enforceOrRedirect("/student/classes", async () => {
+    await enforceRateLimit({ scope: "student-license-key", limit: 10, windowSeconds: 60 * 60, identifier: account.id });
+  });
+  const enrollment = await prisma.student.findFirst({
+    where: { id: enrollmentId, accountId: account.id, active: true },
+    select: { classroom: { select: { teacherId: true } } }
+  });
+  if (!enrollment) errorRedirect("/student/classes", "That class enrollment is not available.");
+  try {
+    await prisma.$transaction((transaction) => redeemLicense(transaction, account.id, key, enrollment.classroom.teacherId), {
+      isolationLevel: "Serializable"
+    });
+  } catch (error) {
+    if (error instanceof LicenseError) errorRedirect("/student/classes", error.message);
+    throw error;
+  }
+  redirect("/student/classes");
 }
 
 export async function logoutStudent() {
@@ -235,41 +277,47 @@ export async function joinVocabDashRoom(formData: FormData) {
     errorRedirect("/play", "This game belongs to a class you are not enrolled in.");
   }
 
-  const existing = await prisma.gameParticipant.findFirst({
-    where: { roomId: room.id, schoolId: room.schoolId, studentId: enrollment.id }
-  });
-  if (existing) {
-    await setStudentSession(account, enrollment);
-    redirect(`/student/games/vocab-dash/play/${existing.id}`);
-  }
-  if (room.status !== "WAITING") {
-    errorRedirect("/play", "That game has already started.");
-  }
-
-  const participant = await prisma.gameParticipant.create({
-    data: {
-      schoolId: room.schoolId,
-      roomId: room.id,
-      studentId: enrollment.id,
-      displayName: account.displayName,
-      characterKey: "runner",
-      characterColor: account.characterColor,
-      accessoryKey: account.selectedAccessory,
-      questionOrderJson: JSON.stringify(shuffledTermIds(room.vocabTerms))
+  // Serialize joins with starting, ending, and answering in the same room.
+  // A double-click must reconnect to one player, never award two placements.
+  const participant = await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT "id" FROM "GameRoom" WHERE "id" = ${room.id} FOR UPDATE`;
+    const currentRoom = await transaction.gameRoom.findUnique({
+      where: { id: room.id },
+      include: { vocabTerms: { orderBy: { sortOrder: "asc" } } }
+    });
+    if (!currentRoom || currentRoom.status === "COMPLETED") return null;
+    const existing = await transaction.gameParticipant.findFirst({
+      where: { roomId: room.id, schoolId: room.schoolId, studentId: enrollment.id }
+    });
+    if (existing) {
+      return transaction.gameParticipant.update({
+        where: { id: existing.id },
+        data: { characterColor: account.characterColor, accessoryKey: account.selectedAccessory }
+      });
     }
+    if (currentRoom.status !== "WAITING" || currentRoom.vocabTerms.length < 10) return null;
+    const created = await transaction.gameParticipant.create({
+      data: {
+        schoolId: room.schoolId,
+        roomId: room.id,
+        studentId: enrollment.id,
+        displayName: account.displayName,
+        characterKey: "runner",
+        characterColor: account.characterColor,
+        accessoryKey: account.selectedAccessory,
+        questionOrderJson: JSON.stringify(shuffledTermIds(currentRoom.vocabTerms))
+      }
+    });
+    await transaction.auditEvent.create({
+      data: auditEventData({
+        schoolId: room.schoolId, actorType: "student", actorId: account.id,
+        action: "game_participant.joined", targetType: "game_room", targetId: room.id,
+        metadata: { kind: "VOCAB_DASH" }
+      })
+    });
+    return created;
   });
-
-  await prisma.auditEvent.create({
-    data: auditEventData({
-      schoolId: room.schoolId,
-      actorType: "student",
-      actorId: account.id,
-      action: "game_participant.joined",
-      targetType: "game_room",
-      targetId: room.id,
-      metadata: { kind: "VOCAB_DASH" }
-    })
-  });
+  if (!participant) errorRedirect("/play", "That game is no longer open for joining.");
 
   await setStudentSession(account, enrollment);
   redirect(`/student/games/vocab-dash/play/${participant.id}`);
@@ -285,29 +333,10 @@ export async function updateStudentCharacter(formData: FormData) {
     errorRedirect(path, "Choose an available character color.");
   }
 
-  let savedAccessories: unknown = [];
   try {
-    savedAccessories = JSON.parse(account.unlockedAccessories || "[]");
-  } catch {
-    savedAccessories = [];
+    await saveCosmeticLook(prisma.studentAccount, account.id, color, requestedAccessory);
+  } catch (error) {
+    errorRedirect(path, error instanceof Error ? error.message : "Could not save that look.");
   }
-  const unlocked = new Set<string>(Array.isArray(savedAccessories) ? savedAccessories.filter((item): item is string => typeof item === "string") : []);
-  const accessory = vocabDashAccessories.find((item) => item.key === requestedAccessory);
-  let stars = account.stars;
-  if (accessory && !unlocked.has(accessory.key)) {
-    if (stars < accessory.cost) errorRedirect(path, `You need ${accessory.cost} stars to unlock ${accessory.label}.`);
-    stars -= accessory.cost;
-    unlocked.add(accessory.key);
-  }
-
-  await prisma.studentAccount.update({
-    where: { id: account.id },
-    data: {
-      stars,
-      characterColor: color,
-      unlockedAccessories: JSON.stringify([...unlocked]),
-      selectedAccessory: accessory?.key || null
-    }
-  });
   redirect("/play?saved=1");
 }

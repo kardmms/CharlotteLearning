@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, BellRing, ChevronLeft, ChevronRight, FilePenLine, FileUp } from "lucide-react";
+import { ArrowRight, BellRing, ChevronLeft, ChevronRight, FilePenLine, FileUp, TriangleAlert } from "lucide-react";
 import { TeacherTopbar } from "@/components/AppTopbar";
 import { ClassNav } from "@/components/ClassNav";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { gradeLabel } from "@/lib/grade";
+import { performanceAlertsFromMaterials } from "@/lib/performance-trends";
 import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ type AssignmentSession = {
   status: string;
   completedCharlotte: boolean;
   pointsEarned: number;
+  focusViolationCount: number;
   signInAt: Date;
   lastSeenAt: Date;
   signedOutAt: Date | null;
@@ -122,7 +124,7 @@ export default async function ClassOverviewPage({
         students: {
           where: { schoolId: teacher.schoolId, active: true },
           orderBy: { displayName: "asc" },
-          select: { id: true }
+          select: { id: true, displayName: true }
         },
         materials: {
           where: {
@@ -156,6 +158,7 @@ export default async function ClassOverviewPage({
       select: {
         id: true,
         title: true,
+        adaptiveQuestionSet: true,
         _count: { select: { questions: true } }
       }
     })
@@ -173,6 +176,7 @@ export default async function ClassOverviewPage({
   if (!classroom) notFound();
 
   const activities = classroom.materials;
+  const isSecondary = Number(classroom.gradeLevel) >= 6;
   const selectedIndex = Math.max(0, activities.findIndex((material) => material.id === query.materialId));
   const latestActivity = activities[selectedIndex];
   const newerActivity = activities[selectedIndex - 1];
@@ -188,18 +192,17 @@ export default async function ClassOverviewPage({
   const correctAnswers = gradedAnswers.filter((answer) => answer.isCorrect).length;
   const accuracyPct = gradedAnswers.length ? Math.round((correctAnswers / gradedAnswers.length) * 100) : 0;
   const studentRows = classroom.students.map((student) => {
-    const session = latestSessions.find((item) => item.studentId === student.id);
+    const session = latestSessionForStudent(latestSessions, student.id);
     return {
       student,
       session
     };
   });
-  const focusAlertCount = studentRows.filter((row) => (row.session?.focusViolationCount ?? 0) > 0).length;
-  const safetyAlertCount = studentRows.filter((row) =>
-    row.session?.answers.some((answer) => answer.safetyFlaggedAt)
+  const alertCount = studentRows.filter((row) =>
+    (row.session?.focusViolationCount ?? 0) > 0 || row.session?.answers.some((answer) => answer.safetyFlaggedAt)
   ).length;
-  const alertCount = focusAlertCount + safetyAlertCount;
   const studentIds = classroom.students.map((student) => student.id);
+  const trendAlerts = performanceAlertsFromMaterials(activities, classroom.students);
   const thisAssignmentStats = buildAssignmentStats(latestActivity, studentIds);
   const lastAssignmentStats = buildAssignmentStats(olderActivity, studentIds);
   const studentScale = Math.max(1, classroom.students.length);
@@ -249,7 +252,7 @@ export default async function ClassOverviewPage({
   return (
     <>
       <TeacherTopbar name={teacher.name} classroomId={classroomId} />
-      <main className="page">
+      <main className={`page ${isSecondary ? "secondary-dashboard" : ""}`}>
         <section className="workspace-heading">
           <div>
             <div className="eyebrow">Class overview</div>
@@ -272,7 +275,7 @@ export default async function ClassOverviewPage({
               <span className="status-pill status-yellow">Draft ready</span>
               <h2 id="draft-ready-title">{latestDraft.title}</h2>
               <p>
-                Charlotte created {latestDraft._count.questions} questions. Review the draft, then publish it to assign
+                Charlotte created {latestDraft.adaptiveQuestionSet ? "five difficulty tests (50 questions)" : `${latestDraft._count.questions} questions`}. Review the draft, then publish it to assign
                 the activity to this class.
               </p>
             </div>
@@ -294,7 +297,7 @@ export default async function ClassOverviewPage({
                 <h2>{latestActivity?.title ?? "No published activity yet"}</h2>
                 <p>
                   {latestActivity
-                    ? `${latestActivity.status.toLowerCase()} - ${latestActivity.estimatedMinutes} minutes - ${latestActivity._count.questions} questions`
+                    ? `${latestActivity.status.toLowerCase()} - ${latestActivity.estimatedMinutes} minutes - ${latestActivity.adaptiveQuestionSet ? "10 questions per student" : `${latestActivity._count.questions} questions`}`
                     : latestDraft
                       ? "Your draft is ready above. Publish it to make the activity available to students."
                       : "Upload material to create a station for students."}
@@ -315,12 +318,20 @@ export default async function ClassOverviewPage({
                   ) : <span />}
                 </div>
                 <Link
-                  className={`page-exit-button ${alertCount ? "has-alerts" : ""}`}
-                  href={`/teacher/classes/${classroom.id}/progress`}
+                  className={`page-exit-button ${trendAlerts.length ? "has-notifications" : ""}`}
+                  href={`/teacher/classes/${classroom.id}/progress${latestActivity ? `?materialId=${latestActivity.id}` : ""}#notifications`}
                 >
                   <BellRing size={17} />
+                  Notifications
+                  {trendAlerts.length > 0 && <span>{trendAlerts.length}</span>}
+                </Link>
+                <Link
+                  className={`page-exit-button ${alertCount ? "has-alerts" : ""}`}
+                  href={`/teacher/classes/${classroom.id}/progress${latestActivity ? `?materialId=${latestActivity.id}` : ""}#alerts`}
+                >
+                  <TriangleAlert size={17} />
                   Alerts
-                  <span>{alertCount}</span>
+                  {alertCount > 0 && <span>{alertCount}</span>}
                 </Link>
                 {latestActivity && (
                   <Link
@@ -357,14 +368,24 @@ export default async function ClassOverviewPage({
             <div>
               <div className="eyebrow">Assignment improvement</div>
               <h2>This assignment vs last assignment</h2>
-              <p>Simple class goals students can read from across the room.</p>
+              <p>Current and previous results in one view.</p>
             </div>
             <div className="weekly-legend" aria-label="Assignment comparison legend">
               <span><i className="this-week-key" /> This assignment</span>
               <span><i className="last-week-key" /> Last assignment</span>
             </div>
           </div>
-          <div className="weekly-chart" aria-label="Assignment improvement grouped bar chart">
+          {isSecondary ? <div className="comparison-grid" aria-label="Assignment comparison">
+            {assignmentMetrics.map((metric) => {
+              const change = metric.thisValue - metric.lastValue;
+              return <article className="comparison-card" key={metric.label}>
+                <h3>{metric.label}</h3>
+                <div><span>This assignment</span><strong>{metricValueLabel(metric.thisValue, metric.suffix)}</strong></div>
+                <div><span>Last assignment</span><strong>{olderActivity ? metricValueLabel(metric.lastValue, metric.suffix) : "—"}</strong></div>
+                <small>{olderActivity ? change === 0 ? "No change" : `${change > 0 ? "+" : ""}${metricValueLabel(change, metric.suffix)} change` : "No previous assignment"}</small>
+              </article>;
+            })}
+          </div> : <div className="weekly-chart" aria-label="Assignment improvement grouped bar chart">
             <div className="weekly-chart-scale" aria-hidden="true">
               <span>100%</span>
               <span>75%</span>
@@ -417,6 +438,7 @@ export default async function ClassOverviewPage({
               })}
             </div>
           </div>
+          }
         </section>
       </main>
     </>

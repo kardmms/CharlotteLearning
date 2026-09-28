@@ -1,10 +1,10 @@
-import { Gamepad2, LockKeyhole, Sparkles, Star } from "lucide-react";
+import { Gamepad2, Star } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
-import { joinVocabDashRoom, updateStudentCharacter } from "@/app/student/actions";
+import { joinVocabDashRoom } from "@/app/student/actions";
 import { StudentTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { getStudentSession, requireStudentAccount } from "@/lib/auth";
-import { vocabDashAccessories, vocabDashColors } from "@/lib/vocab-dash";
+import { StudentCharacterCustomizer } from "@/components/StudentCharacterCustomizer";
 import { gamesFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -62,49 +62,12 @@ export default async function PlayPage({
             </form>
           </section>
 
-          <section className="panel character-customizer">
-            <div className="character-customizer-head">
-              <div><div className="eyebrow">Customize character</div><h2>Make your runner yours</h2></div>
-              <div className={`base-character color-${account.characterColor}`} aria-label="Character preview">
-                <span className={`character-accessory ${account.selectedAccessory || "none"}`} />
-                <i />
-              </div>
-            </div>
-            <form action={updateStudentCharacter}>
-              <fieldset className="character-color-picker">
-                <legend>Color</legend>
-                <div>
-                  {vocabDashColors.map((color) => (
-                    <label key={color.key}>
-                      <input name="characterColor" type="radio" value={color.key} defaultChecked={color.key === account.characterColor} />
-                      <span style={{ background: color.hex }} />
-                      <small>{color.label}</small>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <fieldset className="character-accessory-picker">
-                <legend>Accessories</legend>
-                <div>
-                  <label>
-                    <input name="accessoryKey" type="radio" value="" defaultChecked={!account.selectedAccessory} />
-                    <span>None</span>
-                  </label>
-                  {vocabDashAccessories.map((accessory) => {
-                    const owned = unlocked.has(accessory.key);
-                    return (
-                      <label key={accessory.key}>
-                        <input name="accessoryKey" type="radio" value={accessory.key} defaultChecked={account.selectedAccessory === accessory.key} />
-                        <span>{accessory.label}</span>
-                        <small>{owned ? "Owned" : <><LockKeyhole size={13} /> {accessory.cost} stars</>}</small>
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-              <button className="ghost-button" type="submit"><Sparkles size={17} /> Save character</button>
-            </form>
-          </section>
+          <StudentCharacterCustomizer
+            initialColor={account.characterColor}
+            initialAccessory={account.selectedAccessory}
+            ownedAccessories={[...unlocked]}
+            stars={account.stars}
+          />
         </div>
       </main>
     </div>

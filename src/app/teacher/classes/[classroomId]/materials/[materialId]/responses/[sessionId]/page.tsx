@@ -4,6 +4,7 @@ import { TeacherTopbar } from "@/components/AppTopbar";
 import { IndividualResponsePicker } from "@/components/IndividualResponsePicker";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { selectedQuestions } from "@/lib/adaptive-assessment";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,9 @@ export default async function IndividualResponsePage({
     }
   });
   if (!session) notFound();
+  const displayedQuestions = session.material.adaptiveQuestionSet
+    ? selectedQuestions(session.material.questions, session.assignedQuestionIdsJson)
+    : session.material.questions;
 
   const responses = await prisma.studentSession.findMany({
     where: {
@@ -125,12 +129,12 @@ export default async function IndividualResponsePage({
           </section>
 
           <div className="individual-answer-list">
-            {session.material.questions.map((question, index) => {
+            {displayedQuestions.map((question, index) => {
               const answer = session.answers.find((item) => item.questionId === question.id);
               const unanswered = !answer || answer.answerText === "No response";
               const pending = answer?.isCorrect === null && !unanswered;
               const correct = answer?.isCorrect === true;
-              const maxPoints = questionPointValue(question.sortOrder, session.material.questions.length);
+              const maxPoints = questionPointValue(index + 1, displayedQuestions.length);
               return (
                 <article className="individual-answer-card" key={question.id}>
                   <div className="individual-answer-heading">

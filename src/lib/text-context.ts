@@ -26,7 +26,7 @@ function visiblePageLabel(text: string) {
   return null;
 }
 
-export function sourceExcerptWindows(text: string, limit = 80): SourceExcerpt[] {
+export function sourceExcerptWindows(text: string, limit = 80, sentenceCount = 2): SourceExcerpt[] {
   const windows: SourceExcerpt[] = [];
   let currentPage: string | null = null;
   const parts = text.split(/(\[\[PAGE \d+\]\])/gi);
@@ -45,11 +45,11 @@ export function sourceExcerptWindows(text: string, limit = 80): SourceExcerpt[] 
 
     for (let index = 0; index < sentences.length && windows.length < limit; index += 1) {
       const firstSentence = sentences[index];
-      const excerptSentences = firstSentence.length >= 90
+      const excerptSentences = firstSentence.length >= 90 && sentenceCount <= 2
         ? [firstSentence]
-        : sentences.slice(index, index + 2);
+        : sentences.slice(index, index + sentenceCount);
       const excerpt = excerptSentences.join(" ");
-      if (excerpt.length < 45 || excerpt.length > 520) continue;
+      if (excerpt.length < 45 || excerpt.length > 900) continue;
       windows.push({
         excerpt,
         sourcePage: visiblePageLabel(excerpt) || currentPage
@@ -60,8 +60,8 @@ export function sourceExcerptWindows(text: string, limit = 80): SourceExcerpt[] 
   return windows;
 }
 
-export function excerptForQuestion(text: string, questionText: string): SourceExcerpt {
-  const windows = sourceExcerptWindows(text, 120);
+export function excerptForQuestion(text: string, questionText: string, sentenceCount = 2): SourceExcerpt {
+  const windows = sourceExcerptWindows(text, 120, sentenceCount);
   if (windows.length === 0) return excerptForIndex(text, 0);
   const targets = searchWords(questionText);
   if (targets.size === 0) return windows[0];

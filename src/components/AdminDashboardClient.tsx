@@ -40,6 +40,7 @@ import {
   updateFeedbackPasscode
 } from "@/app/admin/actions";
 import type { AdminMetrics } from "@/lib/admin-metrics";
+import type { AdminStudentGrowthRow } from "@/lib/admin-student-growth";
 import type { OpenAiUsageMetrics } from "@/lib/openai-usage";
 import type { VercelServerMetrics } from "@/lib/vercel-monitoring";
 
@@ -50,7 +51,7 @@ type AdminIdentity = {
   role: string;
 };
 
-export type AdminView = "dashboard" | "analytics" | "leads" | "people" | "feedback" | "settings" | "server" | "ai-usage";
+export type AdminView = "dashboard" | "analytics" | "student-growth" | "leads" | "people" | "feedback" | "settings" | "server" | "ai-usage";
 
 type InviteFlash = {
   inviteId: string;
@@ -933,7 +934,8 @@ export function AdminDashboardClient({
   inviteFlash,
   view = "dashboard",
   serverMetrics,
-  aiUsageMetrics
+  aiUsageMetrics,
+  studentGrowth
 }: {
   initialMetrics: AdminMetrics;
   admin: AdminIdentity;
@@ -941,6 +943,7 @@ export function AdminDashboardClient({
   view?: AdminView;
   serverMetrics?: VercelServerMetrics;
   aiUsageMetrics?: OpenAiUsageMetrics;
+  studentGrowth?: AdminStudentGrowthRow[];
 }) {
   const [metrics, setMetrics] = useState(initialMetrics);
   const [serverSnapshot, setServerSnapshot] = useState(serverMetrics);
@@ -1001,6 +1004,7 @@ export function AdminDashboardClient({
   const title = {
     dashboard: "Main Dashboard",
     analytics: "Analytics",
+    "student-growth": "Student Growth",
     leads: "Leads",
     people: "People",
     feedback: "Feedback",
@@ -1011,6 +1015,7 @@ export function AdminDashboardClient({
   const subtitle = {
     dashboard: "A current view of adoption, participation, and completed learning across Charlotte AI.",
     analytics: "School-level adoption, student participation, learning quality, and platform usage.",
+    "student-growth": "Protected student identifiers and learning trends. Individual names stay out of this view.",
     leads: "Contact requests, follow-up status, and classroom sales opportunities.",
     people: "Admin access, owner controls, and invite history.",
     feedback: "Weekly teacher feedback and product notes.",
@@ -1029,6 +1034,7 @@ export function AdminDashboardClient({
         <nav aria-label="Admin sections">
           <a href="/admin" className={view === "dashboard" ? "active" : ""}><Gauge size={19} /> Dashboard</a>
           <a href="/admin/analytics" className={view === "analytics" ? "active" : ""}><BarChart3 size={19} /> Analytics</a>
+          <a href="/admin/student-growth" className={view === "student-growth" ? "active" : ""}><LineChart size={19} /> Student Growth</a>
           <a href="/admin/leads" className={view === "leads" ? "active" : ""}><Inbox size={19} /> Leads</a>
           <a href="/admin/people" className={view === "people" ? "active" : ""}><UsersRound size={19} /> People</a>
           <a href="/admin/feedback" className={view === "feedback" ? "active" : ""}><MessageSquareText size={19} /> Feedback</a>
@@ -1098,6 +1104,30 @@ export function AdminDashboardClient({
               <MetricCard icon={<Activity size={22} />} label="Platform Participation" value={`${metrics.headline.participationRate}%`} detail={`${metrics.headline.activeStudents} active students`} tone="orange" />
             </section>
           </>
+        )}
+
+        {view === "student-growth" && (
+          <section className="admin-glass-panel">
+            <div className="admin-card-head">
+              <div><h2>Student performance</h2><p>Protected IDs are stable within this workspace. Names and private skill levels are not shown.</p></div>
+              <LineChart size={20} />
+            </div>
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead><tr><th>Protected student ID</th><th>Scored assignments</th><th>Recent average</th><th>Growth</th><th>Status</th></tr></thead>
+                <tbody>
+                  {(studentGrowth || []).map((row) => <tr key={row.protectedId}>
+                    <td><strong>{row.protectedId}</strong></td>
+                    <td>{row.assessedAssignments}</td>
+                    <td>{row.recentAverage === null ? "—" : `${row.recentAverage}%`}</td>
+                    <td>{row.change === null ? "—" : `${row.change > 0 ? "+" : ""}${row.change} points`}</td>
+                    <td>{row.status === "needs_attention" ? "Needs attention" : row.status === "growing" ? "Growing" : row.status === "steady" ? "Steady" : "Not enough data"}</td>
+                  </tr>)}
+                  {!studentGrowth?.length && <tr><td colSpan={5}>No active students to show yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
 
         {view === "leads" && <LeadsPanel metrics={metrics} />}

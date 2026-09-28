@@ -3,6 +3,7 @@ import { ArrowRight, BookOpen, Gamepad2 } from "lucide-react";
 import { StudentTopbar } from "@/components/AppTopbar";
 import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { studentBandClass } from "@/lib/grade";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export default async function StudentPracticePage() {
   });
 
   return (
-    <div className="student-shell">
+    <div className={`student-shell ${studentBandClass(student.classroom.gradeLevel)}`}>
       <StudentTopbar name={student.displayName} />
       <main className="page student-practice-page">
         <section className="student-menu-heading"><div><span>Optional extra practice</span><h1>Vocabulary practice</h1><p>Review words your class has already used.</p></div><BookOpen size={36} /></section>

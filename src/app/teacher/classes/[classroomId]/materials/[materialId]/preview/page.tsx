@@ -5,6 +5,8 @@ import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { studentBandClass } from "@/lib/grade";
 import { excerptForIndex } from "@/lib/text-context";
+import { QUESTION_CATEGORIES, assignedQuestionIds, selectedQuestions } from "@/lib/adaptive-assessment";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +20,16 @@ function parseChoices(choicesJson?: string | null) {
 }
 
 export default async function TeacherPreviewPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ classroomId: string; materialId: string }>;
+  searchParams: Promise<{ level?: string }>;
 }) {
   const teacher = await requireTeacher();
   const { classroomId, materialId } = await params;
+  const query = await searchParams;
+  const level = Math.min(5, Math.max(1, Number.parseInt(query.level || "3", 10) || 3));
   const material = await prisma.material.findFirst({
     where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
@@ -35,6 +41,10 @@ export default async function TeacherPreviewPage({
 
   const reviewHref = `/teacher/classes/${classroomId}/materials/${materialId}/review`;
   const sourceText = material.sourceText || material.sourcePreview || "";
+  const previewQuestions = material.adaptiveQuestionSet
+    ? selectedQuestions(material.questions, JSON.stringify(assignedQuestionIds(material.questions,
+        Object.fromEntries(QUESTION_CATEGORIES.map((category) => [category, level])))))
+    : material.questions;
 
   return (
     <div className={`student-shell teacher-preview-shell ${studentBandClass(material.classroom.gradeLevel)}`}>
@@ -49,6 +59,9 @@ export default async function TeacherPreviewPage({
         <ClosePreviewButton fallbackHref={reviewHref} />
       </header>
       <main className="page narrow-page preview-page">
+        {material.adaptiveQuestionSet && <nav className="form-tabs" aria-label="Preview difficulty level">
+          {[1, 2, 3, 4, 5].map((option) => <Link className={option === level ? "active" : ""} key={option} href={`?level=${option}`}>Test {option}</Link>)}
+        </nav>}
         <StudentStation
           preview
           material={{
@@ -64,7 +77,7 @@ export default async function TeacherPreviewPage({
             pointsEarned: 0,
             focusViolationCount: 0
           }}
-          questions={material.questions.map((question, index) => {
+          questions={previewQuestions.map((question, index) => {
             const fallbackExcerpt = !question.contextExcerpt && sourceText ? excerptForIndex(sourceText, index) : null;
             return {
               id: question.id,

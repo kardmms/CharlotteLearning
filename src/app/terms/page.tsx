@@ -8,10 +8,12 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { PublicTopbar } from "@/components/AppTopbar";
+import { billingEnabled } from "@/lib/licensing";
 
 const effectiveDate = "August 18, 2026";
 
 export default function TermsPage() {
+  const subscriptionsAvailable = billingEnabled();
   return (
     <>
       <PublicTopbar />
@@ -176,21 +178,43 @@ export default function TermsPage() {
           <div className="privacy-section-heading">
             <BadgeDollarSign size={25} />
             <div>
-              <div className="eyebrow">No in-app charges</div>
+              <div className="eyebrow">Billing</div>
               <h2>Fees, subscriptions, and renewals</h2>
             </div>
           </div>
-          <p>
-            Charlotte currently does not process payment-card data, in-app purchases, paid subscriptions,
-            free trials that convert to paid plans, or automatic renewals inside the application. Any paid
-            school, classroom, pilot, or district arrangement is handled outside the app under a separate
-            written agreement, invoice, or order form.
-          </p>
-          <p>
-            Charlotte should not add in-app billing, subscriptions, automatic renewals, paid trials, or
-            cancellation workflows unless the pricing terms, renewal terms, reminders, cancellation method,
-            refund rules, and required consumer or business notices are reviewed and published before launch.
-          </p>
+          {subscriptionsAvailable ? (
+            <>
+              <p>
+                A teacher may purchase student licenses for $10 USD per student per month through Stripe.
+                The teacher chooses the number of seats at checkout. The total monthly charge is $10
+                multiplied by the chosen seat count, plus any applicable taxes shown before payment.
+                The subscription renews monthly until canceled. Charlotte does not receive or store
+                payment-card numbers; Stripe processes payments.
+              </p>
+              <p>
+                Teachers can change their seat count or cancel from Account → Manage subscription.
+                Seat changes may create prorated charges or credits, which Stripe shows before the
+                change is confirmed. A cancellation takes effect at the end of the current billing
+                period, with access continuing until then. Fees already paid for the current period
+                are not refunded for unused time, except where required by law or a written agreement.
+                Students need an active seat and the teacher-created license key to use licensed features.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                Charlotte currently does not process payment-card data, in-app purchases, paid subscriptions,
+                free trials that convert to paid plans, or automatic renewals inside the application. Any paid
+                school, classroom, pilot, or district arrangement is handled outside the app under a separate
+                written agreement, invoice, or order form.
+              </p>
+              <p>
+                Charlotte should not add in-app billing, subscriptions, automatic renewals, paid trials, or
+                cancellation workflows unless the pricing terms, renewal terms, reminders, cancellation method,
+                refund rules, and required consumer or business notices are reviewed and published before launch.
+              </p>
+            </>
+          )}
         </section>
 
         <section className="panel privacy-section" id="reviews">

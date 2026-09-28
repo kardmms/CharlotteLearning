@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GameSourceUpload } from "@/components/GameSourceUpload";
 import { ArrowLeft, FileUp, Keyboard, Sparkles } from "lucide-react";
 import { createVocabDashDraft } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
@@ -72,9 +73,9 @@ export default async function NewVocabDashPage({
             <div className="vocab-source-icon"><FileUp size={24} /></div>
             <div>
               <h2>Upload a file</h2>
-              <p>Use a PDF, DOCX, or TXT file up to 90 MB. Charlotte will pull the best vocabulary words for this class and write the definitions.</p>
+              <p>Use a PDF, DOCX, or TXT file up to 4 MB. Charlotte will pull the best vocabulary words for this class and write the definitions.</p>
             </div>
-            <input name="sourceFile" type="file" accept=".pdf,.docx,.txt,application/pdf,text/plain" />
+            <GameSourceUpload />
           </section>
 
           <section className="vocab-source-card">

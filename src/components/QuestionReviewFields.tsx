@@ -3,6 +3,7 @@
 import type { Question } from "@prisma/client";
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
+import { CATEGORY_LABELS } from "@/lib/adaptive-assessment";
 
 function parseChoices(choicesJson?: string | null) {
   if (!choicesJson) return [];
@@ -22,16 +23,17 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
   const [prompt, setPrompt] = useState(question.prompt);
   const [contextExcerpt, setContextExcerpt] = useState(question.contextExcerpt || "");
   const [sourcePage, setSourcePage] = useState(question.sourcePage || "");
+  const [rubric, setRubric] = useState(question.rubric || "");
   const isMultipleChoice = format === "MULTIPLE_CHOICE";
 
   return (
     <div className="question-editor simplified-question-editor">
-      <h2>Question {index + 1}</h2>
+      <h2>Question {index + 1}{question.category ? ` · ${CATEGORY_LABELS[question.category]}` : ""}</h2>
       <input type="hidden" name={`type-${question.id}`} value={question.type} />
       <input type="hidden" name={`skill-${question.id}`} value={question.skillTag || ""} />
       <input type="hidden" name={`difficulty-${question.id}`} value={question.difficulty} />
       <input type="hidden" name={`standard-${question.id}`} value={question.standardCode || ""} />
-      <input type="hidden" name={`rubric-${question.id}`} value={question.rubric || ""} />
+      {isMultipleChoice && <input type="hidden" name={`rubric-${question.id}`} value={rubric} />}
       {question.randomizeChoices && <input type="hidden" name={`randomize-${question.id}`} value="on" />}
 
       <div className="question-simple-controls">
@@ -105,7 +107,7 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
             )}
           </div>
           {choices.map((choice, choiceIndex) => (
-            <label className="option-row" key={choiceIndex}>
+            <label className={`option-row ${choice && choice === correctAnswer ? "correct-choice" : ""}`} key={choiceIndex}>
               <span>{String.fromCharCode(65 + choiceIndex)}</span>
               <input
                 name={`choice-${question.id}`}
@@ -117,6 +119,7 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
                 }}
                 placeholder={`Option ${choiceIndex + 1}`}
               />
+              {choice && choice === correctAnswer && <strong className="correct-choice-label">Correct</strong>}
             </label>
           ))}
           <label>
@@ -133,6 +136,10 @@ export function QuestionReviewFields({ question, index }: { question: Question; 
           </label>
         </div>
       )}
+      {!isMultipleChoice && <label>
+        Teacher scoring guide
+        <textarea name={`rubric-${question.id}`} value={rubric} onChange={(event) => setRubric(event.target.value)} placeholder="What should a strong answer explain and support with evidence?" />
+      </label>}
     </div>
   );
 }

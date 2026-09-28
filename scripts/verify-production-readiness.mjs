@@ -56,6 +56,12 @@ if (
 ) {
   missing.push("OPENAI_ZERO_DATA_RETENTION_CONFIRMED=true when OPENAI_STUDENT_PII_TO_AI_ENABLED=true");
 }
+if (process.env.SUBSCRIPTIONS_ENABLED === "true") {
+  for (const name of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_STUDENT_PRICE_ID"]) {
+    if (!process.env[name]?.trim()) missing.push(name);
+  }
+  if (process.env.BILLING_TERMS_REVIEWED !== "true") missing.push("BILLING_TERMS_REVIEWED=true");
+}
 
 const configuredHosts = (process.env.ALLOWED_OUTBOUND_HOSTS || "")
   .split(",")

@@ -4,16 +4,24 @@ import { TeacherTopbar } from "@/components/AppTopbar";
 import { Message } from "@/components/Message";
 import { PasswordField } from "@/components/PasswordField";
 import { requireTeacher } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { billingEnabled } from "@/lib/licensing";
+import { openBillingPortal, setTeacherLicenseKey, startSeatCheckout } from "@/app/teacher/billing/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeacherAccountPage({
   searchParams
 }: {
-    searchParams: Promise<{ error?: string; saved?: string; emailSettings?: string }>;
+    searchParams: Promise<{ error?: string; saved?: string; emailSettings?: string; licenseSaved?: string; checkout?: string }>;
 }) {
   const teacher = await requireTeacher();
   const query = await searchParams;
+  const showBilling = billingEnabled() && !teacher.isShowcase;
+  const license = showBilling ? await prisma.teacherLicense.findUnique({
+    where: { teacherId: teacher.id },
+    include: { _count: { select: { redemptions: { where: { active: true } } } } }
+  }) : null;
 
   return (
     <>
@@ -102,6 +110,32 @@ export default async function TeacherAccountPage({
             </button>
           </form>
         </section>
+        {showBilling && (
+          <section className="panel" style={{ marginTop: 18 }}>
+            <div className="eyebrow">Student licenses</div>
+            <h2>$10 per student per month</h2>
+            <p>Choose your student seat count, then give students the license key you create here.</p>
+            <Message error={query.error} success={query.licenseSaved ? "License key saved." : query.checkout === "success" ? "Checkout complete. Seats will appear after Stripe confirms payment." : undefined} />
+            <p><strong>{license?._count.redemptions || 0} of {license?.seats || 0} seats used</strong> · {license?.status || "inactive"}</p>
+            <form className="form-grid" action={setTeacherLicenseKey}>
+              <label>Teacher license key
+                <input name="licenseKey" minLength={8} maxLength={64} pattern="[A-Za-z0-9-]{8,64}" autoComplete="off" required />
+              </label>
+              <p className="form-note">Use 8–64 letters, numbers, or hyphens. Save it somewhere safe; entering a new key replaces the old key for future students.</p>
+              <button className="button secondary" type="submit">{license?.keyHash ? "Change license key" : "Create license key"}</button>
+            </form>
+            {license?.stripeSubscriptionId && !["canceled", "incomplete_expired"].includes(license.status) ? (
+              <form action={openBillingPortal}><button className="button" type="submit">Manage subscription</button></form>
+            ) : (
+              <form className="form-grid" action={startSeatCheckout}>
+                <label>Student seats
+                  <input name="quantity" type="number" min={1} max={5000} step={1} defaultValue={25} required />
+                </label>
+                <button className="button" type="submit" disabled={!license?.keyHash}>Continue to Stripe</button>
+              </form>
+            )}
+          </section>
+        )}
       </main>
     </>
   );

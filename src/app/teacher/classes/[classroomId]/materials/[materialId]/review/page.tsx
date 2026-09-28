@@ -2,14 +2,17 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Eye, Play, RotateCcw, Save, Settings2, Sheet } from "lucide-react";
 import { publishMaterial, saveMaterialDraft, startShowcaseSimulation, unpublishMaterial } from "@/app/teacher/actions";
 import { TeacherTopbar } from "@/components/AppTopbar";
+import { ClearApprovedReadingDraft } from "@/components/ClearApprovedReadingDraft";
 import { DeleteMaterialButton } from "@/components/DeleteMaterialButton";
 import { IndividualResponsePicker } from "@/components/IndividualResponsePicker";
 import { Message } from "@/components/Message";
 import { QuestionReviewFields } from "@/components/QuestionReviewFields";
 import { QuestionResponseChart } from "@/components/QuestionResponseChart";
+import { SaveReadingPdfButton } from "@/components/SaveReadingPdfButton";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
+import { QUESTION_CATEGORIES, selectedQuestions } from "@/lib/adaptive-assessment";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +29,13 @@ function parseChoices(choicesJson?: string | null) {
 
 export default async function ReviewMaterialPage({ params, searchParams }: {
   params: Promise<{ classroomId: string; materialId: string }>;
-  searchParams: Promise<{ error?: string; saved?: string; tab?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; tab?: string; level?: string }>;
 }) {
   const teacher = await requireTeacher();
   const { classroomId, materialId } = await params;
   const query = await searchParams;
   const tab = query.tab === "responses" || query.tab === "settings" ? query.tab : "questions";
+  const level = Math.min(5, Math.max(1, Number.parseInt(query.level || "3", 10) || 3));
   const material = await prisma.material.findFirst({
     where: { id: materialId, classroomId, teacherId: teacher.id, schoolId: teacher.schoolId },
     include: {
@@ -52,13 +56,20 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
     }
   });
   if (!material) notFound();
+  const visibleQuestions = material.adaptiveQuestionSet
+    ? material.questions.filter((question) => question.difficulty === level)
+        .sort((a, b) => QUESTION_CATEGORIES.indexOf(a.category!) - QUESTION_CATEGORIES.indexOf(b.category!) || a.sortOrder - b.sortOrder)
+    : material.questions;
 
   const finalizedSessions = material.sessions;
   let gradedResponseCount = 0;
   let correctResponseCount = 0;
   let pending = 0;
   for (const session of finalizedSessions) {
-    for (const question of material.questions) {
+    const assigned = material.adaptiveQuestionSet
+      ? selectedQuestions(material.questions, session.assignedQuestionIdsJson)
+      : material.questions;
+    for (const question of assigned) {
       const answer = session.answers.find((item) => item.questionId === question.id);
       if (!answer || answer.isCorrect === false) {
         gradedResponseCount += 1;
@@ -95,6 +106,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
 
   return (
     <>
+      {material.sourceName?.startsWith("Charlotte-generated:") && material.sourceText && <ClearApprovedReadingDraft classroomId={classroomId} approvedText={material.sourceText} />}
       <TeacherTopbar name={teacher.name} classroomId={classroomId} />
       <main className="form-workspace">
         <header className="form-workspace-header">
@@ -115,7 +127,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
               aria-label="Preview as a student"
             ><Eye size={19} /></Link>
             <DeleteMaterialButton classroomId={classroomId} materialId={materialId} />
-            {teacher.isShowcase && (
+            {teacher.isShowcase && !material.adaptiveQuestionSet && (
               <form action={startShowcaseSimulation}>
                 <input type="hidden" name="classroomId" value={classroomId} />
                 <input type="hidden" name="materialId" value={materialId} />
@@ -164,8 +176,25 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
               <input type="hidden" name="classroomId" value={classroomId} />
               <input type="hidden" name="materialId" value={materialId} />
               <input type="hidden" name="returnTab" value="questions" />
-              <section className="form-title-card"><h2>{material.title}</h2><p>{material.questions.length} questions · {material.estimatedMinutes} minutes</p></section>
-              {material.questions.map((question, index) => <QuestionReviewFields question={question} index={index} key={question.id} />)}
+              {material.adaptiveQuestionSet && <input type="hidden" name="returnLevel" value={level} />}
+              <section className="form-title-card"><h2>{material.title}</h2><p>{material.adaptiveQuestionSet ? "Five tests · 10 questions per difficulty · 2 per category" : `${material.questions.length} questions`} · {material.estimatedMinutes} minutes</p></section>
+              {material.sourceText && (
+                <details className="form-reading-card" open={material.sourceName?.startsWith("Charlotte-generated:")}>
+                  <summary>Reading used for these questions{material.sourceName ? ` · ${material.sourceName}` : ""}</summary>
+                  {material.sourceName?.startsWith("Charlotte-generated:") && <SaveReadingPdfButton text={material.sourceText} />}
+                  <div>{material.sourceText}</div>
+                </details>
+              )}
+              {material.adaptiveQuestionSet && (
+                <nav className="form-tabs" aria-label="Difficulty tests">
+                  {[1, 2, 3, 4, 5].map((option) => (
+                    <Link key={option} className={level === option ? "active" : ""} href={`?tab=questions&level=${option}`}>
+                      Test {option} · Level {option}
+                    </Link>
+                  ))}
+                </nav>
+              )}
+              {visibleQuestions.map((question, index) => <QuestionReviewFields question={question} index={index} key={question.id} />)}
               <div className="sticky-save-row"><button className="button" type="submit"><Save size={18} /> Save questions</button></div>
             </form>
           )}
@@ -197,6 +226,7 @@ export default async function ReviewMaterialPage({ params, searchParams }: {
                     const choices = parseChoices(question.choicesJson);
                     const questionSafetyFlagCount = question.answers.filter((answer) => answer.safetyFlaggedAt).length;
                     const noResponseCount = finalizedSessions.filter((session) => {
+                      if (material.adaptiveQuestionSet && !selectedQuestions(material.questions, session.assignedQuestionIdsJson).some((item) => item.id === question.id)) return false;
                       const answer = session.answers.find((item) => item.questionId === question.id);
                       return !answer || answer.answerText === "No response";
                     }).length;

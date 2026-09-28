@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock3, Rocket, Star, XCircle } from "lucide-react";
+import { StudentAvatar } from "@/components/StudentAvatar";
+import { CheckCircle2, Clock3, Star, XCircle } from "lucide-react";
 
 type QuestionPayload = {
   termId: string;
@@ -39,13 +40,17 @@ export function VocabDashPlayer({
   displayName,
   roomCode,
   initialStatus,
-  termCount
+  termCount,
+  characterColor,
+  accessoryKey
 }: {
   participantId: string;
   displayName: string;
   roomCode: string;
   initialStatus: string;
   termCount: number;
+  characterColor?: string;
+  accessoryKey?: string | null;
 }) {
   const [payload, setPayload] = useState<GamePayload>({
     status: initialStatus === "WAITING" ? "WAITING" : "PLAYING",
@@ -128,7 +133,7 @@ export function VocabDashPlayer({
     <main className="vocab-player-page">
       <section className="vocab-player-card">
         <div className="vocab-player-top">
-          <div className="vocab-student-join-icon"><Rocket size={28} /></div>
+          <StudentAvatar color={characterColor} accessoryKey={accessoryKey} size={58} />
           <div>
             <span>Vocab Dash</span>
             <h1>{displayName}</h1>

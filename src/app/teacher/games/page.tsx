@@ -58,11 +58,11 @@ export default async function TeacherGamesPage({
       <main className="page teacher-games-page">
         <section className="workspace-heading games-heading">
           <div>
-            <div className="eyebrow">Winter preview</div>
+            <div className="eyebrow">Classroom practice</div>
             <h1>Games</h1>
             <p>Launch live, class-connected practice and follow every student&apos;s progress from one screen.</p>
           </div>
-          <span className="local-preview-badge"><Gamepad2 size={17} /> Playtest</span>
+          <span className="local-preview-badge"><Gamepad2 size={17} /> Live games</span>
         </section>
 
         {classrooms.length > 0 && (

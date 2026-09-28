@@ -3,6 +3,7 @@ import { getTeacherContext } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clearExpiredRateLimits, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { toCsv } from "@/lib/security";
+import { selectedQuestions } from "@/lib/adaptive-assessment";
 
 export const runtime = "nodejs";
 
@@ -47,9 +48,11 @@ export async function GET(_request: Request, { params }: {
     if (!latestByStudent.has(session.studentId)) latestByStudent.set(session.studentId, session);
   }
   const headers: unknown[] = ["Student", "Email", "Status", "Points", "Signed in", "Completed"];
-  material.questions.forEach((_, index) =>
-    headers.push(`Question ${index + 1}`, `Question ${index + 1} result`, `Question ${index + 1} safety flag`)
-  );
+  const questionCount = material.adaptiveQuestionSet ? 10 : material.questions.length;
+  for (let index = 0; index < questionCount; index += 1) {
+    if (material.adaptiveQuestionSet) headers.push(`Question ${index + 1} category / level`);
+    headers.push(`Question ${index + 1}`, `Question ${index + 1} result`, `Question ${index + 1} safety flag`);
+  }
   const rows: unknown[][] = [headers];
   for (const session of [...latestByStudent.values()].sort((a, b) => a.student.displayName.localeCompare(b.student.displayName))) {
     const row: unknown[] = [
@@ -60,8 +63,12 @@ export async function GET(_request: Request, { params }: {
       session.signInAt.toISOString(),
       session.completedAt?.toISOString() ?? ""
     ];
-    for (const question of material.questions) {
+    const questions = material.adaptiveQuestionSet
+      ? selectedQuestions(material.questions, session.assignedQuestionIdsJson)
+      : material.questions;
+    for (const question of questions) {
       const answer = session.answers.find((item) => item.questionId === question.id);
+      if (material.adaptiveQuestionSet) row.push(`${question.category ?? ""} / ${question.difficulty}: ${question.prompt}`);
       row.push(
         answer?.answerText === "No response" ? "" : answer?.answerText ?? "",
         !answer || answer.answerText === "No response"

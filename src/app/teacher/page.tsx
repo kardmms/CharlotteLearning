@@ -32,7 +32,10 @@ export default async function TeacherHomePage({
     },
     orderBy: { createdAt: "desc" }
   });
-  if (classrooms.length > 0) redirect("/teacher/classes");
+  if (classrooms.length > 0) {
+    const secondary = classrooms.find((classroom) => Number(classroom.gradeLevel) >= 6);
+    redirect(secondary ? `/teacher/classes/${secondary.id}` : "/teacher/classes");
+  }
 
   return (
     <>

@@ -1,3 +1,4 @@
+import { StudentAvatar } from "@/components/StudentAvatar";
 import { notFound, redirect } from "next/navigation";
 import { GameRoomStatus } from "@prisma/client";
 import Link from "next/link";
@@ -13,16 +14,6 @@ import { prisma } from "@/lib/db";
 import { gamesFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
-
-const characterLabels: Record<string, string> = {
-  runner: "Runner",
-  rocket: "Rocket",
-  star: "Star",
-  comet: "Comet",
-  bolt: "Bolt",
-  compass: "Compass",
-  spark: "Spark"
-};
 
 export default async function VocabDashRoomPage({
   params,
@@ -102,12 +93,10 @@ export default async function VocabDashRoomPage({
             <div className="joined-student-grid">
               {room.participants.map((participant) => (
                 <div className="joined-student-card" key={participant.id}>
-                  <span className={`joined-character color-${participant.characterColor || "blue"}`}>
-                    {characterLabels[participant.characterKey]?.slice(0, 1) || "V"}
-                  </span>
+                  <StudentAvatar color={participant.characterColor} accessoryKey={participant.accessoryKey} size={52} />
                   <div>
                     <strong>{participant.displayName}</strong>
-                    <span>{characterLabels[participant.characterKey] || "Vocab Dash"}</span>
+                    <span>Ready to play</span>
                   </div>
                   <CheckCircle2 size={18} />
                 </div>

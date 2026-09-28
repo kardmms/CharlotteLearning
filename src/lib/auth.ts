@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { getAuthSecret } from "@/lib/security";
 import { isShowcaseExpired, SHOWCASE_LIFETIME_MS } from "@/lib/showcase-policy";
 import { ensureTeacherSchool } from "@/lib/tenancy";
+import { billingEnabled } from "@/lib/licensing";
 
 const teacherCookie = "charlotte_teacher_session";
 const teacherReturnCookie = "charlotte_teacher_return_session";
@@ -358,6 +359,16 @@ export async function requireStudent() {
   });
 
   if (!student) redirect("/student/classes");
+  if (billingEnabled()) {
+    const [teacher, license] = await Promise.all([
+      prisma.teacher.findUnique({ where: { id: student.classroom.teacherId }, select: { isShowcase: true } }),
+      prisma.studentLicense.findUnique({
+        where: { teacherId_accountId: { teacherId: student.classroom.teacherId, accountId: session.sub } },
+        include: { license: { select: { status: true } } }
+      })
+    ]);
+    if (!teacher?.isShowcase && (license?.license.status !== "active" || !license.active)) redirect("/student/classes");
+  }
   return student;
 }
 

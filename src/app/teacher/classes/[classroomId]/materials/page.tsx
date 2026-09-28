@@ -104,7 +104,7 @@ export default async function MaterialsPage({
                   >
                     {material.status.toLowerCase()}
                   </span>
-                  <span>{material._count.questions}</span>
+                  <span>{material.adaptiveQuestionSet ? "5 tests · 10 each" : material._count.questions}</span>
                   <span>{material._count.sessions}</span>
                   <div className="doc-actions">
                     <DeleteMaterialButton classroomId={classroom.id} materialId={material.id} />
