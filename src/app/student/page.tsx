@@ -1,3 +1,5 @@
+import { SecondaryStudentOverview } from "@/components/SecondaryStudentOverview";
+import { gradeIndex } from "@/lib/grade";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, CheckCircle2, Clock3, Gamepad2, Home, LockKeyhole, School, Star, Trophy } from "lucide-react";
 import { StudentTopbar } from "@/components/AppTopbar";
@@ -121,6 +123,15 @@ export default async function StudentHomePage({
   const calendarCells = buildMonthCalendar(completedKeys, now);
   const monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(now);
 
+  const monthlySessions = gradeIndex(student.classroom.gradeLevel) >= 6 ? await prisma.studentSession.findMany({
+    where: { studentId: student.id, schoolId: student.schoolId, status: "COMPLETED", completedAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) }, material: { classroomId: student.classroomId, activityKind: "IN_CLASS" } },
+    orderBy: { completedAt: "desc" },
+    select: { materialId: true, pointsEarned: true, answers: { select: { isCorrect: true } } }
+  }) : [];
+  const monthlyAssignments = [...new Map(monthlySessions.slice().reverse().map(row => [row.materialId, row])).values()];
+  const gradedMonthly = monthlyAssignments.filter(row => row.answers.length && row.answers.every(answer => answer.isCorrect !== null));
+  const monthlyAverage = gradedMonthly.length ? Math.round(gradedMonthly.reduce((sum, row) => sum + Math.min(100, row.pointsEarned), 0) / gradedMonthly.length) : null;
+
   const activityView = query.view === "class" ? "class" : query.view === "home" ? "home" : null;
   const selectedActivity = activityView === "class" ? inClassActivity : activityView === "home" ? atHomeActivity : null;
 
@@ -181,6 +192,10 @@ export default async function StudentHomePage({
               </section>
             )}
           </>
+        ) : gradeIndex(student.classroom.gradeLevel) >= 6 ? (
+          <SecondaryStudentOverview name={student.displayName} grade={student.classroom.gradeLevel} className={student.classroom.name}
+            assignments={materials.filter(row => row.activityKind === "IN_CLASS" && isOpen(row)).map(row => ({ id: row.id, title: row.title, minutes: row.estimatedMinutes, due: formatDue(row.dueAt), questions: row.adaptiveQuestionSet ? 10 : row._count.questions }))}
+            completed={monthlyAssignments.length} average={monthlyAverage} latestResult={monthlySessions[0]?.materialId} hasPractice={practiceSetCount > 0} gamesEnabled={gamesEnabled} />
         ) : (
           <>
             <section className="student-menu-heading">

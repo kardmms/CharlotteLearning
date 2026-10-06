@@ -1,4 +1,6 @@
 "use client";
+import { ReadAloud } from "./ReadAloud";
+import { AccessibilityMenu } from "./StudentAccessibility";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -197,7 +199,7 @@ export function VocabDashPlayer({
         {payload.status === "PLAYING" && payload.question && (
           <div className="vocab-question-panel">
             <span>Choose the vocabulary word</span>
-            <h2>{payload.question.definition}</h2>
+            <AccessibilityMenu /><ReadAloud text={payload.question.definition} questionId={`${payload.progress}-${payload.question.termId}`} choices={payload.question.choices} />
             <div className="vocab-choice-grid">
               {payload.question.choices.map((choice) => (
                 <button

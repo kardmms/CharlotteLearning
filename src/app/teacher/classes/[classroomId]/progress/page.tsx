@@ -1,3 +1,5 @@
+import { StudentProgressList } from "@/components/StudentProgressList";
+import { gradeIndex } from "@/lib/grade";
 import Link from "next/link";
 import { Mail } from "lucide-react";
 import { TeacherTopbar } from "@/components/AppTopbar";
@@ -66,7 +68,7 @@ export default async function ProgressPage({
   searchParams
 }: {
   params: Promise<{ classroomId: string }>;
-  searchParams: Promise<{ materialId?: string }>;
+  searchParams: Promise<{ materialId?: string; period?: string }>;
 }) {
   const teacher = await requireTeacher();
   const { classroomId } = await params;
@@ -197,7 +199,7 @@ export default async function ProgressPage({
     }];
   }).reverse()]));
   let trendAdvice = new Map<string, { analysis: string; nextStep: string }>();
-  if (trendAlerts.length && (process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY)) {
+  if (gradeIndex(classroom.gradeLevel) < 6 && trendAlerts.length && (process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY)) {
     try {
       await enforceRateLimit({ scope: "teacher-trend-advice", limit: 12, windowSeconds: 60 * 60, identifier: `${teacher.id}:${classroomId}` });
       trendAdvice = await suggestTrendFollowUps(
@@ -248,13 +250,13 @@ export default async function ProgressPage({
   return (
     <>
       <TeacherTopbar name={teacher.name} classroomId={classroomId} />
-      <main className="page">
+      <main className={`page ${gradeIndex(classroom.gradeLevel) >= 6 ? "secondary-progress-page" : ""}`}>
         <section className="panel">
           <div className="eyebrow">Student progress</div>
           <h1>{classroom.name}</h1>
           <p>{gradeLabel(classroom.gradeLevel)}</p>
           <ClassNav classroomId={classroom.id} />
-          <div className="bubble-key" style={{ marginTop: 18 }}>
+          <div className="bubble-key" style={{ marginTop: 18 }} hidden={gradeIndex(classroom.gradeLevel) >= 6}>
             <span className="bubble-row">
               <StatusBubble state="complete" label="Complete" /> Completed
             </span>
@@ -270,6 +272,12 @@ export default async function ProgressPage({
           </div>
         </section>
 
+        {gradeIndex(classroom.gradeLevel) >= 6 && <StudentProgressList classroomId={classroom.id} period={query.period === "5" ? 5 : 3} students={classroom.students.map(student => ({ ...student, scores: trendMaterials.flatMap(assignment => {
+          const session = latestScoredSession(assignment.sessions, student.id);
+          return session ? [{ score: session.pointsEarned, date: (session.completedAt || session.signInAt).getTime() }] : [];
+        }).sort((a, b) => b.date - a.date).map(row => row.score) }))} />}
+
+        <details className="progress-detail-disclosure" open={gradeIndex(classroom.gradeLevel) < 6}><summary>Assignment details and notifications</summary>
         <section className="panel progress-attention-panel" id="notifications" aria-labelledby="notifications-title">
           <div className="panel-header">
             <div><div className="eyebrow">Student trends</div><h2 id="notifications-title">Notifications</h2></div>
@@ -466,6 +474,7 @@ export default async function ProgressPage({
             </table>
           </div>
         </section>
+        </details>
       </main>
     </>
   );

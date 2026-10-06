@@ -244,6 +244,7 @@ model Student {
 }
 
 model StudentAccount {
+  accessibilityPreferences Json @default("{}")
   id                   String           @id @default(cuid())
   displayName          String
   email                String           @unique

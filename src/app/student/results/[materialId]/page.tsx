@@ -1,3 +1,6 @@
+import { ReadAloud } from "@/components/ReadAloud";
+import { AccessibilityMenu } from "@/components/StudentAccessibility";
+import { gradeIndex } from "@/lib/grade";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Clock3, LogOut, RotateCcw, Star, Trophy } from "lucide-react";
@@ -76,6 +79,7 @@ export default async function StudentResultPage({
         <form action={logoutStudent}><button className="ghost-button" type="submit"><LogOut size={18} /> Log out</button></form>
       </header>
       <main className="student-result-page">
+        <AccessibilityMenu />
         <section className={`result-hero ${session.endedByFocusLoss ? "flagged" : ""}`}>
           <div className="result-hero-icon">
             {session.endedByFocusLoss ? <AlertTriangle size={34} /> : <CheckCircle2 size={34} />}
@@ -96,6 +100,14 @@ export default async function StudentResultPage({
           <div className="result-score-card"><strong>{durationMinutes}m</strong><span>Time</span></div>
         </section>
         {pending > 0 && <p className="result-pending"><Clock3 size={17} /> {pending} written {pending === 1 ? "response is" : "responses are"} waiting for teacher review.</p>}
+
+        {gradeIndex(student.classroom.gradeLevel) >= 6 && <section className="portal-card result-question-review"><h2>Question review</h2><p>Review your answers and what to practice next.</p>{session.answers.map(answer => <article className="result-review-item" key={answer.id}>
+          <ReadAloud text={answer.question.prompt} questionId={answer.questionId} auto={false} />
+          <p><strong>{answer.isCorrect === null ? 'Awaiting teacher review' : answer.isCorrect ? '✓ Correct' : '○ Review this question'}</strong> · {answer.question.skillTag || 'Reading'}</p>
+          <p>Your answer: {answer.answerText}</p>
+          {answer.isCorrect === false && answer.question.correctAnswer && <p>Correct answer: {answer.question.correctAnswer}</p>}
+          {(answer.teacherFeedback || answer.question.explanation) && <p>{answer.teacherFeedback || answer.question.explanation}</p>}
+        </article>)}</section>}
 
         {material.activityKind === "AT_HOME" && (
           <>

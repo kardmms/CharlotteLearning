@@ -1,4 +1,6 @@
 "use client";
+import { ReadAloud } from "./ReadAloud";
+import { AccessibilityMenu } from "./StudentAccessibility";
 
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
@@ -17,14 +19,16 @@ export function VocabFlashcards({ terms }: { terms: Term[] }) {
 
   return (
     <div className="flashcard-tool">
+      <AccessibilityMenu />
+      <ReadAloud text={flipped ? term.definition : term.word} questionId={`${term.id}-${flipped}`} heading={false} />
       <button
         className={`vocab-flashcard ${flipped ? "flipped" : ""}`}
         type="button"
         onClick={() => setFlipped((value) => !value)}
         aria-label={flipped ? "Show vocabulary word" : "Show definition"}
       >
-        <span className="vocab-flashcard-front"><small>Vocabulary word</small><strong>{term.word}</strong><em>Tap to flip</em></span>
-        <span className="vocab-flashcard-back">
+        <span className="vocab-flashcard-front" aria-hidden={flipped}><small>Vocabulary word</small><strong>{term.word}</strong><em>Tap to flip</em></span>
+        <span className="vocab-flashcard-back" aria-hidden={!flipped}>
           <small>Definition</small>
           <strong>{term.definition}</strong>
           {term.alternateDefinition && <span><b>Another meaning:</b> {term.alternateDefinition}</span>}

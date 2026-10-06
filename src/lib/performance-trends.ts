@@ -65,3 +65,20 @@ export function performanceAlerts(
     }];
   });
 }
+
+/** Two adjacent, non-overlapping groups of fully graded assignments, newest first.
+ * Each assignment has equal weight; retakes contribute only their latest graded session.
+ * Values are percentage points, not relative percentage growth.
+ */
+export function comparePerformancePeriods(scores: number[], periodSize = 3) {
+  const size = periodSize === 5 ? 5 : 3;
+  const valid = scores.filter(Number.isFinite).map(score => Math.max(0, Math.min(100, score)));
+  const recent = valid.slice(0, size);
+  const previous = valid.slice(size, size * 2);
+  const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const current = average(recent);
+  const prior = average(previous);
+  const sufficient = recent.length === size && previous.length === size;
+  const delta = sufficient ? Math.round(((current ?? 0) - (prior ?? 0)) * 10) / 10 : null;
+  return { current: current === null ? null : Math.round(current * 10) / 10, previous: prior === null ? null : Math.round(prior * 10) / 10, delta, direction: delta === null ? 'insufficient' : Math.abs(delta) < 0.5 ? 'steady' : delta > 0 ? 'up' : 'down', recentCount: recent.length, previousCount: previous.length };
+}

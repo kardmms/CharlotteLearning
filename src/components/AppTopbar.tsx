@@ -87,6 +87,7 @@ export function StudentTopbar({ name }: { name: string }) {
       </Link>
       <nav className="nav-links">
         <span className="muted">{name}</span>
+        <Link className="ghost-button" href="/student/settings">Settings</Link>
         {gamesEnabled && (
           <Link className="ghost-button" href="/play">
             <Gamepad2 size={18} />

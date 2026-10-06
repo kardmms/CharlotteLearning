@@ -113,6 +113,7 @@ export default async function StationPage({
       </header>
       <main className="page narrow-page">
         <StudentStation
+          initialSeconds={Math.max(0, material.estimatedMinutes * 60 - Math.floor((Date.now() - session.signInAt.getTime()) / 1000))}
           material={{
             id: material.id,
             title: material.title,

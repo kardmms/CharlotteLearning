@@ -1,5 +1,8 @@
 "use client";
 
+import { StudentDialog } from "./StudentDialog";
+import { ReadAloud, AccessiblePassage, AccessibleInstructions } from "./ReadAloud";
+import { AccessibilityMenu } from "./StudentAccessibility";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, BookOpenText, CheckCircle2, Clock3, Eye, PencilLine, Send, Sparkles, Star } from "lucide-react";
 import { currentResourceMode, noteNetworkResult } from "@/lib/resource-mode";
@@ -62,7 +65,8 @@ export function StudentStation({
   material,
   session,
   questions,
-  preview = false
+  preview = false,
+  initialSeconds
 }: {
   material: {
     id: string;
@@ -74,6 +78,7 @@ export function StudentStation({
   session: { id: string; signInAt: string; pointsEarned: number; focusViolationCount: number };
   questions: Question[];
   preview?: boolean;
+  initialSeconds?: number;
 }) {
   const initialResults = Object.fromEntries(
     questions
@@ -104,8 +109,7 @@ export function StudentStation({
   );
   const [results, setResults] = useState<Record<string, QuestionResult>>(initialResults);
   const [points, setPoints] = useState(session.pointsEarned);
-  const elapsed = Math.floor((Date.now() - new Date(session.signInAt).getTime()) / 1000);
-  const [setSeconds, setSetSeconds] = useState(Math.max(0, material.estimatedMinutes * 60 - elapsed));
+  const [setSeconds, setSetSeconds] = useState(initialSeconds ?? material.estimatedMinutes * 60);
   const [questionSeconds, setQuestionSeconds] = useState<number | null>(
     preview ? null : questions[firstOpen]?.timeLimitSeconds || null
   );
@@ -250,9 +254,11 @@ export function StudentStation({
 
   useEffect(() => {
     if (preview) return;
-    const timer = window.setInterval(() => setSetSeconds((value) => Math.max(0, value - 1)), 1000);
+    const update = () => setSetSeconds(Math.max(0, material.estimatedMinutes * 60 - Math.floor((Date.now() - new Date(session.signInAt).getTime()) / 1000)));
+    update();
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [preview]);
+  }, [preview, material.estimatedMinutes, session.signInAt]);
 
   useEffect(() => {
     setQuestionSeconds(preview ? null : question.timeLimitSeconds || null);
@@ -461,8 +467,9 @@ export function StudentStation({
 
   return (
     <section className="station-shell">
+      <AccessibilityMenu />
       {focusWarning && (
-        <div className="focus-warning-layer" role="alertdialog" aria-modal="true">
+        <StudentDialog className="focus-warning-layer" label="Focus warning" onDismiss={() => setFocusWarning(false)}>
           <div className="focus-warning-card">
             <div className="focus-warning-icon">!</div>
             <h2>You&apos;ve left the screen.</h2>
@@ -482,10 +489,10 @@ export function StudentStation({
               Return to assignment
             </button>
           </div>
-        </div>
+        </StudentDialog>
       )}
       {responseReviewOpen && (
-        <div className="submit-review-layer" role="dialog" aria-modal="true" aria-labelledby="submit-review-title">
+        <StudentDialog className="submit-review-layer" label="Check before you submit" onDismiss={() => setResponseReviewOpen(false)}>
           <div className="submit-review-card">
             <div className="submit-review-icon">
               <BookOpenText size={26} />
@@ -535,7 +542,7 @@ export function StudentStation({
               </button>
             </div>
           </div>
-        </div>
+        </StudentDialog>
       )}
       <div className="station-header">
         <div className="station-title-block">
@@ -582,7 +589,7 @@ export function StudentStation({
                   {index + 1}
                 </button>
               ) : (
-                <span className={className} key={item.id}>{index + 1}</span>
+                <span className={className} key={item.id} aria-current={index === current ? "step" : undefined}>{index + 1}<span className="a11y-only">{results[item.id]?.locked ? results[item.id].isCorrect === true ? ": correct" : results[item.id].isCorrect === null ? ": awaiting review" : ": needs review" : ": not completed"}</span></span>
               );
             })}
           </div>}
@@ -603,17 +610,19 @@ export function StudentStation({
                 <strong>Read this part first</strong>
                 {question.sourcePage && <span>{question.sourcePage}</span>}
               </div>
-              <p>{question.contextExcerpt}</p>
+              <AccessiblePassage text={question.contextExcerpt} />
             </aside>
           )}
 
-          <h2>{question.prompt}</h2>
+          <ReadAloud text={question.prompt} questionId={question.id} choices={question.choices} />
+          <AccessibleInstructions steps={question.choices.length ? ["Read the question and passage.", "Choose one answer.", "Submit your answer when ready."] : ["Read the question and passage.", "Write your answer using evidence.", "Review and submit your response."]} />
 
           {question.choices.length > 0 ? (
             <div className="choice-grid">
               {question.choices.map((choice, index) => (
                 <button
                   className={`choice-button ${currentAnswer === choice ? "selected" : ""}`}
+                  aria-pressed={currentAnswer === choice}
                   data-no-loading="true"
                   disabled={submitting || currentResult?.locked}
                   key={choice}
@@ -689,7 +698,7 @@ export function StudentStation({
                   <span className={attempt <= (currentResult?.attemptCount || 0) ? "used" : ""} key={attempt} />
                 ))}
               </div>}
-              <p className="help-text">{status}</p>
+              <p className="help-text" role="status">{status}</p>
             </div>
             <button
               className="button student-submit-button"
