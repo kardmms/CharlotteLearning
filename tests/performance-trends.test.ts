@@ -51,3 +51,19 @@ test("waits for all written answers before using a score in notifications", () =
   }] }));
   assert.deepEqual(performanceAlertsFromMaterials(materials, [{ id: "a", displayName: "A" }]), []);
 });
+
+import { comparePerformancePeriods } from '../src/lib/performance-trends.ts';
+test('compares non-overlapping average scores with signed changes', () => {
+  assert.equal(comparePerformancePeriods([90,80,70,70,60,50]).delta, 20);
+  assert.equal(comparePerformancePeriods([50,60,70,70,80,90]).direction, 'down');
+  assert.equal(comparePerformancePeriods([80,80,80,80,80,80]).delta, 0);
+  assert.equal(comparePerformancePeriods([80,80,80,80,80,80]).direction, 'steady');
+  assert.equal(comparePerformancePeriods([80.1,80,80,80,80,80]).direction, 'steady');
+});
+test('requires two full periods and never fabricates a trend for missing work', () => {
+  assert.equal(comparePerformancePeriods([]).current, null);
+  assert.equal(comparePerformancePeriods([90]).delta, null);
+  assert.equal(comparePerformancePeriods([90,80,70,60,50]).direction, 'insufficient');
+  assert.equal(comparePerformancePeriods([90,90,90,90,90,70,70,70,70,70],5).delta,20);
+  assert.equal(comparePerformancePeriods([90,90,90,90,90,70],5).delta,null);
+});
