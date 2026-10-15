@@ -16,7 +16,7 @@ if (!apiKey) {
       'Welcome to Charlotte. Let’s read together. Take your time, listen closely, and choose the answer that best explains the passage.',
       {
         apiKey,
-        voiceId: process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb',
+        voiceId: process.env.ELEVENLABS_VOICE_ID || 'cgSgspJ2msm6clMCkdW9',
         modelId: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
       },
       fetch,

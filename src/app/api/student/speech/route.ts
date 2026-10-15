@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     if (!text) return NextResponse.json({ error: 'Provide between 1 and 10,000 characters' }, { status: 400 });
     const response = await generateSpeech(text, {
       apiKey,
-      voiceId: process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb',
+      voiceId: process.env.ELEVENLABS_VOICE_ID || 'cgSgspJ2msm6clMCkdW9',
       modelId: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
     }, restrictedFetch, AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]));
     if (!response.ok || !response.headers.get('content-type')?.startsWith('audio/')) {
