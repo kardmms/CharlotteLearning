@@ -159,23 +159,20 @@ try {
       await cookie(teacherContext,'teacher',{sub:teacher.id,name:teacher.name,email:teacher.email});
       const teacherPage=await teacherContext.newPage();
       await teacherPage.goto(base+`/teacher/classes/${classroom.id}/progress`);
-      await check(`grade ${grade} teacher trend list and analytics`,async()=>{
+      await check(`grade ${grade} teacher entire-history list and analytics`,async()=>{
         await teacherPage.getByRole('heading',{name:'Progress at a glance'}).waitFor();
-        assert.equal(await teacherPage.getByText('↑ +30 pp',{exact:true}).count(),1);
-        assert.equal(await teacherPage.getByText('↓ -30 pp',{exact:true}).count(),1);
-        assert.equal(await teacherPage.getByText('→ 0 pp',{exact:true}).count(),1);
+        assert.equal(await teacherPage.getByLabel('Comparison',{exact:true}).count(),0);
+        assert.match(await teacherPage.locator('.watchlist-row').filter({hasText:'Declining QA'}).innerText(), /75%/);
+        assert.match(await teacherPage.locator('.watchlist-row').filter({hasText:'Steady QA'}).innerText(), /75%/);
         assert.equal(await teacherPage.getByText('No scored work yet',{exact:true}).count(),1);
         await teacherPage.screenshot({path:`outputs/student-experience-qa/grade-${grade}-teacher.png`,fullPage:true});
         await teacherPage.locator('.watchlist-row').filter({hasText:'Avery QA'}).click();
-        await teacherPage.getByRole('heading',{name:'Skills behind the trend'}).waitFor();
+        await teacherPage.getByRole('heading',{name:'Skills across all assignments'}).waitFor();
         assert.equal(await teacherPage.getByRole('rowheader',{name:'Evidence',exact:true}).count(),1);
       });
-      await check(`grade ${grade} teacher comparison selector and phone layout`,async()=>{
+      await check(`grade ${grade} teacher entire-history phone layout`,async()=>{
         await teacherPage.goto(base+`/teacher/classes/${classroom.id}/progress`);
-        await teacherPage.getByLabel('Comparison',{exact:true}).selectOption('5');
-        await teacherPage.getByRole('button',{name:'Apply',exact:true}).click();
-        await teacherPage.waitForURL(/period=5/);
-        assert.equal(await teacherPage.getByText('More history needed',{exact:true}).count(),3);
+        assert.equal(await teacherPage.getByLabel('Comparison',{exact:true}).count(),0);
         await teacherPage.setViewportSize({width:390,height:844});
         assert.ok(await teacherPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
       });

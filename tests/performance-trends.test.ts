@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { performanceAlerts, performanceAlertsFromMaterials } from "../src/lib/performance-trends.ts";
+import { performanceAlerts, performanceAlertsFromMaterials, summarizePerformanceHistory } from "../src/lib/performance-trends.ts";
 
 test("alerts only after a repeated scored trend", () => {
   const students = [{ id: "a", displayName: "A" }, { id: "b", displayName: "B" }];
@@ -66,4 +66,11 @@ test('requires two full periods and never fabricates a trend for missing work', 
   assert.equal(comparePerformancePeriods([90,80,70,60,50]).direction, 'insufficient');
   assert.equal(comparePerformancePeriods([90,90,90,90,90,70,70,70,70,70],5).delta,20);
   assert.equal(comparePerformancePeriods([90,90,90,90,90,70],5).delta,null);
+});
+
+test("history average includes every graded assignment beyond the old comparison windows", () => {
+  assert.deepEqual(summarizePerformanceHistory([...Array(10).fill(100), ...Array(10).fill(0)]), { average: 50, count: 20 });
+  assert.deepEqual(summarizePerformanceHistory([60, 70, 60, 80, 80, 90]), { average: 73.3, count: 6 });
+  assert.deepEqual(summarizePerformanceHistory([]), { average: null, count: 0 });
+  assert.deepEqual(summarizePerformanceHistory([NaN, Infinity, -5, 120]), { average: 50, count: 2 });
 });

@@ -68,7 +68,7 @@ export default async function ProgressPage({
   searchParams
 }: {
   params: Promise<{ classroomId: string }>;
-  searchParams: Promise<{ materialId?: string; period?: string }>;
+  searchParams: Promise<{ materialId?: string }>;
 }) {
   const teacher = await requireTeacher();
   const { classroomId } = await params;
@@ -100,7 +100,7 @@ export default async function ProgressPage({
   const progressHeaders = material?.adaptiveQuestionSet
     ? Array.from({ length: 10 }, (_, index) => ({ label: `${CATEGORY_LABELS[QUESTION_CATEGORIES[Math.floor(index / 2)]]} ${index % 2 + 1}`, questionId: null as string | null }))
     : (material?.questions || []).map((question, index) => ({ label: String(index + 1), questionId: question.id }));
-  const [sessions, monthlyMaterials, trendMaterials] = await Promise.all([
+  const [sessions, monthlyMaterials, trendMaterials, historyMaterials] = await Promise.all([
     material
       ? prisma.studentSession.findMany({
         where: {
@@ -170,6 +170,13 @@ export default async function ProgressPage({
           }
         }
       }
+    }),
+    prisma.material.findMany({
+      where: { schoolId: teacher.schoolId, classroomId: classroom.id, teacherId: teacher.id },
+      select: { sessions: {
+        where: { schoolId: teacher.schoolId, status: "COMPLETED" },
+        select: { studentId: true, status: true, pointsEarned: true, signInAt: true, completedAt: true, answers: { select: { isCorrect: true } } }
+      } }
     })
   ]);
   const trendAlerts = performanceAlertsFromMaterials(trendMaterials, classroom.students);
@@ -272,7 +279,7 @@ export default async function ProgressPage({
           </div>
         </section>
 
-        {gradeIndex(classroom.gradeLevel) >= 6 && <StudentProgressList classroomId={classroom.id} period={query.period === "5" ? 5 : 3} students={classroom.students.map(student => ({ ...student, scores: trendMaterials.flatMap(assignment => {
+        {gradeIndex(classroom.gradeLevel) >= 6 && <StudentProgressList classroomId={classroom.id} students={classroom.students.map(student => ({ ...student, scores: historyMaterials.flatMap(assignment => {
           const session = latestScoredSession(assignment.sessions, student.id);
           return session ? [{ score: session.pointsEarned, date: (session.completedAt || session.signInAt).getTime() }] : [];
         }).sort((a, b) => b.date - a.date).map(row => row.score) }))} />}

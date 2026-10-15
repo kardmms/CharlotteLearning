@@ -82,3 +82,12 @@ export function comparePerformancePeriods(scores: number[], periodSize = 3) {
   const delta = sufficient ? Math.round(((current ?? 0) - (prior ?? 0)) * 10) / 10 : null;
   return { current: current === null ? null : Math.round(current * 10) / 10, previous: prior === null ? null : Math.round(prior * 10) / 10, delta, direction: delta === null ? 'insufficient' : Math.abs(delta) < 0.5 ? 'steady' : delta > 0 ? 'up' : 'down', recentCount: recent.length, previousCount: previous.length };
 }
+
+/** All graded assignment scores, with equal weight for every assignment. */
+export function summarizePerformanceHistory(scores: number[]) {
+  const valid = scores.filter(Number.isFinite).map(score => Math.max(0, Math.min(100, score)));
+  return {
+    count: valid.length,
+    average: valid.length ? Math.round(valid.reduce((sum, score) => sum + score, 0) / valid.length * 10) / 10 : null,
+  };
+}

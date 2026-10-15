@@ -16,9 +16,9 @@ This targets WCAG 2.2 AA practices; it is not a claim of formal conformance cert
 
 ## Teacher comparisons
 
-The existing Progress route shows Grades 6–12 a compact list. Teachers select the latest 3 vs previous 3, or latest 5 vs previous 5 **fully graded in-class assignments** for each student. The latest eligible completed session per assignment is used, sorted by completion timestamp, and each assignment has equal weight. Partial sessions and answers awaiting grading are excluded. Score uses existing assignment points, capped to 0–100, consistently with the existing teacher progress model.
+The Progress route shows Grades 6–12 each student's overall assignment average and fully graded assignment count across their entire history in the class. It includes in-class and at-home assignments, including previously published work, with no date or assignment-count window. Each assignment has equal weight and contributes its latest completed, fully graded attempt. Partial work and pending grades are excluded. The comparison selector and percentage-point trends have been removed from this summary.
 
-Change is in **percentage points**, not relative percentage growth. Two complete, non-overlapping groups are required for a trend. Under 0.5 pp is steady; partial recent averages are shown with counts and “More history needed,” never a fabricated arrow. The existing student detail route now summarizes skill accuracy in these same groups and links to existing assignment response analysis. Skill accuracy is explicitly distinguished from assignment points and accompanied by question counts.
+Student detail uses the same full-history scope and shows overall skill accuracy with question counts, plus links to assignment responses. Skill accuracy is distinct from assignment points, which account for attempts. Recent-pattern notifications remain separate under assignment details.
 
 ## Verification
 
