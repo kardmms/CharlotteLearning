@@ -15,7 +15,9 @@
     "test:games": "node --experimental-strip-types --test tests/*.test.ts",
     "school-directory:import": "node scripts/import-school-directory.mjs",
     "verify:production": "node scripts/verify-production-readiness.mjs",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:speech": "node --experimental-strip-types --test tests/speech-provider.test.ts tests/read-aloud.test.mjs",
+    "verify:speech": "node --experimental-strip-types scripts/verify-natural-voice.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.10.1",

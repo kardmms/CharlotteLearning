@@ -2,6 +2,7 @@ import "server-only";
 
 const defaultAllowedHosts = [
   "api.openai.com",
+  "api.elevenlabs.io",
   "api.resend.com",
   "api.vercel.com",
   "challenges.cloudflare.com",
