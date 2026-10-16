@@ -2,7 +2,7 @@ import 'server-only';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/db';
 import { restrictedFetch } from '@/lib/outbound';
-import { financeMonths, stripeFinanceAmounts, type FinanceProvider, type FinanceSnapshot } from '@/lib/finance';
+import { financeMonths, stripeFinanceAmounts, parseElevenBilling, type ElevenBilling, type FinanceProvider, type FinanceSnapshot } from '@/lib/finance';
 
 type Total = { month: string; kind: 'revenue' | 'expense'; dollars: number };
 const startDate = () => new Date(`${financeMonths()[0]}-01T00:00:00Z`);
@@ -108,15 +108,13 @@ async function stripe(): Promise<string> {
   }
   throw new Error('Stripe import exceeded 5,000 records; saved history retained.');
 }
-async function elevenlabs(): Promise<string> {
+async function elevenlabs(): Promise<string | { detail: string; billing: ElevenBilling }> {
   const key = process.env.ELEVENLABS_BILLING_API_KEY || process.env.ELEVENLABS_API_KEY;
   if (!key) return 'Voice billing is not connected. Record ElevenLabs invoices below.';
   const body = await (await request(new URL('https://api.elevenlabs.io/v1/user/subscription'), { 'xi-api-key': key })).json();
-  const used = Number(body.character_count);
-  const limit = Number(body.character_limit);
-  if (!Number.isFinite(used) || !Number.isFinite(limit)) throw new Error('Invalid ElevenLabs usage response.');
-  return `${used.toLocaleString('en-US')} / ${limit.toLocaleString('en-US')} characters this billing cycle. Record paid invoices below; character usage is not a dollar charge.`;
+  return { detail: 'Live subscription, usage-based overage and upcoming invoice from ElevenLabs. Pending amounts are shown separately from recorded expenses.', billing: parseElevenBilling(body) };
 }
+
 const sources = [
   { name: 'OpenAI', key: 'openai', run: openai },
   { name: 'ElevenLabs', key: 'elevenlabs', run: elevenlabs },
@@ -125,14 +123,16 @@ const sources = [
 ];
 export async function getFinanceSnapshot(force = false): Promise<FinanceSnapshot> {
   const providers = await Promise.all(sources.map(async source => {
-    const key = `finance-sync:${source.key}`;
+    const key = `finance-sync:v2:${source.key}`;
     const cached = await prisma.adminSetting.findUnique({ where: { key } });
     if (!force && cached?.value && Date.now() - cached.updatedAt.getTime() < 3600000) return JSON.parse(cached.value) as FinanceProvider;
     let provider: FinanceProvider;
     try {
-      const detail = await source.run();
-      const connected = !detail || detail.includes('characters this billing cycle');
-      provider = { name: source.name, status: connected ? 'connected' : 'unconnected', detail: detail || (source.key === 'vercel' ? 'Charlotte project usage plus shared team charges. Reported charges may lag; invoices may differ.' : source.key === 'stripe' ? 'Live account payments, refunds, disputes and fees. Payouts and transfers are excluded.' : 'Reported usage costs for the Charlotte OpenAI project. Provider reporting may lag.'), syncedAt: connected ? new Date().toISOString() : undefined };
+      const result = await source.run();
+      const detail = typeof result === 'string' ? result : result.detail;
+      const billing = typeof result === 'string' ? undefined : result.billing;
+      const connected = !detail || !!billing;
+      provider = { name: source.name, billing, status: connected ? 'connected' : 'unconnected', detail: detail || (source.key === 'vercel' ? 'Charlotte project usage plus shared team charges. Reported charges may lag; invoices may differ.' : source.key === 'stripe' ? 'Live account payments, refunds, disputes and fees. Payouts and transfers are excluded.' : 'Reported usage costs for the Charlotte OpenAI project. Provider reporting may lag.'), syncedAt: connected ? new Date().toISOString() : undefined };
     } catch (error) {
       provider = { name: source.name, status: 'attention', detail: error instanceof Error && error.message === 'MANUAL_OVERLAP' ? 'Manual records overlap this provider’s import window. Void those manual records before syncing to prevent double counting.' : source.key === 'elevenlabs' ? 'Voice is connected, but billing access is unavailable. Add a billing-readable ElevenLabs key or record invoices below.' : 'Billing import unavailable. Check provider credentials and permissions. Previously imported records are retained.' };
     }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { financeMonths, parseFinanceAmount, stripeFinanceAmounts, summarizeFinance, type FinanceRow } from '../src/lib/finance.ts';
+import { financeMonths, parseFinanceAmount, parseElevenBilling, stripeFinanceAmounts, summarizeFinance, type FinanceRow } from '../src/lib/finance.ts';
 const row = (kind: string, cents: number, date = '2026-10-15T00:00:00Z'): FinanceRow => ({ id: 'test', source: 'manual', category: 'Other', kind, amountCents: cents, description: 'test', occurredAt: date });
 test('finance months cross year boundaries in UTC and include the current month', () => {
   const months = financeMonths(new Date('2026-01-01T00:30:00Z'));
@@ -26,4 +26,14 @@ test('Stripe income uses gross less refunds and disputes, with fees counted once
   assert.deepEqual(stripeFinanceAmounts({reporting_category:'fee_credit',amount:100,fee:0}),{revenue:0,expenses:-100});
   assert.deepEqual(stripeFinanceAmounts({reporting_category:'payout',amount:-8000,fee:25}),{revenue:0,expenses:25});
   assert.deepEqual(stripeFinanceAmounts({reporting_category:'transfer',amount:8000,fee:0}),{revenue:0,expenses:0});
+});
+
+test('ElevenLabs billing exposes real overage and upcoming invoice without inventing paid charges', () => {
+  const input = {tier:'free',character_count:1085,character_limit:10000,currency:'usd',current_overage:{amount:'0',currency:'usd'},next_invoice:null};
+  const free = parseElevenBilling(input);
+  assert.equal(free.overageCents,0); assert.equal(free.nextInvoiceCents,null); assert.equal(free.plan,'free');
+  const paid = parseElevenBilling({...input,tier:'creator',current_overage:{amount:'2.35',currency:'usd'},next_invoice:{amount_due_cents:2435}});
+  assert.equal(paid.overageCents,235); assert.equal(paid.nextInvoiceCents,2435);
+  assert.throws(()=>parseElevenBilling({...input,current_overage:{amount:'oops',currency:'usd'}}));
+  assert.throws(()=>parseElevenBilling({...input,next_invoice:{amount_due_cents:1.5}}));
 });

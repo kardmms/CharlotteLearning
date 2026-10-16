@@ -1,6 +1,7 @@
 export const financeCategories = ['OpenAI', 'ElevenLabs', 'Vercel', 'Stripe', 'Database', 'Email', 'Domains', 'Other'] as const;
 export type FinanceRow = { id: string; source: string; category: string; kind: string; amountCents: number; description: string; occurredAt: string };
-export type FinanceProvider = { name: string; status: 'connected' | 'unconnected' | 'attention'; detail: string; syncedAt?: string };
+export type ElevenBilling = { plan: string; creditsUsed: number; creditLimit: number; currency: string; overageCents: number; nextInvoiceCents: number | null; resetsAt: string | null };
+export type FinanceProvider = { name: string; status: 'connected' | 'unconnected' | 'attention'; detail: string; syncedAt?: string; billing?: ElevenBilling };
 export type FinanceSnapshot = { rows: FinanceRow[]; providers: FinanceProvider[]; generatedAt: string };
 export function financeMonths(now = new Date()) {
   return Array.from({ length: 12 }, (_, i) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11 + i, 1)).toISOString().slice(0, 7));
@@ -25,4 +26,20 @@ export function stripeFinanceAmounts(row: { reporting_category: string; amount: 
   const revenue = revenueCategories.includes(row.reporting_category) ? row.amount : 0;
   const expenses = row.fee + (['fee', 'fee_credit'].includes(row.reporting_category) ? -row.amount : 0);
   return { revenue, expenses };
+}
+
+export function parseElevenBilling(value: unknown): ElevenBilling {
+  const body = value as Record<string, unknown>;
+  if (!body || typeof body !== 'object' || typeof body.tier !== 'string' || !Number.isSafeInteger(body.character_count) || Number(body.character_count) < 0 || !Number.isSafeInteger(body.character_limit) || Number(body.character_limit) < 0) throw new Error('Invalid ElevenLabs billing response.');
+  const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : 'USD';
+  if (!['USD','EUR','INR','PLN','GBP'].includes(currency)) throw new Error('Unsupported ElevenLabs currency.');
+  const overage = body.current_overage as { amount?: string | number; currency?: string } | undefined;
+  const amount = overage?.amount;
+  if ((typeof amount !== 'string' && typeof amount !== 'number') || !Number.isFinite(Number(amount)) || Number(amount) < 0 || overage?.currency?.toUpperCase() !== currency) throw new Error('Invalid ElevenLabs overage amount.');
+  const invoice = body.next_invoice as { amount_due_cents?: number } | null | undefined;
+  const nextInvoiceCents = invoice?.amount_due_cents ?? null;
+  if (nextInvoiceCents !== null && (!Number.isSafeInteger(nextInvoiceCents) || nextInvoiceCents < 0)) throw new Error('Invalid ElevenLabs invoice amount.');
+  const reset = body.next_character_count_reset_unix;
+  const resetsAt = typeof reset === 'number' && Number.isFinite(reset) && reset > 0 ? new Date(reset * 1000).toISOString() : null;
+  return { plan: body.tier, creditsUsed: Number(body.character_count), creditLimit: Number(body.character_limit), currency, overageCents: Math.round(Number(amount) * 100), nextInvoiceCents, resetsAt };
 }
