@@ -91,3 +91,12 @@ export function summarizePerformanceHistory(scores: number[]) {
     average: valid.length ? Math.round(valid.reduce((sum, score) => sum + score, 0) / valid.length * 10) / 10 : null,
   };
 }
+
+/** Scores are ordered newest first; compare only the latest two graded assignments. */
+export function latestAssignmentChange(scores: number[]) {
+  const [latest, previous] = scores.filter(Number.isFinite).map(score => Math.max(0, Math.min(100, score)));
+  if (latest === undefined || previous === undefined) return { direction: 'insufficient', label: latest === undefined ? 'No scored work yet' : 'First graded assignment' };
+  if (latest > previous) return { direction: 'up', label: 'Latest score improved' };
+  if (latest < previous) return { direction: 'down', label: 'Latest score declined' };
+  return { direction: 'steady', label: 'Latest score unchanged' };
+}

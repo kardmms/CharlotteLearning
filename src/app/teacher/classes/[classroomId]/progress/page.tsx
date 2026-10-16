@@ -279,12 +279,26 @@ export default async function ProgressPage({
           </div>
         </section>
 
-        {gradeIndex(classroom.gradeLevel) >= 6 && <StudentProgressList classroomId={classroom.id} students={classroom.students.map(student => ({ ...student, scores: historyMaterials.flatMap(assignment => {
-          const session = latestScoredSession(assignment.sessions, student.id);
-          return session ? [{ score: session.pointsEarned, date: (session.completedAt || session.signInAt).getTime() }] : [];
-        }).sort((a, b) => b.date - a.date).map(row => row.score) }))} />}
+        <section className="panel progress-attention-panel" id="alerts" aria-labelledby="alerts-title">
+          <div className="panel-header">
+            <div><div className="eyebrow">Current assignment</div><h2 id="alerts-title">Alerts</h2></div>
+            {alerts.length > 0 && <span className="trend-alert-count alert-count">{alerts.length}</span>}
+          </div>
+          {alerts.length ? (
+            <ul className="trend-alert-list">
+              {alerts.map(({ student, session, safetyFlags }) => (
+                <li key={student.id}>
+                  <strong>{student.displayName}</strong>
+                  <span>{[
+                    safetyFlags ? `${safetyFlags} safety flag${safetyFlags === 1 ? "" : "s"}` : "",
+                    session.focusViolationCount ? `${session.focusViolationCount} focus violation${session.focusViolationCount === 1 ? "" : "s"}` : ""
+                  ].filter(Boolean).join(" · ")}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p>No safety or focus alerts for this assignment.</p>}
+        </section>
 
-        <details className="progress-detail-disclosure" open={gradeIndex(classroom.gradeLevel) < 6}><summary>Assignment details and notifications</summary>
         <section className="panel progress-attention-panel" id="notifications" aria-labelledby="notifications-title">
           <div className="panel-header">
             <div><div className="eyebrow">Student trends</div><h2 id="notifications-title">Notifications</h2></div>
@@ -339,26 +353,12 @@ export default async function ProgressPage({
           ) : <p>No repeated declines or below-class scores across each student&apos;s latest three scored assignments.</p>}
         </section>
 
-        <section className="panel progress-attention-panel" id="alerts" aria-labelledby="alerts-title">
-          <div className="panel-header">
-            <div><div className="eyebrow">Current assignment</div><h2 id="alerts-title">Alerts</h2></div>
-            {alerts.length > 0 && <span className="trend-alert-count alert-count">{alerts.length}</span>}
-          </div>
-          {alerts.length ? (
-            <ul className="trend-alert-list">
-              {alerts.map(({ student, session, safetyFlags }) => (
-                <li key={student.id}>
-                  <strong>{student.displayName}</strong>
-                  <span>{[
-                    safetyFlags ? `${safetyFlags} safety flag${safetyFlags === 1 ? "" : "s"}` : "",
-                    session.focusViolationCount ? `${session.focusViolationCount} focus violation${session.focusViolationCount === 1 ? "" : "s"}` : ""
-                  ].filter(Boolean).join(" · ")}</span>
-                </li>
-              ))}
-            </ul>
-          ) : <p>No safety or focus alerts for this assignment.</p>}
-        </section>
+        {gradeIndex(classroom.gradeLevel) >= 6 && <StudentProgressList classroomId={classroom.id} students={classroom.students.map(student => ({ ...student, scores: historyMaterials.flatMap(assignment => {
+          const session = latestScoredSession(assignment.sessions, student.id);
+          return session ? [{ score: session.pointsEarned, date: (session.completedAt || session.signInAt).getTime() }] : [];
+        }).sort((a, b) => b.date - a.date).map(row => row.score) }))} />}
 
+        <details className="progress-detail-disclosure" open={gradeIndex(classroom.gradeLevel) < 6}><summary>Assignment details</summary>
         <section style={{ marginTop: 18 }}>
           <p className="progress-material-name">
             Assignment: <strong>{material?.title ?? "No published assignment"}</strong>

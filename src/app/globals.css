@@ -10741,7 +10741,7 @@ tr:last-child td {
 .watchlist-header { font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
 .watchlist-row { border-bottom:1px solid var(--line); text-decoration:none; color:inherit; }
 .watchlist-row:hover { background:var(--blue-soft); }
-.watchlist-row > strong,.watchlist-trend strong { font-size:22px; font-variant-numeric:tabular-nums; }
+.watchlist-row > strong,.watchlist-score > strong,.watchlist-trend strong { font-size:22px; font-variant-numeric:tabular-nums; }
 .watchlist-row small { display:block; color:var(--muted); font-size:12px; margin-top:5px; }
 .trend-up strong { color:#18704a; }.trend-down strong { color:#b32939; }
 :root[data-theme="dark"] .trend-up strong { color:#79dbad; }:root[data-theme="dark"] .trend-down strong { color:#ff9caa; }
@@ -10785,7 +10785,7 @@ tr:last-child td {
 .a11y-highContrast .choice-button.selected,.a11y-highContrast [aria-pressed="true"] { outline:4px double #000; }
 @media(prefers-reduced-motion:reduce) { .student-accessibility *, .student-accessibility *::before,.student-accessibility *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
 @media(max-width:900px) { .portal-layout { grid-template-columns:1fr; } }
-@media(max-width:600px) { .portal-card { padding:19px; }.portal-assignment { grid-template-columns:1fr; }.portal-card-head { flex-wrap:wrap; }.watchlist-row,.watchlist-header { grid-template-columns:minmax(0,1fr) 80px 110px; gap:8px; padding:14px 0; }.watchlist-row > strong,.watchlist-trend strong { font-size:18px; }.student-accessibility .topbar { flex-wrap:wrap; height:auto; }.student-accessibility .nav-links { flex-wrap:wrap; }.student-accessibility .choice-grid { grid-template-columns:1fr; } }
+@media(max-width:600px) { .portal-card { padding:19px; }.portal-assignment { grid-template-columns:1fr; }.portal-card-head { flex-wrap:wrap; }.watchlist-row,.watchlist-header { grid-template-columns:minmax(0,1fr) 80px 110px; gap:8px; padding:14px 0; }.watchlist-row > strong,.watchlist-score > strong,.watchlist-trend strong { font-size:18px; }.student-accessibility .topbar { flex-wrap:wrap; height:auto; }.student-accessibility .nav-links { flex-wrap:wrap; }.student-accessibility .choice-grid { grid-template-columns:1fr; } }
 
 dialog.focus-warning-layer,dialog.submit-review-layer { border:0; max-width:none; max-height:none; width:100vw; height:100dvh; margin:0; color:inherit; }
 .student-secondary .celebration-layer { display:none; }

@@ -162,6 +162,14 @@ try {
       await check(`grade ${grade} teacher entire-history list and analytics`,async()=>{
         await teacherPage.getByRole('heading',{name:'Progress at a glance'}).waitFor();
         assert.equal(await teacherPage.getByLabel('Comparison',{exact:true}).count(),0);
+        assert.ok(await teacherPage.evaluate(() => {
+          const alerts = document.querySelector('#alerts');
+          const notifications = document.querySelector('#notifications');
+          const performance = document.querySelector('.student-progress-list');
+          return alerts && notifications && performance && !alerts.closest('details') && !notifications.closest('details') &&
+            Boolean(alerts.compareDocumentPosition(performance) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+            Boolean(notifications.compareDocumentPosition(performance) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }));
         assert.match(await teacherPage.locator('.watchlist-row').filter({hasText:'Declining QA'}).innerText(), /75%/);
         assert.match(await teacherPage.locator('.watchlist-row').filter({hasText:'Steady QA'}).innerText(), /75%/);
         assert.equal(await teacherPage.getByText('No scored work yet',{exact:true}).count(),1);

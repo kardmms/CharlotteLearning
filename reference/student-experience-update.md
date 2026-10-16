@@ -18,7 +18,7 @@ This targets WCAG 2.2 AA practices; it is not a claim of formal conformance cert
 
 The Progress route shows Grades 6–12 each student's overall assignment average and fully graded assignment count across their entire history in the class. It includes in-class and at-home assignments, including previously published work, with no date or assignment-count window. Each assignment has equal weight and contributes its latest completed, fully graded attempt. Partial work and pending grades are excluded. The comparison selector and percentage-point trends have been removed from this summary.
 
-Student detail uses the same full-history scope and shows overall skill accuracy with question counts, plus links to assignment responses. Skill accuracy is distinct from assignment points, which account for attempts. Recent-pattern notifications remain separate under assignment details.
+Student detail uses the same full-history scope and shows overall skill accuracy with question counts, plus links to assignment responses. Skill accuracy is distinct from assignment points, which account for attempts. Alerts and recent-pattern notifications are always visible above the performance summary. Only the assignment response table remains under the Assignment details disclosure. Overall averages remain all-time; their color reflects the latest graded assignment score versus the previous graded assignment (green for improved, red for declined, neutral for unchanged or insufficient history), with a text equivalent.
 
 ## Verification
 

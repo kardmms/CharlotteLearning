@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { performanceAlerts, performanceAlertsFromMaterials, summarizePerformanceHistory } from "../src/lib/performance-trends.ts";
+import { performanceAlerts, performanceAlertsFromMaterials, summarizePerformanceHistory, latestAssignmentChange } from "../src/lib/performance-trends.ts";
 
 test("alerts only after a repeated scored trend", () => {
   const students = [{ id: "a", displayName: "A" }, { id: "b", displayName: "B" }];
@@ -73,4 +73,13 @@ test("history average includes every graded assignment beyond the old comparison
   assert.deepEqual(summarizePerformanceHistory([60, 70, 60, 80, 80, 90]), { average: 73.3, count: 6 });
   assert.deepEqual(summarizePerformanceHistory([]), { average: null, count: 0 });
   assert.deepEqual(summarizePerformanceHistory([NaN, Infinity, -5, 120]), { average: 50, count: 2 });
+});
+
+test("score color follows the latest assignment compared with the previous one", () => {
+  assert.equal(latestAssignmentChange([90, 80, 100, 100]).direction, 'up');
+  assert.equal(latestAssignmentChange([60, 70, 0, 0]).direction, 'down');
+  assert.equal(latestAssignmentChange([70, 70]).direction, 'steady');
+  assert.equal(latestAssignmentChange([90]).direction, 'insufficient');
+  assert.equal(latestAssignmentChange([]).direction, 'insufficient');
+  assert.equal(latestAssignmentChange([NaN, 90, Infinity, 80]).direction, 'up');
 });
