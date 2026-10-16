@@ -382,7 +382,7 @@ export default async function ClassOverviewPage({
                 <h3>{metric.label}</h3>
                 <div><span>This assignment</span><strong>{metricValueLabel(metric.thisValue, metric.suffix)}</strong></div>
                 <div><span>Last assignment</span><strong>{olderActivity ? metricValueLabel(metric.lastValue, metric.suffix) : "—"}</strong></div>
-                <small>{olderActivity ? change === 0 ? "No change" : `${change > 0 ? "+" : ""}${metricValueLabel(change, metric.suffix)} change` : "No previous assignment"}</small>
+                <small className={olderActivity && change !== 0 ? change > 0 ? "comparison-change-positive" : "comparison-change-negative" : undefined}>{olderActivity && change !== 0 && <span aria-hidden="true">{change > 0 ? "↑ " : "↓ "}</span>}{olderActivity ? change === 0 ? "No change" : `${change > 0 ? "+" : ""}${metricValueLabel(change, metric.suffix)} change` : "No previous assignment"}</small>
               </article>;
             })}
           </div> : <div className="weekly-chart" aria-label="Assignment improvement grouped bar chart">

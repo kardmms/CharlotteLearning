@@ -10827,3 +10827,8 @@ dialog.focus-warning-layer,dialog.submit-review-layer { border:0; max-width:none
 .student-secondary .choice-grid { margin:8px 0; }
 .student-secondary .station-submit-row { margin-top:10px; }
 .a11y-textScaled.student-secondary .read-aloud h2 { font-size:calc(1.35rem * var(--student-text-scale)); }
+
+.comparison-card .comparison-change-positive { color: #18704a; font-weight: 700; }
+.comparison-card .comparison-change-negative { color: #b32939; font-weight: 700; }
+:root[data-theme="dark"] .comparison-card .comparison-change-positive { color: #79dbad; }
+:root[data-theme="dark"] .comparison-card .comparison-change-negative { color: #ff9caa; }
