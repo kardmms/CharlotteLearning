@@ -1,0 +1,70 @@
+'use client';
+import { useActionState, useEffect, useState, useTransition } from 'react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, CircleDollarSign, Download, Plus, RefreshCw, Wallet, X } from 'lucide-react';
+import { addFinanceEntry, refreshFinance, voidFinanceEntry } from '@/app/admin/expenses/actions';
+import { financeCategories, financeMonths, summarizeFinance, type FinanceSnapshot } from '@/lib/finance';
+
+const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+const monthName = (month: string, short = false) => new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-US', { month: short ? 'short' : 'long', ...(!short ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+const colors = ['#163d32', '#729c80', '#bed4b8', '#a6a0cc', '#d9bd82', '#88b4c5', '#cfa48f', '#a9b1bc'];
+export function AdminFinancePanel({ snapshot }: { snapshot: FinanceSnapshot }) {
+  const months = financeMonths(new Date(snapshot.generatedAt));
+  const [selected, setSelected] = useState(months.at(-1)!);
+  const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState('All');
+  const [query, setQuery] = useState('');
+  const [token, setToken] = useState('');
+  const [limit, setLimit] = useState(30);
+  const [busy, startTransition] = useTransition();
+  const [notice, setNotice] = useState('');
+  const [state, action, pending] = useActionState(addFinanceEntry, {});
+  useEffect(() => { setToken(crypto.randomUUID()); }, [state]);
+  useEffect(() => { if (showForm) document.getElementById('finance-form-title')?.scrollIntoView({ block: 'center' }); }, [showForm]);
+  const allMonths = [...new Set([...months, ...snapshot.rows.map(r => r.occurredAt.slice(0,7))])].sort();
+  const summary = summarizeFinance(snapshot.rows, months);
+  const current = summarizeFinance(snapshot.rows, [selected])[0];
+  const selectedRows = snapshot.rows.filter(r => r.occurredAt.startsWith(selected));
+  const rows = selectedRows.filter(r => (filter === 'All' || r.category === filter) && `${r.description} ${r.category}`.toLowerCase().includes(query.toLowerCase()));
+  const breakdown = financeCategories.map((category, i) => ({ category, color: colors[i], cents: selectedRows.filter(r => r.category === category && r.kind === 'expense').reduce((sum,r)=>sum+r.amountCents,0) }));
+  const totalPositiveExpenses = breakdown.reduce((sum, r) => sum + Math.max(0,r.cents), 0);
+  const connected = snapshot.providers.filter(p => p.status === 'connected' && p.name !== 'ElevenLabs').length;
+  const max = Math.max(100, ...summary.flatMap(m => [m.revenue, m.expenses, m.net]));
+  const min = Math.min(0, ...summary.flatMap(m => [m.revenue, m.expenses, m.net]));
+  const y = (value: number) => 220 - (value - min) / (max - min) * 180;
+  const zero = y(0);
+  const hasData = summary.some(s => s.entries > 0);
+  const chartPoints = summary.map((m,i)=>`${80+i*74},${y(m.net)}`).join(' ');
+  function exportCsv() {
+    const cell = (value: string) => `"${(/^[=+\-@\t\r]/.test(value) ? "'" : '') + value.replaceAll('"','""')}"`;
+    const text = ['Date,Provider,Type,Amount USD,Source,Description', ...rows.map(r => [r.occurredAt.slice(0,10),r.category,r.kind,(r.amountCents/100).toFixed(2),r.source,r.description].map(cell).join(','))].join('\r\n');
+    const url = URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));
+    const link = document.createElement('a'); link.href=url; link.download=`charlotte-finances-${selected}.csv`; link.click(); URL.revokeObjectURL(url);
+  }
+  return <div className="finance-page">
+    <div className="finance-toolbar"><div><span className="finance-eyebrow">YOUR BUSINESS, IN BALANCE</span><p>One place for everything coming in and going out.</p></div><div className="finance-actions"><label className="finance-month-label">Month<select aria-label="Financial month" value={selected} onChange={e=>{setSelected(e.target.value);setLimit(30);}}>{[...allMonths].reverse().map(m=><option key={m} value={m}>{monthName(m)}</option>)}</select></label><button onClick={()=>setShowForm(true)} className="finance-primary"><Plus size={16}/> Add transaction</button></div></div>
+    <section className="finance-cards" aria-label="Monthly financial summary">
+      <article><span className="finance-card-icon income"><ArrowDownLeft size={21}/></span><span>Revenue received</span><strong>{money(current.revenue)}</strong><small>Payments less refunds and disputes</small></article>
+      <article><span className="finance-card-icon spending"><ArrowUpRight size={21}/></span><span>Operating expenses</span><strong>{money(current.expenses)}</strong><small>Provider costs and recorded invoices</small></article>
+      <article className="finance-net"><span className="finance-card-icon"><Wallet size={21}/></span><span>Recorded net earnings</span><strong className={current.net < 0 ? 'finance-negative' : ''}>{money(current.net)}</strong><small>{monthName(selected)} · revenue minus expenses</small></article>
+    </section>
+    <div className="finance-coverage"><span><CircleDollarSign size={18}/><strong>{connected} of 3 automatic billing sources connected</strong> · USD · calendar months in UTC</span><p>Totals include recorded data only. Missing connections and invoices are excluded; a $0 total does not confirm that no costs were incurred. Provider costs may update after reporting delays.</p></div>
+    <div className="finance-charts">
+      <section className="finance-surface finance-earnings"><div className="finance-section-header"><div><span className="finance-eyebrow">THE BIG PICTURE</span><h2>Monthly earnings</h2><p>Revenue, spending, and what’s left.</p></div><span className="finance-period">Last 12 months</span></div>
+        <div className="finance-legend"><span><i style={{background:'#7ea78c'}}/>Revenue</span><span><i style={{background:'#d9c4a7'}}/>Expenses</span><span><i style={{background:'#183e33'}}/>Net earnings</span></div>
+        <div className="finance-chart-wrap"><svg viewBox="0 0 960 280" role="img" aria-label="Monthly revenue and expenses bars with net earnings line. Exact values are in the table below.">
+          {[0,1,2,3].map(i=>{const value=min+(max-min)*i/3;return <g key={i}><line x1="48" x2="930" y1={y(value)} y2={y(value)} stroke="#e8ede8"/><text x="40" y={y(value)+4} textAnchor="end" fill="#718078" fontSize="10">{money(value)}</text></g>;})}
+          <line x1="48" x2="930" y1={zero} y2={zero} stroke="#ccd8ce"/>
+          {summary.map((m,i)=><g key={m.month}><rect x={65+i*74} y={Math.min(y(m.revenue),zero)} width="13" height={Math.abs(y(m.revenue)-zero)} rx="3" fill="#7ea78c"><title>{monthName(m.month)} revenue: {money(m.revenue)}</title></rect><rect x={82+i*74} y={Math.min(y(m.expenses),zero)} width="13" height={Math.abs(y(m.expenses)-zero)} rx="3" fill="#d9c4a7"><title>Expenses: {money(m.expenses)}</title></rect><text x={80+i*74} y="252" textAnchor="middle" fill="#718078" fontSize="12">{monthName(m.month,true)}</text></g>)}
+          {hasData && <><polyline points={chartPoints} fill="none" stroke="#183e33" strokeWidth="3" strokeLinejoin="round"/>{summary.map((m,i)=><circle key={m.month} cx={80+i*74} cy={y(m.net)} r={selected===m.month?6:4} fill="#183e33" stroke="white" strokeWidth="2"><title>{monthName(m.month)} net: {money(m.net)}</title></circle>)}</>}
+          {!hasData && <text x="490" y="125" textAnchor="middle" fill="#718078" fontSize="15">Your earnings story starts with the first recorded transaction.</text>}
+        </svg></div>
+        <div className="finance-month-strip" aria-label="Select chart month">{summary.map(m=><button key={m.month} aria-pressed={selected===m.month} onClick={()=>setSelected(m.month)}>{monthName(m.month,true)}<strong>{money(m.net)}</strong></button>)}</div>
+        <details className="finance-chart-data"><summary>View monthly numbers</summary><div className="finance-table-scroll"><table><thead><tr><th>Month</th><th>Revenue</th><th>Expenses</th><th>Net earnings</th></tr></thead><tbody>{summary.map(m=><tr key={m.month}><td>{monthName(m.month)}</td><td>{money(m.revenue)}</td><td>{money(m.expenses)}</td><td>{money(m.net)}</td></tr>)}</tbody></table></div></details>
+      </section>
+      <section className="finance-surface finance-spend"><span className="finance-eyebrow">WHERE IT GOES</span><h2>Expense breakdown</h2><p>{monthName(selected)}</p><div className="finance-spend-total">{money(current.expenses)}<small>recorded spending</small></div><div className="finance-stacked" aria-hidden="true">{totalPositiveExpenses?breakdown.filter(b=>b.cents>0).map(b=><span key={b.category} style={{width:`${b.cents/totalPositiveExpenses*100}%`,background:b.color}}/>):<span style={{width:'100%',background:'#edf0eb'}}/>}</div><ul>{breakdown.map(b=><li key={b.category}><span><i style={{background:b.color}}/>{b.category}</span><strong>{money(b.cents)}</strong></li>)}</ul></section>
+    </div>
+    <section className="finance-surface"><div className="finance-section-header"><div><span className="finance-eyebrow">CONNECTED ACCOUNTS</span><h2>Every service, accounted for</h2><p>Billing imports refresh when this page is opened, at most once an hour.</p></div><button disabled={busy} onClick={()=>startTransition(async()=>{try{await refreshFinance();setNotice('Billing refresh complete. Check each source below.');}catch{setNotice('Refresh could not complete. Try again later.');}})}><RefreshCw size={15} className={busy?'finance-spin':''}/>{busy?'Syncing…':'Sync billing'}</button></div>{notice&&<p role="status">{notice}</p>}<div className="finance-providers">{snapshot.providers.map(p=><article key={p.name}><div><span className={`finance-provider-mark ${p.name.toLowerCase()}`}>{p.name==='ElevenLabs'?'Ⅱ':p.name==='Vercel'?'▲':p.name==='Stripe'?'S':'✳'}</span><h3>{p.name}</h3><span className={`finance-status ${p.status}`}>{p.name==='ElevenLabs'&&p.status==='connected'?'Usage connected':p.status==='connected'?'Connected':p.status==='attention'?'Needs attention':'Not connected'}</span></div><p>{p.detail}</p>{p.syncedAt&&<small>Last checked {new Date(p.syncedAt).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})}</small>}</article>)}</div></section>
+    <section className="finance-surface"><div className="finance-section-header"><div><span className="finance-eyebrow">THE DETAILS</span><h2>Transactions</h2><p>Invoices, imported monthly totals, and money received.</p></div><button onClick={exportCsv} disabled={!rows.length}><Download size={15}/> Export CSV</button></div><div className="finance-filters"><input aria-label="Search transactions" placeholder="Search transactions…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Filter by provider" value={filter} onChange={e=>setFilter(e.target.value)}><option>All</option>{financeCategories.map(c=><option key={c}>{c}</option>)}</select><span>{rows.length} records · {monthName(selected)}</span></div><div className="finance-table-scroll"><table><thead><tr><th>Date</th><th>Description</th><th>Provider</th><th>Type</th><th>Source</th><th>Amount</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{rows.slice(0,limit).map(r=><tr key={r.id}><td>{r.occurredAt.slice(0,10)}</td><td>{r.description}</td><td>{r.category}</td><td><span className={`finance-type ${r.kind}`}>{r.kind}</span></td><td>{r.source==='manual'?'Manual':'Imported'}</td><td className={r.kind==='revenue'?'finance-positive':''}>{money(r.amountCents)}</td><td>{r.source==='manual'&&<form action={voidFinanceEntry}><input type="hidden" name="id" value={r.id}/><button className="finance-void" type="submit" aria-label={`Void ${r.description}`}>Void</button></form>}</td></tr>)}</tbody></table>{!rows.length&&<div className="finance-empty"><Wallet size={28}/><h3>No recorded transactions</h3><p>Add an invoice or payment, or connect a billing source to start tracking this month.</p><button onClick={()=>setShowForm(true)}><Plus size={15}/> Add transaction</button></div>}</div>{rows.length>limit&&<button onClick={()=>setLimit(limit+30)}>Show more</button>}</section>
+    {showForm&&<section className="finance-surface finance-entry-form" aria-labelledby="finance-form-title"><div className="finance-section-header"><div><span className="finance-eyebrow">KEEP THE FULL PICTURE</span><h2 id="finance-form-title">Add a transaction</h2><p>Record actual invoices or payments. Negative expenses are credits; negative revenue is a refund.</p></div><button aria-label="Close transaction form" onClick={()=>setShowForm(false)}><X size={18}/></button></div><form action={action}><input type="hidden" name="token" value={token}/><label>Type<select name="kind"><option value="expense">Expense</option><option value="revenue">Revenue</option></select></label><label>Provider<select name="category">{financeCategories.map(c=><option key={c}>{c}</option>)}</select></label><label>Amount (USD)<input name="amount" required placeholder="0.00" inputMode="decimal"/></label><label>Date<input name="date" type="date" required defaultValue={snapshot.generatedAt.slice(0,10)} max={snapshot.generatedAt.slice(0,10)}/></label><label className="finance-description">Description<input name="description" maxLength={240} required placeholder="e.g. ElevenLabs October invoice"/></label><div className="finance-form-footer"><p>Imported provider totals already include their charges. Enter an invoice only if that provider/month has not been imported.</p><button disabled={pending||!token} className="finance-primary" type="submit">{pending?'Saving…':'Save transaction'}</button></div>{state.error&&<p role="alert" className="finance-negative">{state.error}</p>}{state.success&&<p role="status" className="finance-positive"><CheckCircle2 size={15}/> {state.success}</p>}</form></section>}
+  </div>;
+}

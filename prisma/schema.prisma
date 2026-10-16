@@ -644,3 +644,20 @@ model EmailDelivery {
   @@index([classroomId, createdAt])
   @@index([schoolId, createdAt])
 }
+
+model FinanceEntry {
+  id          String   @id @default(cuid())
+  externalKey String   @unique
+  source      String
+  category    String
+  kind        String
+  amountCents Int
+  description String
+  occurredAt  DateTime
+  voidedAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([occurredAt, voidedAt])
+  @@index([source, occurredAt])
+}

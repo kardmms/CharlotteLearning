@@ -7,12 +7,14 @@ import { getOpenAiUsageMetrics } from "@/lib/openai-usage";
 import { getAdminStudentGrowth } from "@/lib/admin-student-growth";
 import { getVercelServerMetrics } from "@/lib/vercel-monitoring";
 
+import { getFinanceSnapshot } from "@/lib/finance-providers";
+
 export async function AdminViewPage({ view }: { view: AdminView }) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
   const admin = await requireAdmin();
-  const [metrics, inviteFlash, serverMetrics, aiUsageMetrics, studentGrowth] = await Promise.all([
+  const [metrics, inviteFlash, serverMetrics, aiUsageMetrics, studentGrowth, finance] = await Promise.all([
     getAdminMetrics().catch((error) => {
       console.error("Admin metrics failed to load", error);
       return getEmptyAdminMetrics();
@@ -33,7 +35,8 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
           return undefined;
         })
       : Promise.resolve(undefined),
-    view === "student-growth" ? getAdminStudentGrowth() : Promise.resolve(undefined)
+    view === "student-growth" ? getAdminStudentGrowth() : Promise.resolve(undefined),
+    view === "expenses" ? getFinanceSnapshot() : Promise.resolve(undefined)
   ]);
 
   return (
@@ -50,6 +53,7 @@ export async function AdminViewPage({ view }: { view: AdminView }) {
       serverMetrics={serverMetrics}
       aiUsageMetrics={aiUsageMetrics}
       studentGrowth={studentGrowth}
+      finance={finance}
     />
   );
 }

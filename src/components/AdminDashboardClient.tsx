@@ -44,6 +44,9 @@ import type { AdminStudentGrowthRow } from "@/lib/admin-student-growth";
 import type { OpenAiUsageMetrics } from "@/lib/openai-usage";
 import type { VercelServerMetrics } from "@/lib/vercel-monitoring";
 
+import { AdminFinancePanel } from "@/components/AdminFinancePanel";
+import type { FinanceSnapshot } from "@/lib/finance";
+
 type AdminIdentity = {
   name: string;
   email: string;
@@ -51,7 +54,7 @@ type AdminIdentity = {
   role: string;
 };
 
-export type AdminView = "dashboard" | "analytics" | "student-growth" | "leads" | "people" | "feedback" | "settings" | "server" | "ai-usage";
+export type AdminView = "dashboard" | "analytics" | "student-growth" | "leads" | "people" | "feedback" | "settings" | "server" | "ai-usage" | "expenses";
 
 type InviteFlash = {
   inviteId: string;
@@ -935,7 +938,8 @@ export function AdminDashboardClient({
   view = "dashboard",
   serverMetrics,
   aiUsageMetrics,
-  studentGrowth
+  studentGrowth,
+  finance
 }: {
   initialMetrics: AdminMetrics;
   admin: AdminIdentity;
@@ -944,6 +948,7 @@ export function AdminDashboardClient({
   serverMetrics?: VercelServerMetrics;
   aiUsageMetrics?: OpenAiUsageMetrics;
   studentGrowth?: AdminStudentGrowthRow[];
+  finance?: FinanceSnapshot;
 }) {
   const [metrics, setMetrics] = useState(initialMetrics);
   const [serverSnapshot, setServerSnapshot] = useState(serverMetrics);
@@ -1010,6 +1015,7 @@ export function AdminDashboardClient({
     feedback: "Feedback",
     settings: "Settings",
     server: "Server",
+    expenses: "Expenses",
     "ai-usage": "AI Usage"
   }[view];
   const subtitle = {
@@ -1021,11 +1027,12 @@ export function AdminDashboardClient({
     feedback: "Weekly teacher feedback and product notes.",
     settings: "Feedback passcode and operational controls.",
     server: "Plain-language health checks for Charlotte's database, AI service, and production app.",
+    expenses: "Revenue, operating costs, and a clear view of Charlotte’s earnings.",
     "ai-usage": "OpenAI token usage, request volume, and cost trends."
   }[view];
 
   return (
-    <main className="admin-shell">
+    <main className={`admin-shell ${view === "expenses" ? "admin-finance-shell" : ""}`}>
       <aside className="admin-sidebar">
         <div className="admin-brand">
           <img src="/images/charlotte-ai-logo.png" alt="" />
@@ -1040,6 +1047,7 @@ export function AdminDashboardClient({
           <a href="/admin/feedback" className={view === "feedback" ? "active" : ""}><MessageSquareText size={19} /> Feedback</a>
           <a href="/admin/server" className={view === "server" ? "active" : ""}><Server size={19} /> Server</a>
           <a href="/admin/ai-usage" className={view === "ai-usage" ? "active" : ""}><Bot size={19} /> AI Usage</a>
+          <a href="/admin/expenses" className={view === "expenses" ? "active" : ""}><DollarSign size={19} /> Expenses</a>
           <a href="/admin/settings" className={view === "settings" ? "active" : ""}><Settings size={19} /> Settings</a>
         </nav>
         <div className="admin-profile">
@@ -1063,7 +1071,7 @@ export function AdminDashboardClient({
           </div>
           <div className={`admin-live-pill ${refreshing ? "refreshing" : ""}`}>
             <span />
-            Live - updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            {view === "expenses" && finance ? `Finance loaded ${new Date(finance.generatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : `Live - updated ${lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
           </div>
         </div>
 
@@ -1161,6 +1169,7 @@ export function AdminDashboardClient({
 
         {view === "server" && <ServerPanel metrics={serverSnapshot} platform={metrics} aiMetrics={aiUsageSnapshot} />}
 
+        {view === "expenses" && finance && <AdminFinancePanel snapshot={finance} />}
         {view === "ai-usage" && <AiUsagePanel metrics={aiUsageSnapshot} />}
       </section>
     </main>
