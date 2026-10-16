@@ -305,14 +305,14 @@ export default async function ClassOverviewPage({
               </div>
               <div className="activity-title-actions">
                 <div className="activity-history-nav" aria-label="Change assignment">
-                  {olderActivity ? (
-                    <Link href={`?materialId=${olderActivity.id}`} aria-label="Previous assignment">
+                  {newerActivity ? (
+                    <Link href={`?materialId=${newerActivity.id}`} aria-label="Previous assignment">
                       <ChevronLeft size={20} />
                     </Link>
                   ) : <span />}
                   <small>{activities.length ? `${selectedIndex + 1} of ${activities.length}` : "0 of 0"}</small>
-                  {newerActivity ? (
-                    <Link href={`?materialId=${newerActivity.id}`} aria-label="Next assignment">
+                  {olderActivity ? (
+                    <Link href={`?materialId=${olderActivity.id}`} aria-label="Next assignment">
                       <ChevronRight size={20} />
                     </Link>
                   ) : <span />}
